@@ -26,7 +26,7 @@ You own the critical downstream logic:
                                           ▼
                       ┌───────────────────────────────────────┐
                       │    TASK 1: DETERMINISTIC ENGINE       │
-                      │       (`app/matching/asme_rules.py`)   │
+                      │      (`app/matching/asme_rules.py`)   │
                       │                                       │
                       │  • Nominal Bore (NB) Invariant Check  │
                       │  • Pressure Class Tolerance Rating    │
