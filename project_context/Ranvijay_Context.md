@@ -1,28 +1,25 @@
-# Central Web Portal & Procurement Dashboard Workflow
+# Central Web Portal & Document Database Storage Workflow
 
-**Role:** Frontend Developer (Ranvijay)
+**Role:** Frontend Developer & Document Database Lead (Ranvijay)
 
-**Primary Directory:** `frontend/`
+**Collaborators:**
+* **Samriddih** (Document Intelligence Lead — provides OCR extracted text & MTC layouts)
+* **Mayank** (Team Lead & System Architect — handles all database connections, API routes, and frontend-to-backend wiring)
+* **Harsh** (Provides Neo4j cross-CPSE spare locator data)
 
-**Target Environment:** Node.js 26, Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query
+**Primary Directories:** `frontend/` and `backend/app/ingestion/`
+
+**Target Environment:** Node.js 26, Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query, PostgreSQL, SQLAlchemy
 
 ---
 
 ### Objective & Architectural Role
 
-Your mission is to build the user-facing enterprise web application for **Samanvay-AI (BharatCodex)**.
+Your mission encompasses two vital aspects of **Samanvay-AI (BharatCodex)**:
+1. **The User-Facing Enterprise Web Application:** The presentation and interaction layer that hackathon judges, Ministry (MoPNG) officials, and plant engineers will evaluate.
+2. **Document Ingestion Database Storage:** Collaborating with Samriddih to persist raw OCR-extracted text, certificates, and parsed document metadata into PostgreSQL staging tables.
 
-The backend processes complex OCR text, runs neural token classification, and queries graph relationships, but the hackathon judges will evaluate the product through the interface you build. Your role is to translate raw API data into an enterprise-grade procurement workspace tailored for Ministry (MoPNG) executives and CPSE procurement officers.
-
-You own the presentation and user-interaction layer:
-
-1. **Catalog Ingestion Studio:** Drag-and-drop file upload for messy SAP MM Excel/CSV extracts with instant ingestion status.
-
-2. **Human-in-the-Loop (HITL) Triage Panel:** An interactive review screen where procurement managers review ambiguous semantic matches ($70\% - 90\%$ confidence) and either accept, reclassify, or reject them.
-
-3. **Cross-CPSE Reconciliation View:** Visual comparison side-by-side (e.g., IOCL SKU vs. ONGC SKU) highlighting identical engineering parameters and idle spare inventory.
-
-4. **Procurement Analytics Dashboard:** Real-time metrics displaying duplicate catalog reduction, freed working capital, and inter-CPSE transfer requests.
+Mayank manages all the database engine configurations, connection pooling, and API gateway routing, while you focus on the UI implementation and document storage schema.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -38,88 +35,80 @@ You own the presentation and user-interaction layer:
 │                                      ▼                                 │
 │                           API CLIENT / DATA HOOKS                      │
 │                           (TanStack React Query)                       │
-└──────────────────────────────────────┬─────────────────────────────────┘
+│                                      │                                 │
+└──────────────────────────────────────┼─────────────────────────────────┘
                                        │
-                              REST / JSON Calls
-                                       │
+                               REST / JSON Calls
                                        ▼
-                     Mayank's Unified FastAPI Gateway                   
-                      (`http://localhost:8000/api/v1`)
-
+                       Mayank's Unified FastAPI Gateway
+                                       │
+                      ┌────────────────┴────────────────┐
+                      ▼                                 ▼
+             [Mayank & Harsh]                  [Ranvijay & Samriddih]
+            (Neo4j / ASME Rules)              (PostgreSQL Document DB)
 ```
 
 ---
 
-### Task 1: Project Setup & Component System Setup
+### Task 1: Document Text Database Persistence (with Samriddih & Mayank)
 
-Set up a clean, modern UI shell using standard production tooling:
+When Samriddih's PaddleOCR / PyMuPDF engine extracts text from scanned MTCs, delivery challans, or plant invoices, that data must be safely stored in PostgreSQL for auditability and downstream processing.
 
-* **Foundation:** Next.js 16 App Router with TypeScript and Tailwind CSS.
+* **File:** `backend/app/ingestion/storage.py` (or `backend/app/contracts/document_db.py`)
+* **SQLAlchemy Schema to Implement:**
+  ```python
+  from sqlalchemy import Column, String, Text, DateTime, JSON, Integer
+  from sqlalchemy.sql import func
+  from backend.app.contracts.base import Base # Mayank provides Base
 
-* **Design System:** Install and configure **shadcn/ui** components:
+  class IngestedDocument(Base):
+      __tablename__ = "ingested_documents"
 
-```bash
-npx shadcn@latest add button card table badge dialog dropdown-menu progress tabs
-
-```
-
-* **Lucide Icons:** Use `lucide-react` for clean industrial and enterprise iconography (e.g., `Layers`, `AlertCircle`, `CheckCircle2`, `ArrowRightLeft`, `Building2`).
-* **State & Data Fetching:** Use `@tanstack/react-query` to handle caching, loading spinners, and optimistic updates when approving matches.
+      id = Column(Integer, primary_key=True, autoincrement=True)
+      filename = Column(String(255), nullable=False)
+      doc_type = Column(String(100), default="MTC_CERTIFICATE")
+      raw_text = Column(Text, nullable=False)
+      parsed_metadata = Column(JSON, nullable=True) # Heat No, Grade, Size, Specs
+      created_at = Column(DateTime(timezone=True), server_default=func.now())
+  ```
+* **Storage Function:**
+  ```python
+  def save_extracted_document(db_session, filename: str, raw_text: str, metadata: dict) -> IngestedDocument:
+      doc = IngestedDocument(filename=filename, raw_text=raw_text, parsed_metadata=metadata)
+      db_session.add(doc)
+      db_session.commit()
+      db_session.refresh(doc)
+      return doc
+  ```
+* *Note: Mayank handles the database engine and provides the `db_session` dependency in FastAPI.*
 
 ---
 
-### Task 2: Core Page Workflows
+### Task 2: Core Frontend Workflows (Next.js 16)
 
 **1. Catalog Deduplication Studio (`src/app/deduplication/page.tsx`)**
-
-* **Upload Zone:** Drag-and-drop box for messy inventory CSV/XLSX dumps or MTC certificate PDFs.
-
-* **Batch Processing Progress Bar:** Displays real-time progress while the backend processes rows through PaddleOCR, NER, and vector matching.
-
-* **Summary Stats Card:** Quick banner showing:
-* Total Items Uploaded
-* Exact Matches Found (Tier-1)
-
-* Substitute Candidates Flagged (Tier-2)
-
-* Items Requiring Human Review (HITL Queue)
+* **Drag-and-Drop Ingestion:** Accepts messy inventory CSV/XLSX dumps or MTC certificate PDFs.
+* **Batch Processing Progress Bar:** Real-time feedback while the backend processes items through OCR, NER, and ASME rules.
+* **Summary KPI Cards:** Total Items Uploaded, Tier-1 Exact Matches, Tier-2 Safe Substitutes, and Borderline Items in HITL Queue.
 
 **2. Human-in-the-Loop (HITL) Triage Panel (`src/app/hitl/page.tsx`)**
-
-* This is your most critical demo page. When ML models are between $70\%$ and $90\%$ confident, enterprise workflows require human sign-off.
-
-* **Side-by-Side Comparison Card:**
-* **Left Side (Source CPSE Item):** Raw description (e.g., `IOCL: FLG WNRF 4IN 300# A105`), owner plant, unit cost, and extracted parameters.
-
-* **Right Side (Suggested Match):** Matched canonical item or sister CPSE part (e.g., `ONGC: FLANGE WELD NECK 4" CL300 ASTM A105`) with its confidence score.
-
-* **Parameter Verification Badges:** Green pill badges for matching invariants (e.g., `NB: 100mm ✓`, `Class: 300 ✓`, `Material: A105 ✓`).
-
-* **Action Buttons:**
-* **"Approve & Link":** Sends verification to backend, linking the SKU in Neo4j.
-
-* **"Reclassify":** Opens a dropdown to select a different canonical UNSPSC code.
-
-* **"Reject (Incompatible)":** Flags the pair as incompatible.
+* **The Demo Showstopper:** When AI confidence is between 70% and 90%, procurement managers review matches side-by-side:
+  * **Left Side (Source CPSE Part):** e.g., `IOCL: FLG WNRF 4IN 300# A105` (Panipat Depot, Unit Cost ₹12,400).
+  * **Right Side (Suggested Match):** e.g., `ONGC: FLANGE WELD NECK 4" CL300 ASTM A105` (Hazira Depot, 45 units available).
+  * **Parameter Badges:** High-contrast green pill badges: `[NB: 100mm ✓]` `[Class: 300 ✓]` `[Steel: ASTM A105 ✓]`.
+  * **Action Buttons:** `[Approve & Link]` (calls `/match/hitl-resolve`), `[Reclassify]`, `[Reject]`.
 
 **3. Procurement Analytics Dashboard (`src/app/dashboard/page.tsx`)**
-
-* Executive-level summary view using clean cards:
-* **Working Capital Unlocked:** Calculated estimated savings from discovering identical idle spares instead of issuing fresh purchase tenders.
-* **Cross-CPSE Spare Locator Table:** Displays where idle inventory is located across sister depots (e.g., ONGC Hazira Plant having 45 units of a flange IOCL Panipat is trying to procure).
-* **Taxonomy Distribution:** Bar chart showing items categorized under UNSPSC segments.
+* **Working Capital Unlocked:** Calculated savings from identifying idle surplus instead of placing fresh tenders (₹1,500+ Cr).
+* **Cross-CPSE Spare Locator Table:** Shows exact quantities and days idle at sister depots.
+* **Taxonomy Distribution Chart:** Breakdown of items categorized under UNSPSC segments.
 
 ---
 
-### Task 3: Directory Deliverables & Structure
-
-You will work strictly inside the `frontend/` directory:
+### File Deliverables & Directory Layout
 
 ```
 frontend/
-├── package.json
-├── tsconfig.json
-├── tailwind.config.ts
 ├── src/
 │   ├── app/
 │   │   ├── layout.tsx                # App shell, persistent sidebar & navigation
@@ -127,76 +116,21 @@ frontend/
 │   │   ├── dashboard/page.tsx        # Procurement analytics overview
 │   │   ├── deduplication/page.tsx    # Batch file upload and deduplication studio
 │   │   └── hitl/page.tsx             # Human-in-the-loop review queue
-│   │
 │   ├── components/
 │   │   ├── ui/                       # shadcn/ui components (Button, Card, Table, Badge)
-│   │   ├── AppSidebar.tsx            # Left navigation sidebar
-│   │   ├── ItemComparisonCard.tsx    # Side-by-side reconciliation comparison widget
-│   │   └── UploadZone.tsx            # Drag-and-drop file ingestion element
-│   │
+│   │   └── ItemComparisonCard.tsx    # Side-by-side reconciliation comparison widget
 │   └── lib/
-│       ├── api.ts                    # Axios / Fetch client calling Mayank's FastAPI routes
+│       ├── api.ts                    # API client calling Mayank's FastAPI routes
 │       ├── types.ts                  # TypeScript interfaces matching backend Pydantic models
 │       └── mockData.ts               # Fallback mock data for offline UI development
 
+backend/app/ingestion/
+└── storage.py                        # Document database persistence in PostgreSQL
 ```
 
 ---
 
-### Task 4: API Client Signatures (`src/lib/api.ts`)
-
-Connect your frontend views directly to Mayank's FastAPI endpoints:
-
-```typescript
-// src/lib/types.ts
-export interface ReconciledMatch {
-  sourceSku: string;
-  sourceDescription: string;
-  sourceCpse: "IOCL" | "ONGC" | "BPCL";
-  matchedCanonicalId: string;
-  matchedDescription: string;
-  confidenceScore: number;
-  tier: "TIER_1_IDENTICAL" | "TIER_2_SUBSTITUTE" | "TIER_3_INCOMPATIBLE";
-  parameters: {
-    nominalBoreMm: number;
-    pressureClass: number;
-    metallurgy: string;
-  };
-}
-
-// src/lib/api.ts
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-
-export async function uploadCatalogFile(file: File) {
-  const formData = new FormData();
-  formData.append("file", file);
-  const res = await fetch(`${BASE_URL}/ingest/upload`, { method: "POST", body: formData });
-  return res.json();
-}
-
-export async function fetchHitlQueue(): Promise<ReconciledMatch[]> {
-  const res = await fetch(`${BASE_URL}/match/hitl-queue`);
-  return res.json();
-}
-
-export async function resolveHitlMatch(skuId: string, action: "APPROVE" | "REJECT", canonicalId?: string) {
-  const res = await fetch(`${BASE_URL}/match/hitl-resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ skuId, action, canonicalId }),
-  });
-  return res.json();
-}
-
-```
-
----
-
-### Anticipated Clarifying Questions & Your Direct Answers
-
-* **Q: "What if the backend APIs aren't ready when I start building?"**
-**A:** Do not wait for the backend. Use `src/lib/mockData.ts` populated with realistic JSON objects matching the TypeScript interfaces above. You can build, test, and style the entire Next.js UI using local mock data. Once Mayank's FastAPI routes are live, simply switch the data source in `src/lib/api.ts`.
-* **Q: "Do I need to build a complex 3D or dynamic canvas graph visualizer?"**
-**A:** No. Complex canvas-based interactive graph visualizers often cause rendering and styling bugs during live hackathon presentations. Prioritize clean, readable tabular views, side-by-side reconciliation cards, and badge comparisons first. If time permits near the end, you can add a simple flow diagram using `reactflow`.
-* **Q: "How should the UI look to impress the judges?"**
-**A:** Make it look like a serious enterprise tool: clean light/dark slate backgrounds, sharp borders, high-contrast badges (green for `Identical`, amber for `Substitute`, red for `Incompatible`), and clear typography. Avoid overly flashy transitions; speed, clarity, and scannability are what procurement judges value.
+### Team Collaboration & Handoffs
+1. **With Samriddih:** Samriddih produces the clean OCR text and certificate dicts; your `storage.py` saves them to PostgreSQL.
+2. **With Mayank:** Mayank sets up the PostgreSQL database connection and wires up the backend REST endpoints; your `api.ts` connects the frontend to Mayank's API.
+3. **With Harsh:** Harsh's Neo4j queries provide the cross-CPSE spare locator data that populates your Analytics Dashboard.
