@@ -4,7 +4,7 @@
 
 ---
 
-## 🗺️ Chronological Dependency Flow
+## ️ Chronological Dependency Flow
 
 ```
 [Phase 0: Scaffolding]
@@ -38,7 +38,7 @@
 
 ---
 
-## 📅 Milestone Breakdown & Specific Deadlines
+##  Milestone Breakdown & Specific Deadlines
 
 ### Phase 0: Infrastructure & Scaffolding (Hours 00:00 – 02:00)
 * **T+01:00 (Mayank):** Data Contracts in [`backend/app/contracts/material.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/contracts/material.py) and [`matching.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/contracts/matching.py).

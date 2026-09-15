@@ -42,6 +42,9 @@ dependencies = [
     "accelerate>=1.15.0",
     "scikit-learn>=1.9.1",
     "pdfplumber>=0.11.10",
+    "winocr>=0.0.15",
+    "paddleocr>=2.10.0",
+    "qrcode>=8.2",
 ]
 
 [[tool.uv.index]]
@@ -51,3 +54,7 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cuda" }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -4,7 +4,7 @@
 
 ---
 
-## 🗺️ Chronological Dependency Flow
+## ️ Chronological Dependency Flow
 
 ```
 [Phase 0: Scaffolding]
@@ -38,7 +38,7 @@
 
 ---
 
-## 📅 Milestone Breakdown & Specific Deadlines
+##  Milestone Breakdown & Specific Deadlines
 
 ---
 
@@ -105,11 +105,11 @@
 | **T+19:30** | **UI Visual Polish & Badges**<br>`Ranvijay` | *Solo* | Add color-coded confidence badges (Green for Tier-1, Amber for Tier-2, Red for Tier-3), smooth progress bar animations, and dark/light mode toggle. | Polished Next.js frontend pages | Visually stunning UI for live evaluator inspection. |
 | **T+21:00** | **Zero-Crash & Latency Audit**<br>`Mayank` | `Shourya, Harsh` | Test full pipeline latency ($<200\text{ ms}$). Ensure offline fallback to `mockData.ts` works if any container disconnects. | One-click launch script (`docker compose up` / `run_demo.bat`) | Eliminates live-demo panic. |
 | **T+22:30** | **Slide Deck Alignment**<br>`Mayank` | `Team` | Verify that every statistic in [`SIH_Presentation.pptx`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/SIH_Presentation.pptx) and [`stage_diagram.png`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/stage_diagram.png) exactly matches live demo capabilities. | Aligned presentation deck & demo script | Complete alignment between slides and software. |
-| **T+24:00** | **Full Team Pitch Rehearsal**<br>`Whole Team` | *All* | Dry run the 5-minute presentation: 30 seconds per slide, live 2-minute product demo on Next.js, and Q&A handling. | **Demo-Ready Team & Product** 🏆 | **Victory at Smart India Hackathon!** |
+| **T+24:00** | **Full Team Pitch Rehearsal**<br>`Whole Team` | *All* | Dry run the 5-minute presentation: 30 seconds per slide, live 2-minute product demo on Next.js, and Q&A handling. | **Demo-Ready Team & Product**  | **Victory at Smart India Hackathon!** |
 
 ---
 
-## 🚦 Deliverable Checklist Per Person
+##  Deliverable Checklist Per Person
 
 ### Mayank Anand (Team Lead & Tier Distribution Lead)
 - [ ] [`backend/app/contracts/material.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/contracts/material.py) & [`matching.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/contracts/matching.py) (Pydantic v2 schemas)
