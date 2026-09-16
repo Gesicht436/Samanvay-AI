@@ -1,12 +1,22 @@
 """
 Unit Tests for Multi-Modal Document Intake and Batch Streaming Loader.
-Validates extraction against ground-truth MTCs and ERP catalog dumps.
+Validates extraction against ground-truth MTCs, ERP catalog dumps,
+Carbon Equivalent (CE) computation, and image pre-processing transforms.
 """
 
 from pathlib import Path
+from PIL import Image
+import numpy as np
 import pytest
 from backend.app.ingestion.pdf_parser import process_document
 from backend.app.ingestion.data_pipeline.loader import stream_catalog_batches
+from backend.app.ingestion.certificate import (
+    compute_carbon_equivalent,
+    validate_mechanical_thresholds,
+    detect_granular_document_type,
+    normalize_mtc_text
+)
+from backend.app.ingestion.ocr_engine import preprocess_image_for_ocr, estimate_skew_angle
 
 RAW_DIR = Path("data/raw")
 CATALOG_CSV = Path("data/mock_cpes_catalogs/iocl_materials.csv")
@@ -116,3 +126,71 @@ def test_process_real_scanned_procurement_images():
         assert meta4["material_grade"] == "ASTM A105"
         assert len(meta4["extracted_items"]) >= 2
 
+
+def test_carbon_equivalent_computation():
+    """Validates Carbon Equivalent (CE) formula and weldability status."""
+    # Standard ASTM A105 Chemistry: C=0.20%, Mn=0.80%, Si=0.25%, Cr=0.10%, Mo=0.04%, V=0.02%, Ni=0.15%, Cu=0.15%
+    # CE = 0.20 + (0.80 / 6) + (0.16 / 5) + (0.30 / 15) = 0.20 + 0.133 + 0.032 + 0.02 = 0.385%
+    chem_good = {
+        "C": "0.20%", "Mn": "0.80%", "Si": "0.25%",
+        "Cr": "0.10%", "Mo": "0.04%", "V": "0.02%",
+        "Ni": "0.15%", "Cu": "0.15%"
+    }
+    ce_res = compute_carbon_equivalent(chem_good)
+    assert ce_res is not None
+    assert 0.37 <= ce_res["carbon_equivalent"] <= 0.40
+    assert ce_res["is_standard_weldable"] is True
+    assert ce_res["status"] in ["EXCELLENT_WELDABILITY", "ACCEPTABLE_WELDABILITY"]
+
+    # High Carbon steel with elevated CE (>0.43%)
+    chem_high = {
+        "C": "0.28%", "Mn": "1.20%", "Si": "0.35%",
+        "Cr": "0.20%", "Mo": "0.10%", "V": "0.05%",
+        "Ni": "0.25%", "Cu": "0.20%"
+    }
+    ce_high_res = compute_carbon_equivalent(chem_high)
+    assert ce_high_res is not None
+    assert ce_high_res["carbon_equivalent"] > 0.43
+    assert ce_high_res["is_standard_weldable"] is False
+    assert ce_high_res["status"] == "PREHEAT_REQUIRED_HIGH_CE"
+
+
+def test_mechanical_threshold_validation():
+    """Validates ASTM strength warnings for below-standard mechanical properties."""
+    # Defective A105 sample with weak yield strength (220 MPa < 250 MPa minimum)
+    mech_weak = {"yield": "220 MPa", "tensile": "510 MPa"}
+    warnings = validate_mechanical_thresholds("ASTM A105", mech_weak)
+    assert len(warnings) >= 1
+    assert "Yield Strength" in warnings[0]
+
+    # Compliant A105 sample
+    mech_compliant = {"yield": "310 MPa", "tensile": "540 MPa"}
+    warnings_comp = validate_mechanical_thresholds("ASTM A105", mech_compliant)
+    assert len(warnings_comp) == 0
+
+
+def test_image_preprocessing_pipeline():
+    """Validates deskew estimation and image enhancement transforms."""
+    # Create synthetic test image with text-like pattern
+    img = Image.new("RGB", (800, 600), color=(240, 240, 240))
+    enhanced = preprocess_image_for_ocr(
+        img,
+        apply_deskew=True,
+        apply_contrast=True,
+        apply_binarization=False
+    )
+    assert enhanced.size[0] >= 1600  # Resolution normalized
+    assert enhanced.mode == "L"       # Converted to grayscale
+
+
+def test_granular_document_subclassification():
+    """Validates granular document type and subtype detection."""
+    challan_text = "MATERIAL DISPATCH DELIVERY CHALLAN IOCL PANIPAT TO ONGC HAZIRA"
+    doc_t, doc_sub = detect_granular_document_type(challan_text)
+    assert doc_t == "DELIVERY_CHALLAN"
+    assert doc_sub == "DELIVERY_CHALLAN_CPSE"
+
+    tpi_mtc_text = "EN 10204 3.2 INSPECTION CERTIFICATE TPI WITNESSED BY LLOYDS REGISTER"
+    doc_t2, doc_sub2 = detect_granular_document_type(tpi_mtc_text)
+    assert doc_t2 == "MTC_CERTIFICATE"
+    assert doc_sub2 == "MTC_EN10204_3_2"

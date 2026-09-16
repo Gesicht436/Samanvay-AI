@@ -1,102 +1,129 @@
 # Samanvay-AI Frontend Portal (`frontend`)
 
 ## 1. Overview
-The `frontend` directory contains the web portal for Samanvay-AI, built with **Next.js 16**, **React 19**, **TypeScript**, and **Tailwind CSS**.
+The `frontend` directory contains the modernized sovereign web portal for Samanvay-AI, built with **Next.js 15**, **React 19**, **TypeScript**, and **Tailwind CSS**.
 
 ### Design Philosophy
-The user interface is inspired by **Amazon Business** and the **AWS Management Console**:
-- Clean Light Mode: High-contrast white cards (`#ffffff`) with subtle gray borders (`#d5d9d9`) on light slate backgrounds (`#f8fafc`).
-- Information Density: Tables and attribute grids prioritize high information density, clear status badges, and rapid scanning over marketing fluff or empty space.
-- Zero Jargon / Zero Emojis: Designed strictly for plant engineers, procurement officers, and inventory controllers without distracting buzzwords or emojis.
-- Instant Utility: Every view provides actionable buttons (1-click Indent, Batch Approval, Gate Pass Print, RFC 4180 Excel CSV Export).
+- **Sleek & Minimalistic Aesthetic**: Clean, modern design inspired by modern developer platforms (GitHub, Linear, Vercel) with generous whitespace, subtle borders, and clear visual hierarchy.
+- **Light & Dark Theme Toggle**: Full CSS variable-driven light mode (primary) with dark mode accessibility toggle, respecting system preferences and persisting choices in `localStorage`.
+- **Strict Separation of Concerns**: Distinct, modular pages for each operational stage. No monolithic files.
+- **Zero Emojis**: Strictly enforced professional enterprise styling suitable for Ministry of Petroleum & Natural Gas (MoPNG) officers and site engineers.
 
 ---
 
 ## 2. Directory Structure
 
 ```
-frontend/
-|-- src/
-|   |-- app/                     # Next.js App Router pages
-|   |   |-- audits/              # Sovereign compliance audit ledger page
-|   |   |-- dashboard/           # Procurement KPIs and surplus inventory discovery radar
-|   |   |-- deduplication/       # Material standardization workbench & MTC image viewer
-|   |   |-- hitl/                # Human-in-the-Loop batch triage review queue
-|   |   |-- transfers/           # Inter-CPSE material requisitions and CISF gate pass
-|   |   |-- layout.tsx           # Root layout incorporating TopNav and styling
-|   |   |-- page.tsx             # Root redirect to /dashboard
-|   |   `-- globals.css          # Tailwind CSS directives and global typography
-|   |-- components/              # Shared UI components
-|   |   `-- TopNav.tsx           # Amazon-style global navigation header and depot switcher
-|   `-- lib/                     # Client utilities
-|       `-- exportUtils.ts       # RFC 4180 compliant Excel CSV export utility
-|-- package.json                 # Node dependencies and scripts
-|-- tsconfig.json                # Strict TypeScript compiler options
-|-- tailwind.config.ts           # Tailwind CSS theme configuration
-`-- README.md                    # This file
+frontend/src/
+|-- app/
+|   |-- layout.tsx              # Root layout with Sidebar and ThemeProvider
+|   |-- page.tsx                # Root redirect to /upload
+|   |-- globals.css             # CSS custom properties for light/dark themes
+|   |-- upload/
+|   |   |-- page.tsx            # Procurement bill & MTC intake with WinRT OCR
+|   |   `-- review/
+|   |       `-- page.tsx        # Dedicated Site Engineer Inward Review page
+|   |-- inventory/
+|   |   `-- page.tsx            # Plant inventory tracking & surplus lifecycle radar
+|   |-- discover/
+|   |   `-- page.tsx            # Cross-CPSE spare search & indent composition
+|   |-- requests/
+|   |   |-- page.tsx            # Requisitions inbox (Inbound/Outbound/Confirm/Decline)
+|   |   `-- [id]/
+|   |       `-- page.tsx        # Single request detail with live tracking timeline
+|   `-- audit/
+|       `-- page.tsx            # Sovereign compliance audit ledger (SHA-256 sealed)
+|-- components/
+|   |-- Sidebar.tsx             # Left sidebar navigation with plant facility switcher
+|   |-- ThemeProvider.tsx       # Theme context & CPSE facility state
+|   |-- ThemeToggle.tsx         # Sun/Moon mode switcher button
+|   `-- ui/
+|       |-- Card.tsx            # Minimalist Card wrapper & CardHeader
+|       |-- Modal.tsx           # Accessible modal dialog
+|       |-- StatusBadge.tsx     # Standardized status badge with dot indicators
+|       |-- KpiCard.tsx         # Metric summary counter cards
+|       |-- Timeline.tsx        # Vertical live movement timeline
+|       `-- EmptyState.tsx      # Clean empty state illustrations
+`-- lib/
+    |-- api.ts                  # Centralized REST client with offline fallback fixtures
+    |-- types.ts                # TypeScript domain models and interfaces
+    |-- constants.ts            # CPSE depot registry, lifecycle maps, urgency levels
+    |-- formatters.ts           # INR currency, date, and time utilities
+    `-- theme.ts                # Theme preference storage and DOM class manipulator
 ```
 
 ---
 
-## 3. Application Routes & Features
+## 3. Pages & End-to-End Operational Workflow
 
-### 1. Global Navigation Bar (`components/TopNav.tsx`)
-- Deep Navy header (`#131921`) with Samanvay-AI identity.
-- "Deliver to Depot" active operating depot selector (Panipat, Hazira, Kochi, Mathura, Uran).
-- Global cross-CPSE procurement search bar with category dropdown and golden search button (`#febd69`).
-- Sub-navigation ribbon (`#232f3e`) linking Dashboard, Deduplication, HITL Triage, Transfers, and Sovereign Audits.
+```
+[1. Upload Bill/MTC] ──> [2. Engineer Inward Review] ──> [3. Plant Inventory]
+                                                               │
+                                                               ▼ (If idle >90d)
+                                                        [Broadcast Surplus]
+                                                               │
+[5. Live Tracking Timeline] ◄── [4. Facility Confirms] ◄── [Discover & Request]
+```
 
-### 2. Procurement & Surplus Radar Dashboard (`app/dashboard/page.tsx`)
-- KPI Summary Cards: Surplus Items Identified, Working Capital Unlocked (INR), Active Inter-CPSE Requisitions, ASME Safety Invariant Accuracy (100%).
-- Surplus Inventory Discovery Radar: Tabular view of idle stock across CPSE depots with search and CPSE filters (`All`, `IOCL`, `ONGC`, `BPCL`).
-- Direct Action: 1-click "Issue Indent" button pre-populates a transfer requisition directly from the radar row.
-- Export: 1-click "Export CSV" downloads a standardized RFC 4180 spreadsheet.
+### 1. Document Upload & OCR Intake (`/upload`)
+- Multi-format file intake supporting scanned invoices, digital bills, and EN 10204 3.1 Mill Test Certificates in PDF, PNG, JPG, or TIFF.
+- Live WinRT OCR processing extracting Heat numbers, PO numbers, ASTM metallurgy, ASME standards, and line items in sub-250ms.
+- Test presets featuring real refinery certificates for immediate one-click testing.
+- Direct navigation to Site Engineer Review.
 
-### 3. Material Deduplication & MTC Studio (`app/deduplication/page.tsx`)
-- Real-Time Standardization Workbench: Paste any raw ERP description (e.g. `NRV 2IN 150# CS`) to view extracted attributes in milliseconds.
-- Spec Attribute Grid: Side-by-side breakdown of Item Type, Nominal Bore mm, Pressure Class, Metallurgy, Facing, and Standard.
-- ASME Tolerance Result: Clear Tier-1 (Identical), Tier-2 (Substitute), or Tier-3 (Incompatible) indicator with engineering justification.
-- Scanned Document & MTC Viewer: Preset buttons to test against real procurement documents (`Image (1).jpeg` through `Image (7).jpeg`) showing OCR extracted items, heat numbers, and chemical analysis.
+### 2. Site Engineer Inward Review (`/upload/review`)
+- Detailed inspection workbench where site engineers verify extracted attributes before committing assets to the central database.
+- Editable technical specifications: SKU code, size (NB mm), pressure class, metallurgy, facing, and governing standard.
+- **Initial Lifecycle Tag Selection**:
+  - `TO_BE_CONSUMED`: Reserved for upcoming turnaround maintenance. Private to plant; hidden from sister CPSE surplus discovery.
+  - `IN_STORAGE`: Standard warehouse reserve buffer stock.
+- Single-click commit to central PostgreSQL database and Neo4j knowledge graph.
 
-### 4. Human-in-the-Loop Batch Triage (`app/hitl/page.tsx`)
-- Triage Review Cards: High-density cards displaying ambiguous matches (70%-90% confidence or Tier-2 upgrades) for engineer review.
-- Spec Comparison Table: Side-by-side comparison of requested source parameters vs candidate inventory with `EXACT` and `UPGRADE` badges.
-- Single & Batch Actions: Single-click "Approve" and "Reject" buttons, plus a "1-Click Bulk Approve All Safe Matches" button.
-- Live Active Learning: Decisions instantly update the backend active learning cache without page reload.
+### 3. Plant Inventory & Surplus Radar (`/inventory`)
+- Central repository of all inward physical assets with real-time lifecycle tracking.
+- KPI metric counters: Total Tracked, To Be Consumed, In Storage, Idle Surplus, Consumed.
+- Dynamic filtering by holding CPSE, lifecycle status, or text search.
+- **Lifecycle Transition Actions**:
+  - `Mark Idle Surplus`: Prompts for justification note and immediately broadcasts the asset to all sister CPSEs in Neo4j.
+  - `Mark Consumed`: Records installation in processing unit and archives the record.
 
-### 5. Inter-CPSE Transfers & CISF Gate Pass (`app/transfers/page.tsx`)
-- Transfer Requisitions Ledger: Status-tabbed view (`ALL`, `PENDING_APPROVAL`, `APPROVED`, `DISPATCHED`, `DELIVERED`).
-- Multi-Depot Inventory Locks: Displays active surplus inventory reservation locks preventing double-allocation across depots.
-- GIS Route Details: Displays calculated highway distance in kilometers, estimated transit duration, and road freight costs.
-- Official Printable CISF Digital Gate Pass: Modal rendering of the statutory Central Industrial Security Force (CISF) Material Gate Pass with verification seal, authorized signatory fields, and scannable SVG QR code.
+### 4. Cross-CPSE Spare Material Discovery (`/discover`)
+- Unified search engine across all certified spare items held by ONGC, IOCL, BPCL, HPCL, and GAIL.
+- Filter by holding CPSE, equipment category, or metallurgy.
+- **Send Procurement Request Modal**: Pre-fills target facility information, validates requested quantity against available stock, captures urgency level (`EMERGENCY_SHUTDOWN`, `PLANNED_MAINTENANCE`, `ROUTINE`), and transmits the indent.
 
-### 6. Sovereign Audit Trail Ledger (`app/audits/page.tsx`)
-- Compliance Event Ledger: Chronological event stream compliant with CVC and CAG public procurement transparency guidelines.
-- Cryptographic Verification: Displays the SHA-256 digital signature computed over event parameters with a "Verify Seal" integrity validator.
-- Filtering & Export: Filter by CPSE or event category, with 1-click CSV export.
+### 5. Procurement Requests & Tracking Inbox (`/requests`)
+- Unified requests dashboard with tabbed segmentation:
+  - **All Requests**: Global view of all transfer activity.
+  - **Received Requests (Inbound)**: Filtered to requests targeting the active facility. Enables 1-click **Confirm Supply** or **Decline Request**.
+  - **Sent Requests (Outbound)**: Outward indents issued to other refineries.
+- Quick status filters and search bar.
+
+### 6. Request Detail & Live Tracking Timeline (`/requests/[id]`)
+- Comprehensive bilateral view accessible to both sender and receiver facilities.
+- Corridor tracking cards displaying requesting unit, supplying depot, allocated valuation, and transporter fleet details.
+- **Interactive Live Movement Timeline**:
+  - Step 1: Procurement Request Issued (with engineer notes)
+  - Step 2: Supply Capability Confirmed / Declined (with facility sign-off)
+  - Step 3: CISF Material Gate Pass Issued (with SHA-256 seal)
+  - Step 4: Outward Perimeter Gate Dispatch (vehicle and driver details)
+  - Step 5: Consignment Delivery & Handover at Site Depot
+- Printable official CISF Electronic Material Gate Pass with cryptographic QR code and verification URL.
+
+### 7. Sovereign Audit Ledger (`/audit`)
+- CVC and CAG compliant immutable audit trail.
+- Every bill commit, lifecycle transition, and transfer indent is cryptographically sealed with a SHA-256 hash.
+- Export to RFC 4180 Excel CSV with UTF-8 BOM encoding.
 
 ---
 
-## 4. Local Development Setup
+## 4. Development & Build Verification
 
-### 1. Install Node Dependencies
-From the `frontend/` directory:
 ```powershell
-npm install
-```
-
-### 2. Run Development Server
-```powershell
+# Run development server
+cd frontend
 npm run dev
-```
-Open `http://localhost:3000` in your web browser.
 
-### 3. Production Build & Type Checking
-To compile the application and verify all static routes:
-```powershell
+# Verify static build and TypeScript compilation
 npm run build
 ```
-Expected output:
-- Compiles in ~2 seconds.
-- Validates all TypeScript types and ESLint rules.
-- Generates 9 static pages (`/`, `/_not-found`, `/dashboard`, `/deduplication`, `/hitl`, `/transfers`, `/audits`).

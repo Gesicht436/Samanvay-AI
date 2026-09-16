@@ -20,6 +20,16 @@ DATA_FILE = settings.DATA_DIR / "ml_training" / "biencoder_pairs.jsonl"
 OUTPUT_DIR = settings.BGE_M3_MODEL_PATH
 
 
+def _load_pairs(filepath: Path):
+    """Loads contrastive pairs from a JSONL file. Returns list of (anchor, positive) tuples."""
+    pairs = []
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line in f:
+            data = json.loads(line)
+            pairs.append((data["anchor"], data["positive"]))
+    return pairs
+
+
 def train_biencoder(epochs: int = 3, batch_size: int = 16, lr: float = 2e-5):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"[+] Initializing BGE-M3 training on device: {device} (CUDA: {torch.cuda.is_available()})")
@@ -29,17 +39,15 @@ def train_biencoder(epochs: int = 3, batch_size: int = 16, lr: float = 2e-5):
     if not DATA_FILE.exists():
         raise FileNotFoundError(f"Missing training dataset at {DATA_FILE}")
 
-    # Load contrastive pairs
-    train_examples = []
+    # Load contrastive pairs and split train/dev (90/10)
     logger.info(f"[+] Loading contrastive pairs from {DATA_FILE}...")
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        for line in f:
-            data = json.loads(line)
-            train_examples.append(InputExample(
-                texts=[data["anchor"], data["positive"]]
-            ))
+    all_pairs = _load_pairs(DATA_FILE)
+    split_idx = max(1, int(len(all_pairs) * 0.9))
+    train_pairs = all_pairs[:split_idx]
+    dev_pairs   = all_pairs[split_idx:]
+    logger.info(f"[+] Loaded {len(all_pairs)} pairs (train={len(train_pairs)}, dev={len(dev_pairs)})")
 
-    logger.info(f"[+] Loaded {len(train_examples)} training pairs.")
+    train_examples = [InputExample(texts=[a, p]) for a, p in train_pairs]
 
     model = SentenceTransformer(settings.BASE_BGE_M3, device=device)
     train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=batch_size)
@@ -50,6 +58,25 @@ def train_biencoder(epochs: int = 3, batch_size: int = 16, lr: float = 2e-5):
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Build cosine similarity evaluator on the held-out dev set.
+    # sentence_transformers will run this after each epoch and print the score.
+    # The best checkpoint (highest cosine similarity on dev) is saved automatically.
+    evaluator = None
+    if dev_pairs:
+        from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
+        anchors   = [a for a, _ in dev_pairs]
+        positives = [p for _, p in dev_pairs]
+        # All dev pairs are positive (label=1.0)
+        labels    = [1.0] * len(dev_pairs)
+        evaluator = EmbeddingSimilarityEvaluator(
+            sentences1=anchors,
+            sentences2=positives,
+            scores=labels,
+            name="dev_cosine",
+            show_progress_bar=False
+        )
+        logger.info(f"[+] EmbeddingSimilarityEvaluator configured on {len(dev_pairs)} dev pairs.")
+
     model.fit(
         train_objectives=[(train_dataloader, train_loss)],
         epochs=epochs,
@@ -57,12 +84,16 @@ def train_biencoder(epochs: int = 3, batch_size: int = 16, lr: float = 2e-5):
         optimizer_params={"lr": lr},
         weight_decay=0.01,
         show_progress_bar=True,
-        use_amp=(device == "cuda")  # Automatic Mixed Precision for RTX 3060
+        use_amp=(device == "cuda"),  # Automatic Mixed Precision for RTX 3060
+        evaluator=evaluator,
+        evaluation_steps=len(train_dataloader),  # evaluate at end of each epoch
+        output_path=str(OUTPUT_DIR),             # saves best checkpoint here
     )
 
     logger.info(f"[+] Saving fine-tuned BGE-M3 model weights to {OUTPUT_DIR}...")
     model.save(str(OUTPUT_DIR))
     logger.info("[+] Fine-tuning complete and weights persisted successfully!")
+
 
 
 if __name__ == "__main__":

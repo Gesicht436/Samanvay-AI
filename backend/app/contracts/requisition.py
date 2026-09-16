@@ -63,6 +63,16 @@ class DigitalMaterialGatePass(BaseModel):
     verification_url: Optional[str] = Field(None, description="Public/CISF URL for cryptographic authenticity verification")
 
 
+class TimelineEvent(BaseModel):
+    timestamp: str
+    event: str          # "CREATED", "CONFIRMED", "APPROVED", "DISPATCHED", "IN_TRANSIT", "DELIVERED", "REJECTED"
+    title: str          # User-facing title, e.g. "Procurement Request Issued"
+    actor: str          # e.g. "Mayank Anand, Executive Engineer (Materials)"
+    actor_cpse: str     # e.g. "IOCL"
+    notes: Optional[str] = None
+    details: Optional[dict] = None
+
+
 class InterCPSERequisition(BaseModel):
     """
     Lifecycle tracking model for inter-enterprise transfer of surplus spares.
@@ -92,6 +102,11 @@ class InterCPSERequisition(BaseModel):
     delivery_timestamp: Optional[str] = None
     gate_pass: Optional[DigitalMaterialGatePass] = None
     audit_hash: str = Field(..., description="Immutable SHA-256 audit fingerprint")
+    timeline: List[TimelineEvent] = Field(default_factory=list)
+    tracking_carrier: Optional[str] = None
+    tracking_number: Optional[str] = None
+    estimated_delivery: Optional[str] = None
+    facility_confirmation_note: Optional[str] = None
 
 
 class RequisitionCreateRequest(BaseModel):
@@ -115,9 +130,28 @@ class RequisitionApproveRequest(BaseModel):
     driver_id_no: str = "DL-042019948123"
 
 
+class RequisitionConfirmRequest(BaseModel):
+    confirming_officer: str = "P. K. Sharma, Chief General Manager (Procurement)"
+    confirmation_notes: str = "Part physical condition verified in surplus bay; facility confirmed capability to supply requested quantity."
+    vehicle_no: Optional[str] = "GJ-05-AB-7712"
+    driver_name: Optional[str] = "Mukesh Singh Parmar"
+    driver_id_no: Optional[str] = "DL-GJ0520210084"
+
+
 class RequisitionRejectRequest(BaseModel):
     rejection_reason: str = "Item reserved for imminent internal unit turnaround maintenance."
     rejected_by: str = "A. K. Ganguly, GM (Materials)"
+
+
+class RequisitionTrackUpdateRequest(BaseModel):
+    event: str = "IN_TRANSIT_UPDATE"
+    title: str = "Transit Checkpoint Verified"
+    actor: str = "CISF Toll Checkpost Officer"
+    actor_cpse: str = "MoPNG"
+    notes: Optional[str] = "Vehicle cleared interstate transit corridor checkpoint."
+    tracking_carrier: Optional[str] = None
+    tracking_number: Optional[str] = None
+    estimated_delivery: Optional[str] = None
 
 
 class RouteEstimateRequest(BaseModel):

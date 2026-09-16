@@ -98,7 +98,21 @@ The server starts at `http://127.0.0.1:8000`.
 ### C. Ingestion and OCR (`backend/app/ingestion/`)
 - `ocr_engine.py`: Multi-tier optical character recognition pipeline. Prioritizes native Windows Media OCR (`winocr`) for sub-250ms text extraction from scanned MTC images.
 - `certificate.py`: Specialized tabular parser extracting heat numbers, mechanical yield strength, and chemical compositions (Carbon, Sulfur, Phosphorus, Chromium, Molybdenum).
-- `storage.py`: SQLAlchemy database models and audit logging utilities.
+- `storage.py`: SQLAlchemy database models for ingested documents, inventory items, and audit logging utilities.
+
+### D. Central Inventory & Inward Lifecycle Management (`backend/app/api/v1/inventory.py`)
+- Inward Procurement Bill Commit: Site engineers upload scanned bills or MTC certificates, inspect/modify parsed specifications (heat number, metallurgy, dimensions, PO number), and commit items into PostgreSQL with an initial lifecycle status.
+- Lifecycle Statuses:
+  - `TO_BE_CONSUMED`: Item received and reserved for scheduled turnaround or upcoming unit maintenance. Stored internally in PostgreSQL and mirrored in Neo4j with status `TO_BE_CONSUMED`; completely excluded from sister CPSE surplus radar search results.
+  - `IN_STORAGE`: Standard warehouse reserve buffer stock.
+  - `IDLE_SURPLUS`: Flagged when turnaround is completed or delayed without utilizing the item. Immediately broadcasted live to sister CPSEs (IOCL, ONGC, BPCL) in cross-CPSE surplus discovery queries (`find_inter_cpse_spares`).
+  - `RESERVED_TRANSFER`: Reserved by an indenting sister CPSE with an active inventory lock.
+  - `CONSUMED`: Installed in a refinery processing unit; quantity decremented to 0 and archived from active stock.
+- REST Endpoints:
+  - `POST /api/v1/inventory/commit-bill`: Commits verified procurement bill item and syncs to Neo4j.
+  - `GET /api/v1/inventory/items`: Lists plant inventory items filtered by CPSE, status, or depot.
+  - `GET /api/v1/inventory/{item_id}`: Retrieves single item record by primary key.
+  - `PATCH /api/v1/inventory/{item_id}/status`: Transitions item status (e.g. `TO_BE_CONSUMED` -> `IDLE_SURPLUS`) and updates the Knowledge Graph in real-time.
 
 ---
 
@@ -109,5 +123,6 @@ uv run pytest
 ```
 To run tests for a specific module:
 ```powershell
-uv run pytest tests/test_active_learning.py -v
+uv run pytest tests/test_inventory_lifecycle.py -v
 ```
+

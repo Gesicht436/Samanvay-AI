@@ -14,13 +14,16 @@ from backend.app.contracts.requisition import (
     DigitalMaterialGatePass,
     RequisitionCreateRequest,
     RequisitionApproveRequest,
+    RequisitionConfirmRequest,
     RequisitionRejectRequest,
+    RequisitionTrackUpdateRequest,
     RouteEstimateRequest,
     RouteEstimateResponse,
     InventoryLockItem,
     GatePassVerificationResponse,
     RequisitionStatus,
     UrgencyLevel,
+    TimelineEvent,
 )
 from backend.app.matching.logistics import (
     DEPOT_REGISTRY,
@@ -173,6 +176,36 @@ def _seed_sample_requisitions():
         approved_at="2026-09-14T14:25:00Z",
         gate_pass=gp1,
         audit_hash=_calculate_audit_hash(f"{req1_id}:IOCL:ONGC:APPROVED:186000"),
+        tracking_carrier="Container Corporation of India (CONCOR)",
+        tracking_number="CONCOR-GJ-2026-8812",
+        estimated_delivery="2026-09-16T12:00:00Z",
+        facility_confirmation_note="Materials bay inspection passed. Parts cleared for urgent dispatch under interstate CPSE emergency protocol.",
+        timeline=[
+            TimelineEvent(
+                timestamp="2026-09-14T10:15:00Z",
+                event="CREATED",
+                title="Procurement Request Issued",
+                actor="Mayank Anand, Executive Engineer (Maintenance)",
+                actor_cpse="IOCL",
+                notes="Critical path replacement for turnaround shutdown maintenance. Prevents crude unit trip.",
+            ),
+            TimelineEvent(
+                timestamp="2026-09-14T12:40:00Z",
+                event="CONFIRMED",
+                title="Supply Capability Confirmed",
+                actor="Dr. S. K. Roy, Executive Director (Materials, ONGC)",
+                actor_cpse="ONGC",
+                notes="Surplus stock verified in Hazira warehouse bay. 15 units locked for transfer.",
+            ),
+            TimelineEvent(
+                timestamp="2026-09-14T14:25:00Z",
+                event="APPROVED",
+                title="CISF Material Gate Pass Issued",
+                actor="Dr. S. K. Roy, Executive Director (Materials, ONGC)",
+                actor_cpse="ONGC",
+                notes="Gate Pass OGP-2026-HZR-081-0092 generated with SHA-256 seal. Vehicle assigned: HR-06-EA-8841.",
+            ),
+        ],
     )
     _REQUISITIONS_DB[req1_id] = req1
 
@@ -196,6 +229,16 @@ def _seed_sample_requisitions():
         status=RequisitionStatus.PENDING_APPROVAL,
         requested_by="Ananya Sengupta, Senior Manager (Electrical, BPCL)",
         audit_hash=_calculate_audit_hash(f"{req2_id}:BPCL:ONGC:PENDING:370000"),
+        timeline=[
+            TimelineEvent(
+                timestamp="2026-09-15T06:00:00Z",
+                event="CREATED",
+                title="Procurement Request Issued",
+                actor="Ananya Sengupta, Senior Manager (Electrical, BPCL)",
+                actor_cpse="BPCL",
+                notes="Main reflux pump drive motor high bearing vibration. Urgent inter-depot requisition from Uran to prevent flaring.",
+            ),
+        ],
     )
     _REQUISITIONS_DB[req2_id] = req2
 
@@ -261,6 +304,44 @@ def _seed_sample_requisitions():
         dispatch_timestamp="2026-09-14T18:15:00Z",
         gate_pass=gp3,
         audit_hash=_calculate_audit_hash(f"{req3_id}:IOCL:BPCL:IN_TRANSIT:291000"),
+        tracking_carrier="CONCOR Surface Rail-Road",
+        tracking_number="CONCOR-MH-2026-4412",
+        estimated_delivery="2026-09-17T08:00:00Z",
+        facility_confirmation_note="Valves tested and certified for Class 600 sour service. Approved for immediate transit.",
+        timeline=[
+            TimelineEvent(
+                timestamp="2026-09-13T12:00:00Z",
+                event="CREATED",
+                title="Procurement Request Issued",
+                actor="Vikram Chauhan, DGM (Piping, IOCL)",
+                actor_cpse="IOCL",
+                notes="Emergency high-pressure replacement during unit overhaul.",
+            ),
+            TimelineEvent(
+                timestamp="2026-09-14T15:10:00Z",
+                event="CONFIRMED",
+                title="Supply Capability Confirmed",
+                actor="Rajeev Verma, CGM (Materials, BPCL)",
+                actor_cpse="BPCL",
+                notes="Valves tested and certified for Class 600 sour service. Approved for immediate transit.",
+            ),
+            TimelineEvent(
+                timestamp="2026-09-14T17:30:00Z",
+                event="APPROVED",
+                title="CISF Material Gate Pass Issued",
+                actor="Rajeev Verma, CGM (Materials, BPCL)",
+                actor_cpse="BPCL",
+                notes="Gate Pass OGP-2026-MUM-081-4412 generated. Transporter: CONCOR.",
+            ),
+            TimelineEvent(
+                timestamp="2026-09-14T18:15:00Z",
+                event="DISPATCHED",
+                title="Vehicle Dispatched from Refinery",
+                actor="CISF Perimeter Security Post (Mahul Gate 4)",
+                actor_cpse="BPCL",
+                notes="Vehicle MH-43-BB-1092 departed facility with CISF seal cleared.",
+            ),
+        ],
     )
     _REQUISITIONS_DB[req3_id] = req3
 
@@ -364,6 +445,17 @@ def create_requisition(req: RequisitionCreateRequest):
 
     audit_hash = _calculate_audit_hash(f"{new_id}:{req.source_cpse}:{req.target_cpse}:{total_val}:{now_iso}")
 
+    initial_timeline = [
+        TimelineEvent(
+            timestamp=now_iso,
+            event="CREATED",
+            title="Procurement Request Issued",
+            actor="Mayank Anand, Executive Engineer (Materials)",
+            actor_cpse=req.source_cpse,
+            notes=f"Urgent requirement for {req.required_qty} units: {req.justification}",
+        )
+    ]
+
     requisition = InterCPSERequisition(
         requisition_id=new_id,
         source_cpse=req.source_cpse,
@@ -382,9 +474,98 @@ def create_requisition(req: RequisitionCreateRequest):
         status=RequisitionStatus.PENDING_APPROVAL,
         requested_by="Mayank Anand, Executive Engineer (Materials)",
         audit_hash=audit_hash,
+        timeline=initial_timeline,
     )
     _REQUISITIONS_DB[new_id] = requisition
     return requisition
+
+
+@router.get("/{req_id}", response_model=InterCPSERequisition)
+def get_single_requisition(req_id: str):
+    """Retrieves full requisition details with live tracking timeline."""
+    _seed_sample_requisitions()
+    if req_id not in _REQUISITIONS_DB:
+        raise HTTPException(status_code=404, detail=f"Requisition {req_id} not found")
+    return _REQUISITIONS_DB[req_id]
+
+
+@router.post("/{req_id}/confirm", response_model=InterCPSERequisition)
+def confirm_requisition(req_id: str, payload: RequisitionConfirmRequest):
+    """
+    Target facility confirms capability to supply the requested part.
+    Records confirmation in timeline and approves for dispatch.
+    """
+    _seed_sample_requisitions()
+    if req_id not in _REQUISITIONS_DB:
+        raise HTTPException(status_code=404, detail=f"Requisition {req_id} not found")
+
+    item = _REQUISITIONS_DB[req_id]
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    item.facility_confirmation_note = payload.confirmation_notes
+    item.timeline.append(
+        TimelineEvent(
+            timestamp=now_iso,
+            event="CONFIRMED",
+            title="Supply Capability Confirmed by Facility",
+            actor=payload.confirming_officer,
+            actor_cpse=item.target_cpse,
+            notes=payload.confirmation_notes,
+        )
+    )
+
+    # Approve and issue gate pass
+    return approve_requisition(
+        req_id,
+        RequisitionApproveRequest(
+            approver_name=payload.confirming_officer,
+            vehicle_no=payload.vehicle_no or "GJ-05-AB-7712",
+            driver_name=payload.driver_name or "Mukesh Singh Parmar",
+            driver_id_no=payload.driver_id_no or "DL-GJ0520210084",
+        ),
+    )
+
+
+@router.post("/{req_id}/decline", response_model=InterCPSERequisition)
+def decline_requisition(req_id: str, payload: RequisitionRejectRequest):
+    """
+    Target facility declines the requisition with justification reason.
+    Releases inventory reservation lock and records decline in timeline.
+    """
+    return reject_requisition(req_id, payload)
+
+
+@router.post("/{req_id}/track", response_model=InterCPSERequisition)
+def update_requisition_tracking(req_id: str, payload: RequisitionTrackUpdateRequest):
+    """
+    Appends live transit milestone, carrier info, or checkpoint verification to the timeline.
+    """
+    _seed_sample_requisitions()
+    if req_id not in _REQUISITIONS_DB:
+        raise HTTPException(status_code=404, detail=f"Requisition {req_id} not found")
+
+    item = _REQUISITIONS_DB[req_id]
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    if payload.tracking_carrier:
+        item.tracking_carrier = payload.tracking_carrier
+    if payload.tracking_number:
+        item.tracking_number = payload.tracking_number
+    if payload.estimated_delivery:
+        item.estimated_delivery = payload.estimated_delivery
+
+    item.timeline.append(
+        TimelineEvent(
+            timestamp=now_iso,
+            event=payload.event,
+            title=payload.title,
+            actor=payload.actor,
+            actor_cpse=payload.actor_cpse,
+            notes=payload.notes,
+        )
+    )
+    _REQUISITIONS_DB[req_id] = item
+    return item
 
 
 @router.post("/{req_id}/approve", response_model=InterCPSERequisition)
@@ -449,7 +630,21 @@ def approve_requisition(req_id: str, payload: RequisitionApproveRequest):
     item.approved_by = payload.approver_name
     item.approved_at = now_iso
     item.gate_pass = gate_pass
+    item.tracking_carrier = "Container Corporation of India (CONCOR)"
+    item.tracking_number = f"CONCOR-{item.target_cpse[:3]}-2026-{int(time.time()) % 9000 + 1000}"
     item.audit_hash = _calculate_audit_hash(f"{item.requisition_id}:APPROVED:{gp_hash}")
+
+    # Add timeline event
+    item.timeline.append(
+        TimelineEvent(
+            timestamp=now_iso,
+            event="APPROVED",
+            title="CISF Material Gate Pass Issued",
+            actor=payload.approver_name,
+            actor_cpse=item.target_cpse,
+            notes=f"Gate Pass {gp_no} issued for vehicle {payload.vehicle_no} (Driver: {payload.driver_name}).",
+        )
+    )
 
     _REQUISITIONS_DB[req_id] = item
     return item
@@ -468,6 +663,8 @@ def reject_requisition(req_id: str, payload: RequisitionRejectRequest):
     if item.status in [RequisitionStatus.IN_TRANSIT, RequisitionStatus.DELIVERED]:
         raise HTTPException(status_code=400, detail="Cannot reject requisition that is already dispatched or delivered.")
 
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
     # Release inventory lock
     stock_key = f"{item.target_cpse}:{item.sku_code}"
     if stock_key in _INVENTORY_STOCK:
@@ -480,6 +677,17 @@ def reject_requisition(req_id: str, payload: RequisitionRejectRequest):
     item.status = RequisitionStatus.REJECTED
     item.rejection_reason = payload.rejection_reason
     item.audit_hash = _calculate_audit_hash(f"{req_id}:REJECTED:{payload.rejection_reason}")
+
+    item.timeline.append(
+        TimelineEvent(
+            timestamp=now_iso,
+            event="REJECTED",
+            title="Requisition Declined by Facility",
+            actor=payload.rejected_by,
+            actor_cpse=item.target_cpse,
+            notes=payload.rejection_reason,
+        )
+    )
 
     _REQUISITIONS_DB[req_id] = item
     return item
@@ -504,6 +712,17 @@ def dispatch_requisition(req_id: str):
     item.dispatch_timestamp = now_iso
     item.audit_hash = _calculate_audit_hash(f"{req_id}:IN_TRANSIT:{now_iso}")
 
+    item.timeline.append(
+        TimelineEvent(
+            timestamp=now_iso,
+            event="DISPATCHED",
+            title="Material Dispatched from Refinery",
+            actor="CISF Perimeter Checkpost Security",
+            actor_cpse=item.target_cpse,
+            notes="Vehicle cleared outward gate with verified electronic gate pass and CISF security seal.",
+        )
+    )
+
     _REQUISITIONS_DB[req_id] = item
     return item
 
@@ -525,6 +744,17 @@ def deliver_requisition(req_id: str):
     item.status = RequisitionStatus.DELIVERED
     item.delivery_timestamp = now_iso
     item.audit_hash = _calculate_audit_hash(f"{req_id}:DELIVERED:{now_iso}")
+
+    item.timeline.append(
+        TimelineEvent(
+            timestamp=now_iso,
+            event="DELIVERED",
+            title="Material Received at Destination Depot",
+            actor="Receiving Gate CISF Security & Plant Engineer",
+            actor_cpse=item.source_cpse,
+            notes="Consignment physically received and inspected. Delivered to plant CDU-2 unit.",
+        )
+    )
 
     # Finalize stock: inventory was successfully transferred
     stock_key = f"{item.target_cpse}:{item.sku_code}"

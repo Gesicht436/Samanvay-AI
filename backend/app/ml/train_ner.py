@@ -113,7 +113,7 @@ def train_ner(epochs: int = 3, batch_size: int = 16, lr: float = 3e-5):
         per_device_eval_batch_size=batch_size,
         learning_rate=lr,
         weight_decay=0.01,
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",   # renamed from evaluation_strategy in transformers 4.41+
         save_strategy="epoch",
         fp16=(device == "cuda"),
         logging_steps=50,

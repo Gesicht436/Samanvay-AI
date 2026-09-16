@@ -1,7 +1,7 @@
 """
 Neo4j Graph Database Seeding Script.
 Loads UNSPSC v26, GeM categories, Canonical Master Catalog (2,200 items),
-and CPSE inventory stock (10,800 items) into Neo4j with unique constraints.
+and CPSE inventory stock (10,800 items across IOCL, ONGC, and BPCL) into Neo4j with unique constraints.
 """
 
 import csv
@@ -42,11 +42,22 @@ def seed_database():
             logger.info("[+] Seeding UNSPSC taxonomy...")
             with open(unspsc_file, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                batch = []
                 for row in reader:
+                    batch.append(row)
+                    if len(batch) >= 500:
+                        session.run("""
+                        UNWIND $batch AS item
+                        MERGE (u:UNSPSC_Commodity {code: item.code})
+                        SET u.title = item.title, u.level = item.level, u.parent_code = item.parent_code
+                        """, batch=batch)
+                        batch = []
+                if batch:
                     session.run("""
-                    MERGE (u:UNSPSC_Commodity {code: $code})
-                    SET u.title = $title, u.level = $level, u.parent_code = $parent
-                    """, code=row["code"], title=row["title"], level=row["level"], parent=row["parent_code"])
+                    UNWIND $batch AS item
+                    MERGE (u:UNSPSC_Commodity {code: item.code})
+                    SET u.title = item.title, u.level = item.level, u.parent_code = item.parent_code
+                    """, batch=batch)
 
         # 2. Seed GeM Categories
         gem_file = TAXONOMY_DIR / "gem_categories.csv"
@@ -54,11 +65,22 @@ def seed_database():
             logger.info("[+] Seeding GeM categories...")
             with open(gem_file, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                batch = []
                 for row in reader:
+                    batch.append(row)
+                    if len(batch) >= 500:
+                        session.run("""
+                        UNWIND $batch AS item
+                        MERGE (g:GeM_Category {category_id: item.category_id})
+                        SET g.name = item.name, g.parent_id = item.parent_id
+                        """, batch=batch)
+                        batch = []
+                if batch:
                     session.run("""
-                    MERGE (g:GeM_Category {category_id: $cat_id})
-                    SET g.name = $name, g.parent_id = $parent
-                    """, cat_id=row["category_id"], name=row["name"], parent=row["parent_id"])
+                    UNWIND $batch AS item
+                    MERGE (g:GeM_Category {category_id: item.category_id})
+                    SET g.name = item.name, g.parent_id = item.parent_id
+                    """, batch=batch)
 
         # 3. Seed Canonical Master
         canonical_file = TAXONOMY_DIR / "canonical_master.csv"
@@ -107,7 +129,64 @@ def seed_database():
                     MERGE (c)-[:LISTED_ON_GEM]->(g)
                     """, batch=batch)
 
-        logger.info("[+] Graph database seeding complete!")
+        # 4. Seed CPSE Catalogs & Depots (IOCL, ONGC, BPCL)
+        catalog_files = [
+            CATALOG_DIR / "iocl_materials.csv",
+            CATALOG_DIR / "ongc_materials.csv",
+            CATALOG_DIR / "bpcl_materials.csv",
+        ]
+        for cat_file in catalog_files:
+            if not cat_file.exists():
+                continue
+            logger.info(f"[+] Seeding enterprise inventory from {cat_file.name}...")
+            with open(cat_file, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                batch = []
+                for row in reader:
+                    batch.append(row)
+                    if len(batch) >= 200:
+                        session.run("""
+                        UNWIND $batch AS item
+                        MERGE (d:CPSE_Depot {depot_id: item.depot_id})
+                        SET d.location_name = item.depot_location, d.cpse = item.cpse
+
+                        MERGE (s:LegacySKU {local_code: item.local_code})
+                        SET s.cpse = item.cpse,
+                            s.raw_description = item.raw_description
+
+                        WITH s, d, item
+                        MATCH (c:CanonicalMaterial {canonical_id: item.canonical_id})
+                        MERGE (s)-[:MAPS_TO]->(c)
+
+                        WITH s, d, item
+                        MERGE (s)-[stock:STORED_AT]->(d)
+                        SET stock.quantity = toInteger(item.quantity),
+                            stock.unit_cost = toFloat(item.unit_cost_inr),
+                            stock.idle_days = toInteger(item.idle_days)
+                        """, batch=batch)
+                        batch = []
+                if batch:
+                    session.run("""
+                    UNWIND $batch AS item
+                    MERGE (d:CPSE_Depot {depot_id: item.depot_id})
+                    SET d.location_name = item.depot_location, d.cpse = item.cpse
+
+                    MERGE (s:LegacySKU {local_code: item.local_code})
+                    SET s.cpse = item.cpse,
+                        s.raw_description = item.raw_description
+
+                    WITH s, d, item
+                    MATCH (c:CanonicalMaterial {canonical_id: item.canonical_id})
+                    MERGE (s)-[:MAPS_TO]->(c)
+
+                    WITH s, d, item
+                    MERGE (s)-[stock:STORED_AT]->(d)
+                    SET stock.quantity = toInteger(item.quantity),
+                        stock.unit_cost = toFloat(item.unit_cost_inr),
+                        stock.idle_days = toInteger(item.idle_days)
+                    """, batch=batch)
+
+        logger.info("[+] Complete enterprise graph database seeding finished!")
 
 
 if __name__ == "__main__":

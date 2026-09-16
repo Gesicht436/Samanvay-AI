@@ -2,28 +2,60 @@
 Mill Test Certificate (MTC) and Delivery Challan Parser (EN 10204 3.1 / 3.2).
 Extracts structured inspection metadata, heat numbers, chemical compositions, mechanical properties,
 and multi-item line descriptions from digital PDFs and scanned OCR documents.
+
+Enhanced with:
+  - ASTM Carbon Equivalent (CE) weldability formula computation.
+  - Mechanical yield/tensile strength threshold cross-validation.
+  - Granular document sub-classification (EN 10204 3.1, 3.2 with TPI, Challans, POs).
+  - Expanded OCR domain spell-correction dictionary.
 """
 
 import re
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from backend.app.ml.ner_tagger import extract_attributes
 
 logger = logging.getLogger(__name__)
 
 
+# -----------------------------------------------------------------------------
+# 1. Industrial OCR Character Post-Processing Dictionary
+# -----------------------------------------------------------------------------
+
 def normalize_mtc_text(text: str) -> str:
-    """Corrects common OCR character misreads found in industrial piping certificates."""
+    """
+    Corrects common OCR optical character misreads specific to industrial piping,
+    valves, metallurgy grades, and ASTM/ASME specifications.
+    """
     t = text
+    # ASME / ANSI standard misreads
     t = re.sub(r"\bASME\s*816\b", "ASME B16", t, flags=re.IGNORECASE)
     t = re.sub(r"\bANSI\s*816\b", "ANSI B16", t, flags=re.IGNORECASE)
     t = re.sub(r"\b816\.([0-9])\b", r"B16.\1", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bB16\s+([0-9]+)\b", r"B16.\1", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bAPI\s*6\s*D\b", "API 6D", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bAPI\s*60\s*0\b", "API 600", t, flags=re.IGNORECASE)
+
+    # ASTM Grade misreads
     t = re.sub(r"\bA\s*105\b", "ASTM A105", t, flags=re.IGNORECASE)
     t = re.sub(r"\bSA\s*105\b", "ASME SA105", t, flags=re.IGNORECASE)
     t = re.sub(r"\bA\s*815\b", "ASTM A815", t, flags=re.IGNORECASE)
     t = re.sub(r"\bA\s*182\b", "ASTM A182", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bA\s*350\b", "ASTM A350", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bA\s*216\b", "ASTM A216", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bVVCB\b", "WCB", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bVV-C-B\b", "WCB", t, flags=re.IGNORECASE)
+
+    # Stainless & Alloy shorthands
+    t = re.sub(r"\bSS\s*316\b", "SS316", t, flags=re.IGNORECASE)
+    t = re.sub(r"\b316\s*L\b", "316L", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bSS\s*304\b", "SS304", t, flags=re.IGNORECASE)
+    t = re.sub(r"\b304\s*L\b", "304L", t, flags=re.IGNORECASE)
+
+    # Flange and Valve shorthand corrections
     t = re.sub(r"\bFig\.\b", "Flg.", t, flags=re.IGNORECASE)
     t = re.sub(r"\bFIg\.\b", "Flg.", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bHANGE\b", "FLANGE", t, flags=re.IGNORECASE)
     t = re.sub(r"\b\[NV\b", "INV", t, flags=re.IGNORECASE)
     t = re.sub(r"\b150\*\b", "150#", t)
     t = re.sub(r"\b300\*\b", "300#", t)
@@ -31,17 +63,32 @@ def normalize_mtc_text(text: str) -> str:
     t = re.sub(r"\b900\*\b", "900#", t)
     t = re.sub(r"\bBLRTI\b", "BLRTJ", t, flags=re.IGNORECASE)
     t = re.sub(r"\baLRTJ\b", "BLRTJ", t)
+    t = re.sub(r"\bWN\s*RF\b", "WNRF", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bSO\s*RF\b", "SORF", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bBL\s*RF\b", "BLRF", t, flags=re.IGNORECASE)
+
+    # NACE and Sour Service
+    t = re.sub(r"\bNACE\s*MR\s*0175\b", "NACE MR0175", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bISO\s*15156[-\s]*[1-3]?\b", "ISO 15156", t, flags=re.IGNORECASE)
+
+    # Dimensions and Schedules
+    t = re.sub(r"\b([0-9]{1,2})\s*N\s*B\b", r"\1 NB", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bSCH\s*([0-9]{1,3}[A-Z]?)\b", r"SCH \1", t, flags=re.IGNORECASE)
     return t
 
+
+# -----------------------------------------------------------------------------
+# 2. Chemical Composition Extraction & Carbon Equivalent Calculation
+# -----------------------------------------------------------------------------
 
 def extract_chemical_from_text(text: str) -> Dict[str, str]:
     """Extracts chemical elemental percentages from OCR text or certificate text."""
     chem: Dict[str, str] = {}
-    elements = ["C", "Mn", "Si", "P", "S", "Cr", "Ni", "Mo", "Cu", "V", "Al", "Ti"]
+    elements = ["C", "Mn", "Si", "P", "S", "Cr", "Ni", "Mo", "Cu", "V", "Al", "Ti", "Nb", "N"]
     
-    # 1. Key-value style: e.g. "C: 0.19%", "Mn = 0.66"
+    # 1. Key-value style: e.g. "C: 0.19%", "Mn = 0.66", "C 0.18"
     for el in elements:
-        pat = rf"\b{el}\s*[:=\s]\s*([0-9]+\.[0-9]+)\s*%?"
+        pat = rf"\b{el}\s*[:=\s]\s*([0-9]+\.[0-9]{{1,4}})\s*%?"
         m = re.search(pat, text, re.IGNORECASE)
         if m:
             val = m.group(1).strip()
@@ -59,22 +106,79 @@ def extract_chemical_from_text(text: str) -> Dict[str, str]:
     return chem
 
 
+def compute_carbon_equivalent(chem_dict: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """
+    Computes ASTM / IIW Carbon Equivalent (CE) for weldability validation:
+      CE = %C + %Mn/6 + (%Cr + %Mo + %V)/5 + (%Ni + %Cu)/15
+    Standard threshold for ASTM A105 / A350 LF2: CE <= 0.43% (or <= 0.45% for thick sections).
+    """
+    def _parse_val(el: str) -> float:
+        val_str = chem_dict.get(el, "0").replace("%", "").strip()
+        try:
+            return float(val_str)
+        except ValueError:
+            return 0.0
+
+    c = _parse_val("C")
+    mn = _parse_val("Mn")
+    cr = _parse_val("Cr")
+    mo = _parse_val("Mo")
+    v = _parse_val("V")
+    ni = _parse_val("Ni")
+    cu = _parse_val("Cu")
+
+    if c <= 0.0:
+        return None
+
+    ce = c + (mn / 6.0) + ((cr + mo + v) / 5.0) + ((ni + cu) / 15.0)
+    ce_rounded = round(ce, 3)
+
+    # Weldability assessment
+    max_safe_ce = 0.43
+    is_weldable = ce_rounded <= max_safe_ce
+    status = "EXCELLENT_WELDABILITY" if ce_rounded <= 0.40 else ("ACCEPTABLE_WELDABILITY" if is_weldable else "PREHEAT_REQUIRED_HIGH_CE")
+
+    return {
+        "carbon_equivalent": ce_rounded,
+        "formula": "IIW (C + Mn/6 + (Cr+Mo+V)/5 + (Ni+Cu)/15)",
+        "is_standard_weldable": is_weldable,
+        "max_recommended_ce": max_safe_ce,
+        "status": status
+    }
+
+
+# -----------------------------------------------------------------------------
+# 3. Mechanical Property Extraction & ASTM Strength Validation
+# -----------------------------------------------------------------------------
+
 def extract_mechanical_from_text(text: str) -> Dict[str, str]:
     """Extracts mechanical properties (Tensile, Yield, Elongation, Hardness) from text."""
     mech: Dict[str, str] = {}
 
     # Tensile strength (Rm)
-    m_ts = re.search(r"(?:Tensile\s*(?:Strength)?|Rm|T\.S\.)\s*(?:\(?[A-Za-z]+\)?)?[:\s]*(?:Min\.?)?\s*([0-9]{3,4})\s*(?:MPa|N/mm2|KSI)?", text, re.IGNORECASE)
+    m_ts = re.search(
+        r"(?:Tensile\s*(?:Strength)?|Rm|T\.S\.)\s*(?:\(?[A-Za-z]+\)?)?[:\s]*(?:Min\.?)?\s*([0-9]{3,4})\s*(?:MPa|N/mm2|KSI)?",
+        text,
+        re.IGNORECASE
+    )
     if m_ts:
         mech["tensile"] = f"{m_ts.group(1)} MPa"
 
     # Yield strength (ReH / Rp0.2)
-    m_ys = re.search(r"(?:Yield\s*(?:Strength)?|ReH|Rp0\.2|Y\.S\.)\s*(?:\(?[A-Za-z]+\)?)?[:\s]*(?:Min\.?)?\s*([0-9]{3,4})\s*(?:MPa|N/mm2|KSI)?", text, re.IGNORECASE)
+    m_ys = re.search(
+        r"(?:Yield\s*(?:Strength)?|ReH|Rp0\.2|Y\.S\.)\s*(?:\(?[A-Za-z]+\)?)?[:\s]*(?:Min\.?)?\s*([0-9]{3,4})\s*(?:MPa|N/mm2|KSI)?",
+        text,
+        re.IGNORECASE
+    )
     if m_ys:
         mech["yield"] = f"{m_ys.group(1)} MPa"
 
     # Elongation (A / A5)
-    m_el = re.search(r"(?:Elongation|Elong|A5?)\s*(?:\(?[A-Za-z%]+\)?)?[:\s]*(?:Min\.?)?\s*([0-9]{1,2}(?:\.[0-9]+)?)\s*%", text, re.IGNORECASE)
+    m_el = re.search(
+        r"(?:Elongation|Elong|A5?)\s*(?:\(?[A-Za-z%]+\)?)?[:\s]*(?:Min\.?)?\s*([0-9]{1,2}(?:\.[0-9]+)?)\s*%",
+        text,
+        re.IGNORECASE
+    )
     if m_el:
         mech["elongation"] = f"{m_el.group(1)}%"
     else:
@@ -83,25 +187,122 @@ def extract_mechanical_from_text(text: str) -> Dict[str, str]:
             mech["elongation"] = f"{m_el2.group(1)}%"
 
     # Hardness (HB / HRC / HBW)
-    m_hb = re.search(r"(?:Hardness|HBW?|HRC|HV)\s*(?:\(?[A-Za-z]+\)?)?[:\s]*(?:Max\.?)?\s*([0-9]{2,3})\s*(?:HBW?|HRC|HV)?", text, re.IGNORECASE)
+    m_hb = re.search(
+        r"(?:Hardness|HBW?|HRC|HV)\s*(?:\(?[A-Za-z]+\)?)?[:\s]*(?:Max\.?)?\s*([0-9]{2,3})\s*(?:HBW?|HRC|HV)?",
+        text,
+        re.IGNORECASE
+    )
     if m_hb:
         mech["hardness"] = f"{m_hb.group(1)} HB"
 
     # Heat Treatment
-    m_ht = re.search(r"\b(NORMALIZED(?:\s*[0-9]+DEG(?:\s*C(?:ENTIGRADE)?)?)?|QUENCHED\s*(?:&|AND)\s*TEMPERED|ANNEALED|SOLUTION\s*ANNEALED)\b", text, re.IGNORECASE)
+    m_ht = re.search(
+        r"\b(NORMALIZED(?:\s*[0-9]+DEG(?:\s*C(?:ENTIGRADE)?)?)?|QUENCHED\s*(?:&|AND)\s*TEMPERED|ANNEALED|SOLUTION\s*ANNEALED)\b",
+        text,
+        re.IGNORECASE
+    )
     if m_ht:
         mech["heat_treatment"] = m_ht.group(1).strip()
 
     return mech
 
 
+def validate_mechanical_thresholds(material_grade: Optional[str], mech_dict: Dict[str, str]) -> List[str]:
+    """
+    Validates extracted mechanical properties against statutory ASTM minimum standards.
+    Emits warnings if values are below ASTM thresholds.
+    """
+    warnings = []
+    if not material_grade:
+        return warnings
+
+    mat_upper = material_grade.upper()
+
+    def _parse_num(val_str: Optional[str]) -> Optional[float]:
+        if not val_str:
+            return None
+        m = re.search(r"([0-9]+(?:\.[0-9]+)?)", val_str)
+        return float(m.group(1)) if m else None
+
+    yield_val = _parse_num(mech_dict.get("yield"))
+    tensile_val = _parse_num(mech_dict.get("tensile"))
+
+    # ASTM A105 Carbon Steel Forgings (Min Yield: 250 MPa, Min Tensile: 485 MPa)
+    if "A105" in mat_upper:
+        if yield_val is not None and yield_val < 250:
+            warnings.append(f"ASTM A105 Yield Strength ({yield_val} MPa) is below standard minimum (250 MPa).")
+        if tensile_val is not None and tensile_val < 485:
+            warnings.append(f"ASTM A105 Tensile Strength ({tensile_val} MPa) is below standard minimum (485 MPa).")
+
+    # ASTM A350 LF2 Low Temp Carbon Steel (Min Yield: 250 MPa, Min Tensile: 485 MPa)
+    elif "LF2" in mat_upper or "A350" in mat_upper:
+        if yield_val is not None and yield_val < 250:
+            warnings.append(f"ASTM A350 LF2 Yield Strength ({yield_val} MPa) is below standard minimum (250 MPa).")
+
+    # ASTM A182 F316 / F316L Stainless Steel (Min Yield: 205 MPa for 316, 170 MPa for 316L)
+    elif "316" in mat_upper or "F316" in mat_upper:
+        min_y = 170 if "316L" in mat_upper else 205
+        if yield_val is not None and yield_val < min_y:
+            warnings.append(f"Stainless Steel F316 Yield Strength ({yield_val} MPa) is below standard minimum ({min_y} MPa).")
+
+    return warnings
+
+
+# -----------------------------------------------------------------------------
+# 4. Granular Document Type Classification
+# -----------------------------------------------------------------------------
+
+def detect_granular_document_type(raw_text: str) -> Tuple[str, str]:
+    """
+    Returns (doc_type, doc_subtype) for precise document categorization:
+      - MTC_EN10204_3_1: Inspection Certificate 3.1
+      - MTC_EN10204_3_2: Inspection Certificate 3.2 (Independent TPI Verified)
+      - DELIVERY_CHALLAN: Dispatch challan / inward slip
+      - PURCHASE_ORDER: Purchase Order requisition
+      - VALVE_HYDRO_TEST_REPORT: Pressure test certificate
+      - FASTENER_QUALITY_CERTIFICATE: Stud bolt & nut inspection certificate
+    """
+    upper = raw_text.upper()
+
+    # 1. Delivery Challan / Inward Slip
+    if any(k in upper for k in ["DELIVERY CHALLAN", "DISPATCH CHALLAN", "INWARD SLIP", "MATERIAL INWARD", "GATE ENTRY"]):
+        return "DELIVERY_CHALLAN", "DELIVERY_CHALLAN_CPSE"
+
+    # 2. Purchase Order
+    if any(k in upper for k in ["PURCHASE ORDER", "PO REQUISITION", "ORDER CONFIRMATION"]) and "MILL TEST" not in upper:
+        return "PURCHASE_ORDER", "PURCHASE_ORDER_STANDARD"
+
+    # 3. Valve Hydro-Test Report
+    if any(k in upper for k in ["HYDROSTATIC TEST", "HYDRO TEST REPORT", "SHELL TEST", "SEAT TEST"]):
+        return "VALVE_TEST_REPORT", "VALVE_HYDRO_TEST_REPORT"
+
+    # 4. Fastener Certificate
+    if any(k in upper for k in ["FASTENER QUALITY", "STUD BOLT TEST", "NUT TEST", "ASTM A193", "ASTM A194"]):
+        if "FLANGE" not in upper and "VALVE" not in upper:
+            return "FASTENER_QUALITY_CERTIFICATE", "FASTENER_QUALITY_CERTIFICATE"
+
+    # 5. Inspection Certificate EN 10204 3.2 (Third Party Inspection)
+    if any(k in upper for k in ["3.2", "EN 10204 3.2", "TPI", "THIRD PARTY INSPECTION", "LLOYD", "BUREAU VERITAS", "DNV", "TUV"]):
+        return "MTC_CERTIFICATE", "MTC_EN10204_3_2"
+
+    # 6. Default MTC EN 10204 3.1
+    return "MTC_CERTIFICATE", "MTC_EN10204_3_1"
+
+
+# -----------------------------------------------------------------------------
+# 5. Full MTC Table and Multi-Item Parser
+# -----------------------------------------------------------------------------
+
 def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) -> Dict[str, Any]:
     """
-    Parses tables extracted by pdfplumber or OCR lines into structured MTC dictionary.
+    Parses tables extracted by pdfplumber or OCR lines into a comprehensive MTC dictionary
+    with chemical, mechanical, multi-item descriptions, and compliance validations.
     """
     norm_text = normalize_mtc_text(full_text)
     clean_text = " ".join(norm_text.split())
     lines = norm_text.splitlines()
+
+    doc_type, doc_subtype = detect_granular_document_type(norm_text)
 
     metadata: Dict[str, Any] = {
         "cert_no": None,
@@ -112,11 +313,15 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
         "standard": None,
         "qty": None,
         "manufacturer": None,
+        "doc_subtype": doc_subtype,
         "nace_compliant": False,
+        "is_ibr_certified": False,
         "chemical": None,
         "mechanical": None,
         "chemical_dict": {},
         "mechanical_dict": {},
+        "carbon_equivalent": None,
+        "validation_warnings": [],
         "extracted_items": [],
     }
 
@@ -146,7 +351,7 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
                     metadata["qty"] = val
 
     # 2. Line-by-line check for exact key-value pairs in header
-    for line in lines[:40]:
+    for line in lines[:45]:
         l_clean = line.strip()
         if not metadata["cert_no"]:
             m_c = re.search(
@@ -182,13 +387,13 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
             if c.upper() not in ["DATE", "TPI", "INVOICE", "ACCORDING", "QTY"] and len(c) > 2:
                 metadata["cert_no"] = c
 
-    # Pattern for formal MTC IDs like DMI/TC/22-23/581
+    # Formal MTC ID pattern like DMI/TC/22-23/581
     if not metadata["cert_no"]:
         m_dm = re.search(r"\b([A-Z]{2,4}/(?:TC|MTC)/[A-Z0-9/-]+)\b", norm_text, re.IGNORECASE)
         if m_dm:
             metadata["cert_no"] = m_dm.group(1).strip()
 
-    # Pattern for German Abnahmeprüfzeugnis
+    # German Abnahmeprüfzeugnis pattern
     if not metadata["cert_no"]:
         m_ab = re.search(r"Abnahmepr[a-zA-Z\W]*Nr\.?[:\s]*([0-9A-Z/ -]+?)(?:\s+[0-9]{4}|\s+Inspection|\n|$)", norm_text, re.IGNORECASE)
         if m_ab:
@@ -237,7 +442,7 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
         if m:
             metadata["standard"] = m.group(1).strip()
 
-    # 3. Chemical and Mechanical tables (digital PDF or OCR text extraction)
+    # 3. Chemical and Mechanical tables
     if len(tables) > 1:
         chem_table = tables[1]
         if len(chem_table) >= 2:
@@ -254,7 +459,7 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
             metadata["mechanical"] = [headers, values]
             metadata["mechanical_dict"] = {h: v for h, v in zip(headers, values) if h and v}
 
-    # Fallback text-based chemical and mechanical extraction for scanned OCR documents
+    # Text fallback for chemical and mechanical
     if not metadata["chemical_dict"]:
         text_chem = extract_chemical_from_text(norm_text)
         if text_chem:
@@ -266,6 +471,21 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
         if text_mech:
             metadata["mechanical_dict"] = text_mech
             metadata["mechanical"] = [list(text_mech.keys()), list(text_mech.values())]
+
+    # Carbon Equivalent (CE) computation
+    if metadata["chemical_dict"]:
+        ce_res = compute_carbon_equivalent(metadata["chemical_dict"])
+        if ce_res:
+            metadata["carbon_equivalent"] = ce_res
+            if not ce_res["is_standard_weldable"]:
+                metadata["validation_warnings"].append(
+                    f"Elevated Carbon Equivalent ({ce_res['carbon_equivalent']}%) exceeds standard weldability limit (0.43%). Preheat required."
+                )
+
+    # Mechanical threshold validation
+    mech_warnings = validate_mechanical_thresholds(metadata["material_grade"], metadata["mechanical_dict"])
+    if mech_warnings:
+        metadata["validation_warnings"].extend(mech_warnings)
 
     # Manufacturer / Provider detection
     m_prov = re.search(r"(?:PROVIDER|MANUFACTURER|MILL|SUPPLIER)[:\s]*([A-Z0-9\s.,&-]+?)(?:\n|BUYER|GOODS|CERTIFICATE|ORDER|$)", norm_text, re.IGNORECASE)
@@ -281,15 +501,17 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
         elif "VIRAJ" in norm_text:
             metadata["manufacturer"] = "Viraj Profiles Ltd."
 
-    # NACE MR0175 / ISO 15156 sour service detection
+    # NACE and IBR Compliance
     if re.search(r"\b(NACE|MR0175|MR[-\s]?0175|ISO\s*15156)\b", norm_text, re.IGNORECASE):
         metadata["nace_compliant"] = True
         metadata["is_sour_service"] = True
 
+    if re.search(r"\b(IBR|INDIAN\s*BOILER\s*REG(?:ULATION)?S?)\b", norm_text, re.IGNORECASE):
+        if not re.search(r"\b(NON[-\s]?IBR)\b", norm_text, re.IGNORECASE):
+            metadata["is_ibr_certified"] = True
+
     # 4. Multi-Item Line Extraction
     extracted_items = []
-    lines = norm_text.splitlines()
-
     for line in lines:
         l = line.strip()
         if len(l) < 5:
@@ -324,7 +546,6 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
                 enrich_text += f", {metadata['standard']}"
 
             item_attrs = extract_attributes(enrich_text)
-            # Only record if meaningful mechanical attributes could be recognized
             if item_attrs.item_type or item_attrs.size_nb_mm or item_attrs.pressure_class:
                 extracted_items.append({
                     "raw_line": l,
@@ -337,7 +558,6 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
     # 5. Set Primary Description & Extracted Attributes
     if not metadata["description"]:
         if extracted_items:
-            # Prefer items with specific physical dimensions and ratings over generic category headers
             sorted_items = sorted(
                 extracted_items,
                 key=lambda x: (
@@ -376,4 +596,3 @@ def parse_mtc_tables(tables: List[List[List[Optional[str]]]], full_text: str) ->
     metadata["items_count"] = len(extracted_items)
     metadata["primary_item"] = metadata.get("description")
     return metadata
-

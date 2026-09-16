@@ -58,6 +58,36 @@ class ReconciliationAudit(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class InventoryItem(Base):
+    """Central repository of physical components, tracking lifecycle tags and idle surplus state."""
+    __tablename__ = "inventory_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sku_code = Column(String(100), nullable=False, index=True)
+    cpse = Column(String(50), nullable=False, index=True)  # IOCL, ONGC, BPCL
+    depot_id = Column(String(50), nullable=False, index=True)
+    depot_location = Column(String(255), nullable=False)
+    po_no = Column(String(100), nullable=True)
+    heat_no = Column(String(100), nullable=True)
+    description = Column(Text, nullable=False)
+    canonical_id = Column(String(50), nullable=True, index=True)
+    item_type = Column(String(100), nullable=True)
+    size_nb_mm = Column(Float, nullable=True)
+    pressure_class = Column(Integer, nullable=True)
+    metallurgy = Column(String(100), nullable=True)
+    facing_end = Column(String(50), nullable=True)
+    standard = Column(String(100), nullable=True)
+    quantity = Column(Integer, default=1, nullable=False)
+    unit_cost_inr = Column(Float, default=0.0, nullable=False)
+    status = Column(String(50), default="TO_BE_CONSUMED", nullable=False, index=True)
+    days_idle = Column(Integer, default=0, nullable=False)
+    source_document_id = Column(Integer, nullable=True)
+    action_note = Column(Text, nullable=True)
+    last_updated_by = Column(String(100), default="SITE_ENGINEER", nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 # -----------------------------------------------------------------------------
 # Database Engine Initialization with Fallback
 # -----------------------------------------------------------------------------
@@ -163,3 +193,106 @@ def get_all_documents(db: Session, limit: int = 50) -> List[IngestedDocument]:
 def get_recent_audits(db: Session, limit: int = 50) -> List[ReconciliationAudit]:
     """Retrieves recent reconciliation audits."""
     return db.query(ReconciliationAudit).order_by(desc(ReconciliationAudit.created_at)).limit(limit).all()
+
+
+# -----------------------------------------------------------------------------
+# Central Inventory Item Operations
+# -----------------------------------------------------------------------------
+
+def create_inventory_item(
+    db: Session,
+    sku_code: str,
+    cpse: str,
+    depot_id: str,
+    depot_location: str,
+    description: str,
+    quantity: int = 1,
+    unit_cost_inr: float = 0.0,
+    status: str = "TO_BE_CONSUMED",
+    po_no: Optional[str] = None,
+    heat_no: Optional[str] = None,
+    canonical_id: Optional[str] = None,
+    item_type: Optional[str] = None,
+    size_nb_mm: Optional[float] = None,
+    pressure_class: Optional[int] = None,
+    metallurgy: Optional[str] = None,
+    facing_end: Optional[str] = None,
+    standard: Optional[str] = None,
+    source_document_id: Optional[int] = None,
+    action_note: Optional[str] = None,
+    engineer_id: str = "SITE_ENGINEER"
+) -> InventoryItem:
+    """Inserts a new inventory item verified from an uploaded procurement bill."""
+    item = InventoryItem(
+        sku_code=sku_code,
+        cpse=cpse,
+        depot_id=depot_id,
+        depot_location=depot_location,
+        description=description,
+        quantity=quantity,
+        unit_cost_inr=unit_cost_inr,
+        status=status,
+        po_no=po_no,
+        heat_no=heat_no,
+        canonical_id=canonical_id,
+        item_type=item_type,
+        size_nb_mm=size_nb_mm,
+        pressure_class=pressure_class,
+        metallurgy=metallurgy,
+        facing_end=facing_end,
+        standard=standard,
+        source_document_id=source_document_id,
+        action_note=action_note,
+        last_updated_by=engineer_id,
+        days_idle=0
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def get_inventory_items(
+    db: Session,
+    cpse: Optional[str] = None,
+    status: Optional[str] = None,
+    depot_id: Optional[str] = None,
+    limit: int = 100
+) -> List[InventoryItem]:
+    """Retrieves central inventory items filtered by CPSE, status, or depot."""
+    query = db.query(InventoryItem)
+    if cpse:
+        query = query.filter(InventoryItem.cpse == cpse)
+    if status:
+        query = query.filter(InventoryItem.status == status)
+    if depot_id:
+        query = query.filter(InventoryItem.depot_id == depot_id)
+    return query.order_by(desc(InventoryItem.updated_at)).limit(limit).all()
+
+
+def get_inventory_item_by_id(db: Session, item_id: int) -> Optional[InventoryItem]:
+    """Finds an inventory item by primary key."""
+    return db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+
+
+def update_inventory_status(
+    db: Session,
+    item_id: int,
+    new_status: str,
+    action_note: Optional[str] = None,
+    engineer_id: str = "SITE_ENGINEER"
+) -> Optional[InventoryItem]:
+    """Transitions the lifecycle status of an inventory item (e.g. TO_BE_CONSUMED -> IDLE_SURPLUS)."""
+    item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    if not item:
+        return None
+    item.status = new_status
+    if action_note:
+        item.action_note = action_note
+    item.last_updated_by = engineer_id
+    if new_status == "IDLE_SURPLUS" and item.days_idle == 0:
+        item.days_idle = 90  # Default idle threshold for newly flagged surplus
+    db.commit()
+    db.refresh(item)
+    return item
+

@@ -3,93 +3,198 @@
 @tailwind utilities;
 
 :root {
-  --background: #f4f6f8;
-  --foreground: #0f1111;
-  --card-bg: #ffffff;
-  --card-border: #d5d9d9;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --border-primary: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent-primary: #0284c7;
+  --accent-hover: #0369a1;
+  --accent-subtle: #f0f9ff;
+  --accent-border: #bae6fd;
+}
+
+.dark {
+  --bg-primary: #0b0f17;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --border-primary: #374151;
+  --border-subtle: #1f2937;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-primary: #38bdf8;
+  --accent-hover: #0ea5e9;
+  --accent-subtle: rgba(14, 165, 233, 0.12);
+  --accent-border: rgba(56, 189, 248, 0.3);
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--text-primary);
+  background: var(--bg-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Amazon-style crisp scrollbars */
+/* Minimalist scrollbars */
 ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #eaeded;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #c7c9c9;
+  background: #cbd5e1;
   border-radius: 4px;
 }
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
 ::-webkit-scrollbar-thumb:hover {
-  background: #a2a6a6;
+  background: #94a3b8;
 }
 
-/* Amazon Business utility classes */
-.btn-amazon-primary {
-  background-color: #ffd814;
-  border-color: #fcd200;
-  color: #0f1111;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+/* Sleek Button Styles */
+.btn-primary {
+  background-color: var(--accent-primary);
+  color: #ffffff;
+  border: 1px solid transparent;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
 }
-.btn-amazon-primary:hover {
-  background-color: #f7ca00;
-  border-color: #f2c200;
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.92;
+  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.2);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-primary);
+}
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-subtle {
+  background-color: var(--accent-subtle);
+  color: var(--accent-primary);
+  border: 1px solid var(--accent-border);
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+}
+.btn-subtle:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+/* Minimalist Form Input */
+.app-input {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.app-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+/* Backward-compatible utility classes */
+.btn-amazon-primary {
+  background-color: var(--accent-primary);
+  border: 1px solid transparent;
+  color: #ffffff;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: opacity 0.15s;
+}
+.btn-amazon-primary:hover:not(:disabled) {
+  opacity: 0.92;
 }
 
 .btn-amazon-secondary {
-  background-color: #ffa41c;
-  border-color: #ff8f00;
-  color: #0f1111;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  transition: background-color 0.15s ease-in-out;
-}
-.btn-amazon-secondary:hover {
-  background-color: #fa8900;
+  background-color: #f59e0b;
+  border: 1px solid #d97706;
+  color: #ffffff;
+  border-radius: 0.375rem;
+  font-weight: 600;
 }
 
 .btn-amazon-white {
-  background-color: #ffffff;
-  border: 1px solid #d5d9d9;
-  color: #0f1111;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  transition: all 0.15s ease-in-out;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  border-radius: 0.375rem;
+  font-weight: 500;
 }
 .btn-amazon-white:hover {
-  background-color: #f7fafa;
-  border-color: #b5b9b9;
+  background-color: var(--bg-tertiary);
 }
 
-/* Amazon input focus style */
 .amazon-input {
-  background-color: #ffffff;
-  border: 1px solid #888c8c;
-  color: #0f1111;
-  border-radius: 4px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  border-radius: 0.375rem;
 }
 .amazon-input:focus {
   outline: none;
-  border-color: #e77600;
-  box-shadow: 0 0 0 3px rgba(231, 118, 0, 0.2);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
 }
 
-/* Amazon link */
 .amazon-link {
-  color: #007185;
+  color: var(--accent-primary);
   text-decoration: none;
 }
 .amazon-link:hover {
-  color: #c7511f;
   text-decoration: underline;
 }
 
@@ -99,7 +204,7 @@ body {
     background: #ffffff !important;
     color: #000000 !important;
   }
-  header, nav, footer, .no-print {
+  header, nav, aside, footer, .no-print {
     display: none !important;
   }
   .printable-card {
@@ -108,5 +213,7 @@ body {
     width: 100% !important;
     margin: 0 !important;
     padding: 1cm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
   }
 }
