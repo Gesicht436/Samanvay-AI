@@ -1,0 +1,46 @@
+[project]
+name = "samanvay-ai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Gesicht436", email = "186572303+Gesicht436@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "accelerate>=1.15.0",
+    "datasets>=5.0.1",
+    "easyocr>=1.7.2",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "numpy>=2.5.3",
+    "openpyxl>=3.1.5",
+    "paddleocr>=2.10.0",
+    "pandas>=3.0.5",
+    "pdfplumber>=0.11.10",
+    "pillow>=12.3.0",
+    "psycopg2>=2.9.13",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "python-dotenv>=1.2.3",
+    "python-multipart>=0.0.32",
+    "qdrant-client>=1.19.1",
+    "qrcode>=8.2",
+    "scikit-learn>=1.9.1",
+    "sentence-transformers>=6.0.1",
+    "sqlalchemy>=2.0.54",
+    "uvicorn>=0.53.0",
+    "winocr>=0.0.15",
+    "torch",
+    "torchvision",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cuda" }
