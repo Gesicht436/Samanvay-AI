@@ -18,11 +18,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [cpse, setCpse] = useState<string>('depot-1');
 
   useEffect(() => {
+    const saved = typeof window !== 'undefined' ? (localStorage.getItem('samanvay_theme') as Theme | null) : null;
+    if (saved && (saved === 'light' || saved === 'dark')) {
+      setTheme(saved);
+    }
+  }, []);
+
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('samanvay_theme', theme);
     }
   }, [theme]);
 

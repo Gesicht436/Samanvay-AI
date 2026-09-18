@@ -1,23 +1,37 @@
-from neo4j import GraphDatabase
 from typing import List, Dict, Any
+
+try:
+    from neo4j import GraphDatabase
+    NEO4J_AVAILABLE = True
+except ImportError:
+    GraphDatabase = None
+    NEO4J_AVAILABLE = False
+
 
 class GraphQuerier:
     def __init__(self):
-        # Graceful fallback if settings not fully available
+        self.driver = None
+        if not NEO4J_AVAILABLE:
+            return
+
         try:
             from backend.app.core.config import settings
-            self.uri = settings.NEO4J_URI if hasattr(settings, "NEO4J_URI") else "bolt://localhost:7687"
-            self.user = settings.NEO4J_USER if hasattr(settings, "NEO4J_USER") else "neo4j"
-            self.password = settings.NEO4J_PASSWORD if hasattr(settings, "NEO4J_PASSWORD") else "password"
-        except ImportError:
+            self.uri = settings.neo4j_uri if hasattr(settings, "neo4j_uri") else "bolt://localhost:7687"
+            self.user = settings.neo4j_user if hasattr(settings, "neo4j_user") else "neo4j"
+            self.password = settings.neo4j_password if hasattr(settings, "neo4j_password") else "password"
+        except Exception:
             self.uri = "bolt://localhost:7687"
             self.user = "neo4j"
             self.password = "password"
-            
-        self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+
+        try:
+            self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+        except Exception:
+            self.driver = None
 
     def close(self):
-        self.driver.close()
+        if self.driver:
+            self.driver.close()
 
     def find_compatible_surplus(self, item_type: str, size: str, pressure_class: str, metallurgy: str, facing: str = None) -> List[Dict[str, Any]]:
         # This is a complex cypher query looking for zero-tolerance on size

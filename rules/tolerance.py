@@ -421,3 +421,36 @@ def evaluate_material_compatibility(
         engineering_upgrades=upgrades,
         summary="Incompatible Replacement (Composite Score Below 80%)",
     )
+
+
+def evaluate_pair(query: Any, candidate: Any) -> CompatibilityResult:
+    """Convenience evaluator accepting dicts or ExtractedMaterialAttributes."""
+    def _to_attrs(obj: Any) -> ExtractedMaterialAttributes:
+        if isinstance(obj, ExtractedMaterialAttributes):
+            return obj
+        if isinstance(obj, dict):
+            d = obj.copy()
+            if "size" in d and "size_nb_mm" not in d:
+                val = str(d.pop("size")).lower().replace("mm", "").strip()
+                try:
+                    d["size_nb_mm"] = float(val)
+                except ValueError:
+                    pass
+            if "rating" in d and "pressure_class" not in d:
+                try:
+                    d["pressure_class"] = int(d.pop("rating"))
+                except (ValueError, TypeError):
+                    pass
+            if "material" in d and "metallurgy" not in d:
+                d["metallurgy"] = d.pop("material")
+            if "facing" in d and "facing_end" not in d:
+                d["facing_end"] = d.pop("facing")
+            valid_fields = set(ExtractedMaterialAttributes.model_fields.keys())
+            filtered_d = {k: v for k, v in d.items() if k in valid_fields}
+            return ExtractedMaterialAttributes(**filtered_d)
+        return ExtractedMaterialAttributes()
+
+    q_attrs = _to_attrs(query)
+    c_attrs = _to_attrs(candidate)
+    return evaluate_material_compatibility(q_attrs, c_attrs)
+

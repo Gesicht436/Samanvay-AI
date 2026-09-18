@@ -1,9 +1,13 @@
 @import "tailwindcss";
 
 @theme {
+  --font-sans: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
   --color-emerald-50: #ecfdf5;
   --color-emerald-500: #10b981;
   --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
   
   --color-amber-50: #fffbeb;
   --color-amber-500: #f59e0b;
@@ -17,17 +21,27 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
+  --muted: #64748b;
+  --ring: #10b981;
 }
 
 [data-theme='dark'] {
-  --background: #0f172a;
+  --background: #090e1a;
   --foreground: #f8fafc;
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
+  --border: #1e293b;
+  --muted: #94a3b8;
+  --ring: #10b981;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Minimal scrollbar */
