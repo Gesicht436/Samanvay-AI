@@ -35,6 +35,8 @@ dependencies = [
     "winocr>=0.0.15",
     "torch",
     "torchvision",
+    "onnxruntime>=1.30.0",
+    "pymupdf>=1.28.2",
 ]
 
 [[tool.uv.index]]

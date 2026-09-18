@@ -65,8 +65,10 @@ def check_pressure_class(
     q_class = _normalize_class(query_class)
     c_class = _normalize_class(candidate_class)
 
+    if q_class is None and c_class is None:
+        return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
     if q_class is None or c_class is None:
-        # Cannot evaluate — HITL required
+        # One specified, one missing — HITL required
         return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.85, None)
 
     # ── EXACT MATCH ────────────────────────────────────────────────
@@ -135,6 +137,8 @@ def check_pressure_rating_psi(
     Evaluate operating PSI pressure rating for pipes and tubing.
     Down-rating = Tier 3. Equal or over-rating = Tier 1.
     """
+    if query_psi is None and candidate_psi is None:
+        return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
     if query_psi is None or candidate_psi is None:
         return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.85, None)
 

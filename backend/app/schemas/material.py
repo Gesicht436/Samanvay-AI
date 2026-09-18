@@ -9,7 +9,7 @@ TreeSHAP explainability outputs.
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ── Dynamic Compatibility Tier (Computed at Runtime per Q↔C Pair) ─────────
@@ -65,6 +65,73 @@ class ExtractedMaterialAttributes(BaseModel):
         default=False,
         description="True if routed to HITL triage queue due to low confidence or sparse data",
     )
+
+    model_config = {"extra": "allow"}
+
+    @classmethod
+    def _parse_size(cls, val: Any) -> Optional[float]:
+        if val is None:
+            return None
+        if isinstance(val, (int, float)):
+            return float(val)
+        s = str(val).strip().upper()
+        import re
+        m = re.search(r'([\d\.]+)', s)
+        if m:
+            num = float(m.group(1))
+            if 'IN' in s or '"' in s:
+                return round(num * 25.4, 2)
+            return num
+        return None
+
+    @classmethod
+    def _parse_int(cls, val: Any) -> Optional[int]:
+        if val is None:
+            return None
+        if isinstance(val, int):
+            return val
+        s = str(val).strip().upper().replace("#", "").replace("CLASS", "").strip()
+        import re
+        m = re.search(r'\d+', s)
+        return int(m.group(0)) if m else None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_dict_input(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            obj = dict(data)
+            props = dict(obj.get("properties") or {})
+            
+            # Map shorthand keys
+            if "size" in obj and "size_nb_mm" not in obj:
+                obj["size_nb_mm"] = cls._parse_size(obj.pop("size"))
+            elif "size_nb_mm" in obj:
+                obj["size_nb_mm"] = cls._parse_size(obj["size_nb_mm"])
+
+            if "rating" in obj and "pressure_class" not in obj:
+                parsed_rating = cls._parse_int(obj.pop("rating"))
+                obj["pressure_class"] = parsed_rating
+            elif "pressure_class" in obj:
+                obj["pressure_class"] = cls._parse_int(obj["pressure_class"])
+
+            if "material" in obj and "metallurgy" not in obj:
+                obj["metallurgy"] = obj.pop("material")
+
+            if "facing" in obj and "facing_end" not in obj:
+                obj["facing_end"] = obj.pop("facing")
+
+            # Collect unmapped extra keys into properties
+            known_fields = {
+                "item_type", "size_nb_mm", "pressure_class", "pressure_rating_psi",
+                "schedule", "metallurgy", "facing_end", "standard", "properties",
+                "is_incomplete", "missing_attributes", "confidence_score", "requires_hitl"
+            }
+            extra_keys = [k for k in obj.keys() if k not in known_fields]
+            for k in extra_keys:
+                props[k] = obj.pop(k)
+            obj["properties"] = props
+            return obj
+        return data
 
 
 # ── Physical Attributes (Query or Inventory Item) ─────────────────────────
@@ -154,6 +221,14 @@ class RuleViolation(BaseModel):
     failure_mode_prevented: str  # e.g. "Hydrostatic rupture under operating pressure"
     explanation: str  # Human-readable engineering explanation
 
+    @property
+    def rule_name(self) -> str:
+        return self.module_name
+
+    @property
+    def description(self) -> str:
+        return f"{self.failure_mode_prevented}: {self.explanation}"
+
 
 # ── Candidate Match Result ────────────────────────────────────────────────
 
@@ -223,3 +298,11 @@ class CompatibilityResult(BaseModel):
     rule_violations: list[RuleViolation] = Field(default_factory=list)
     engineering_upgrades: list[str] = Field(default_factory=list)
     summary: str = ""
+
+    @property
+    def tier(self) -> DynamicCompatibilityTier:
+        return self.compatibility_tier
+
+    @property
+    def score(self) -> float:
+        return self.composite_score
