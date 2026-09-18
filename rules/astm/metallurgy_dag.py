@@ -82,10 +82,22 @@ _NICKEL_ALLOYS = frozenset([
 ])
 
 # Cr-Mo Creep Steels (high-temperature service hierarchy)
-_CR_MO_F11 = frozenset(["ASTM A182 F11", "A182 F11", "F11", "ASTM A217 WC6", "WC6", "1.25CR-0.5MO"])
-_CR_MO_F22 = frozenset(["ASTM A182 F22", "A182 F22", "F22", "ASTM A217 WC9", "WC9", "2.25CR-1MO"])
-_CR_MO_F5 = frozenset(["ASTM A182 F5", "A182 F5", "F5", "ASTM A217 C5", "C5", "5CR-0.5MO"])
-_CR_MO_F91 = frozenset(["ASTM A182 F91", "A182 F91", "F91", "ASTM A217 C12A", "C12A", "9CR-1MO-V"])
+_CR_MO_F11 = frozenset([
+    "ASTM A182 F11", "A182 F11", "F11", "ASTM A217 WC6", "WC6", "1.25CR-0.5MO",
+    "ASTM A335 P11", "A335 P11", "P11", "ASTM A234 WP11", "WP11",
+])
+_CR_MO_F22 = frozenset([
+    "ASTM A182 F22", "A182 F22", "F22", "ASTM A217 WC9", "WC9", "2.25CR-1MO",
+    "ASTM A335 P22", "A335 P22", "P22", "ASTM A234 WP22", "WP22",
+])
+_CR_MO_F5 = frozenset([
+    "ASTM A182 F5", "A182 F5", "F5", "ASTM A217 C5", "C5", "5CR-0.5MO",
+    "ASTM A335 P5", "A335 P5", "P5", "ASTM A234 WP5", "WP5",
+])
+_CR_MO_F91 = frozenset([
+    "ASTM A182 F91", "A182 F91", "F91", "ASTM A217 C12A", "C12A", "9CR-1MO-V",
+    "ASTM A335 P91", "A335 P91", "P91", "ASTM A234 WP91", "WP91",
+])
 
 # ── Hierarchy Level Assignment ────────────────────────────────────────────
 # Higher level = more capable material (safe to upgrade to)
@@ -169,6 +181,24 @@ def check_metallurgy(
             None,
         )
 
+    norm_q = _normalize_material(query_mat)
+    norm_c = _normalize_material(candidate_mat)
+
+    # ── EXACT NORMALIZED STRING MATCH ──────────────────────────────
+    if norm_q and norm_c and norm_q == norm_c:
+        return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
+
+    # ── MOLYBDENUM CORROSION DROP-IN UPGRADE (Wrought SS304 -> SS316) ──────
+    # Direct interchangeable drop-in replacement for flanges & pipes (Tier-1)
+    is_q_304 = any(x in norm_q for x in ["304", "F304", "TP304"]) and "304L" not in norm_q and "CF8" not in norm_q
+    is_c_316 = any(x in norm_c for x in ["316", "F316", "TP316"]) and "316L" not in norm_c and "CF8M" not in norm_c
+    if is_q_304 and is_c_316:
+        return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 0.98, None)
+
+    # ── HIGH-CREEP ALLOY BOLTING UPGRADE (A193 B7 -> B16) ───────────
+    if ("B7" in norm_q and "A193" in norm_q) and ("B16" in norm_c and "A193" in norm_c):
+        return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 0.99, None)
+
     query_info = _find_material_info(query_mat)
     candidate_info = _find_material_info(candidate_mat)
 
@@ -179,7 +209,7 @@ def check_metallurgy(
     q_level, q_family = query_info
     c_level, c_family = candidate_info
 
-    # ── EXACT MATCH ────────────────────────────────────────────────
+    # ── EXACT FAMILY MATCH ─────────────────────────────────────────
     if q_family == c_family:
         return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
 
@@ -220,6 +250,27 @@ def check_metallurgy(
                 ),
             ),
         )
+
+    # ── CREEP ALLOY DOWNGRADE TO CARBON STEEL ──────────────────────
+    if q_level >= 10 and c_level < 10:
+        return (
+            DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
+            0.0,
+            RuleViolation(
+                module_name="ASTM_METALLURGY_DAG",
+                standard_code="ASME B31.3 / ASTM A335",
+                failure_mode_prevented="Creep rupture and accelerated graphitization failure in high-temperature service",
+                explanation=(
+                    f"CREEP RUPTURE TRAP: Query requires creep-resistant Cr-Mo alloy '{query_mat}' "
+                    f"(level: {q_level}). Candidate '{candidate_mat}' is carbon or low-alloy steel "
+                    f"subject to rapid creep voiding and blowout at furnace operating temperatures."
+                ),
+            ),
+        )
+
+    # ── CARBON STEEL UPGRADE TO CR-MO ALLOY ────────────────────────
+    if c_level >= 10 and q_level < 10:
+        return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.88, None)
 
     # ── DOWNGRADE PROHIBITION ──────────────────────────────────────
     # Check hierarchy levels are in same branch

@@ -25,8 +25,8 @@ def check_compressor_compatibility(
     Evaluates API 618 cylinder valves, API 617 sour impellers, and API 692 dry gas seals.
     """
     # 1. API 618 Suction vs Discharge Cylinder Valve
-    q_vlv_type = str(query_props.get("valve_role", query_props.get("valve_type", ""))).upper()
-    c_vlv_type = str(cand_props.get("valve_role", cand_props.get("valve_type", ""))).upper()
+    q_vlv_type = str(query_props.get("valve_function") or query_props.get("valve_role") or query_props.get("valve_type", "")).upper()
+    c_vlv_type = str(cand_props.get("valve_function") or cand_props.get("valve_role") or cand_props.get("valve_type", "")).upper()
 
     if ("SUCTION" in q_vlv_type and "DISCHARGE" in c_vlv_type) or ("DISCHARGE" in q_vlv_type and "SUCTION" in c_vlv_type):
         return (
@@ -41,8 +41,8 @@ def check_compressor_compatibility(
         )
 
     # 2. API 692 Dry Gas Seal (Tandem vs Single)
-    q_dgs = str(query_props.get("dgs_type", query_props.get("seal_type", ""))).upper()
-    c_dgs = str(cand_props.get("dgs_type", cand_props.get("seal_type", ""))).upper()
+    q_dgs = str(query_props.get("dgs_type") or query_props.get("seal_type", "")).upper()
+    c_dgs = str(cand_props.get("dgs_type") or cand_props.get("seal_type", "")).upper()
 
     if "TANDEM" in q_dgs and "SINGLE" in c_dgs:
         return (

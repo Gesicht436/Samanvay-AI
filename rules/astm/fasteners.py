@@ -108,8 +108,8 @@ def check_fastener_integrity(
         )
 
     # 4. Nut Pairing Check
-    cand_nut = str(cand_props.get("nut_grade", "")).upper()
-    if "B7" in cs and cand_nut and cand_nut in ["GR.2", "GR 2", "CLASS 4.6", "2"]:
+    cand_nut = str(cand_props.get("nut_grade", "") or cand_props.get("nut", "")).upper()
+    if "B7" in cs and any(term in cand_nut for term in ["MILD_STEEL", "COMMERCIAL", "GR.2", "GR 2", "CLASS 4.6"]):
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
             0.0,
@@ -121,7 +121,12 @@ def check_fastener_integrity(
             ),
         )
 
+    # 5. Exact Match
     if qs == cs or (not qs and not cs):
         return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
+
+    # 6. B7 -> B16 High-Temperature Creep Safe Upgrade (Tier 1 with Gr.7 or Gr.4 nut)
+    if "B7" in qs and "B16" in cs and not any(term in cand_nut for term in ["MILD_STEEL", "COMMERCIAL", "GR.2"]):
+        return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 0.99, None)
 
     return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.88, None)

@@ -40,8 +40,23 @@ def check_line_pipe_quality(
         )
 
     # 2. Category M Toxic Fluid Service
-    q_cat_m = query_props.get("category_m", False) or query_props.get("lethal_service", False)
+    q_cat_m = query_props.get("category_m", False) or query_props.get("lethal_service", False) or "CATEGORY_M" in str(query_props.get("service", "")).upper()
     c_cat_m = cand_props.get("category_m_certified", True)
+    q_joint = str(query_props.get("joint", "")).upper()
+    c_joint = str(cand_props.get("joint", "")).upper()
+
+    if q_cat_m and ("THREAD" in c_joint or "NPT" in c_joint):
+        return (
+            DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
+            0.0,
+            RuleViolation(
+                module_name="ASME_B31_3_CAT_M",
+                standard_code="ASME B31.3 Chapter VIII M300",
+                failure_mode_prevented="Lethal toxic atmospheric gas escape via threaded joint",
+                explanation="CATEGORY M JOINT PROHIBITION: Threaded NPT joints are strictly prohibited in ASME B31.3 Category M lethal fluid service. Full penetration buttweld with 100% radiographic examination is mandatory.",
+            ),
+        )
+
     if q_cat_m and not c_cat_m:
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
@@ -55,10 +70,10 @@ def check_line_pipe_quality(
         )
 
     # 3. Seamless vs Welded
-    q_mfg = str(query_props.get("mfg_method", query_props.get("manufacturing_method", ""))).upper()
-    c_mfg = str(cand_props.get("mfg_method", cand_props.get("manufacturing_method", ""))).upper()
+    q_mfg = str(query_props.get("mfg") or query_props.get("mfg_method") or query_props.get("manufacturing_method") or "").upper()
+    c_mfg = str(cand_props.get("mfg") or cand_props.get("mfg_method") or cand_props.get("manufacturing_method") or "").upper()
     if ("SEAMLESS" in q_mfg or "SMLS" in q_mfg) and ("WELDED" in c_mfg or "ERW" in c_mfg or "LSAW" in c_mfg):
-        is_critical = q_cat_m or query_props.get("hydrogen_service", False) or query_props.get("high_pressure", False)
+        is_critical = q_cat_m or "H2" in str(query_props.get("service", "")).upper() or "HYDROGEN" in str(query_props.get("service", "")).upper() or query_props.get("hydrogen_service", False) or query_props.get("high_pressure", False)
         if is_critical:
             return (
                 DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
@@ -71,5 +86,9 @@ def check_line_pipe_quality(
                 ),
             )
         return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.85, None)
+
+    # Safe upgrade from PSL1 to PSL2
+    if ("PSL 1" in q_psl or "PSL1" in q_psl) and ("PSL 2" in c_psl or "PSL2" in c_psl):
+        return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.90, None)
 
     return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)

@@ -132,4 +132,10 @@ def check_coating_thickness(
         except (ValueError, TypeError):
             pass
 
+    # Coating type upgrade (e.g. BARE -> 3LPE_COATED)
+    q_coat = str(query_props.get("coating", "")).upper()
+    c_coat = str(cand_props.get("coating", "")).upper()
+    if q_coat and c_coat and q_coat != c_coat:
+        return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.90, None)
+
     return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)

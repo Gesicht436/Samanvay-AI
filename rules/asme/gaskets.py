@@ -13,8 +13,18 @@ Rules:
    - BX rings (API 6A) CANNOT fit ASME B16.5 R grooves.
 """
 
+import re
 from typing import Optional, Tuple, Dict, Any
 from backend.app.schemas.material import DynamicCompatibilityTier, RuleViolation
+
+
+def _parse_temp(val: Any) -> Optional[float]:
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    m = re.search(r'[-+]?\d*\.?\d+', str(val))
+    return float(m.group(0)) if m else None
 
 
 def check_gasket_compatibility(
@@ -32,30 +42,26 @@ def check_gasket_compatibility(
     c_filler = str(cand_props.get("filler", "")).upper()
 
     # Temperature checks
-    q_temp = query_props.get("max_temp_c")
-    c_temp = cand_props.get("max_temp_c")
-    if q_temp is not None and c_temp is not None:
-        try:
-            qt = float(q_temp)
-            ct = float(c_temp)
-            if ct < qt:
-                return (
-                    DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
-                    0.0,
-                    RuleViolation(
-                        module_name="ASME_B16_21_TEMPERATURE",
-                        standard_code="ASME B16.21",
-                        failure_mode_prevented="Elastomer or gasket degradation and blowout under high temperature",
-                        explanation=f"GASKET TEMPERATURE DOWN-RATING: Candidate rating {ct}°C is below required {qt}°C.",
-                    ),
-                )
-            elif ct > qt:
-                return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.92, None)
-        except (ValueError, TypeError):
-            pass
+    qt = _parse_temp(query_props.get("max_temp_c"))
+    ct = _parse_temp(cand_props.get("max_temp_c"))
+    if qt is not None and ct is not None:
+        if ct < qt:
+            return (
+                DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
+                0.0,
+                RuleViolation(
+                    module_name="ASME_B16_21_TEMPERATURE",
+                    standard_code="ASME B16.21",
+                    failure_mode_prevented="Elastomer or gasket degradation and blowout under high temperature",
+                    explanation=f"GASKET TEMPERATURE DOWN-RATING: Candidate rating {ct}°C is below required {qt}°C.",
+                ),
+            )
+        elif ct > qt:
+            return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.92, None)
 
     # Filler material temperature limits
-    temp = operating_temp_c or (float(q_temp) if q_temp is not None else None)
+    temp_raw = operating_temp_c or query_props.get("temp_c") or query_props.get("temp") or query_props.get("max_temp_c")
+    temp = _parse_temp(temp_raw)
     if temp and temp > 260.0:
         if ("GRAPHITE" in q_filler or "GRAFOIL" in q_filler) and ("PTFE" in c_filler or "TEFLON" in c_filler):
             return (
@@ -99,5 +105,28 @@ def check_gasket_compatibility(
                 explanation="BX RING INCOMPATIBILITY: BX pressure-energized rings are designed for API 6A 15,000 PSI flanges and cannot seal in ASME B16.5 R grooves.",
             ),
         )
+
+    # RTJ Gasket Hardness Invariant (gasket must be softer than flange groove)
+    f_hrb = cand_props.get("flange_hardness_hrb") or query_props.get("flange_hardness_hrb")
+    g_hrb = cand_props.get("gasket_hardness_hrb") or query_props.get("gasket_hardness_hrb")
+    if f_hrb is not None and g_hrb is not None:
+        try:
+            if float(g_hrb) >= float(f_hrb):
+                return (
+                    DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
+                    0.0,
+                    RuleViolation(
+                        module_name="ASME_B16_20_HARDNESS",
+                        standard_code="ASME B16.20 Section 3.2",
+                        failure_mode_prevented="RTJ flange groove indentation, galling, and plastic deformation",
+                        explanation=f"RTJ GALLING TRAP: Gasket ring hardness ({g_hrb} HRB) is equal to or greater than flange face hardness ({f_hrb} HRB). Gasket must be softer than flange metal.",
+                    ),
+                )
+        except (ValueError, TypeError):
+            pass
+
+    # SWG Inner ring safe upgrade
+    if not query_props.get("inner_ring", False) and cand_props.get("inner_ring", False):
+        return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 0.99, None)
 
     return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)

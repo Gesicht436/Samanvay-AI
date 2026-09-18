@@ -25,12 +25,12 @@ def check_thermal_insulation_cui(
     Evaluates ASTM C795 CUI leachable chloride compliance and ASTM C552 cryogenic cellular glass.
     """
     mat = (substrate_material or "").upper()
-    is_ss_or_duplex = any(m in mat for m in ["SS304", "SS316", "304", "316", "DUPLEX", "2205", "2507"])
-    temp = service_temp_c or query_props.get("operating_temp_c")
+    is_ss_or_duplex = query_props.get("ss_piping", False) or cand_props.get("ss_piping", False) or any(m in mat for m in ["SS304", "SS316", "304", "316", "DUPLEX", "2205", "2507"])
+    temp = service_temp_c or query_props.get("temp_c") or query_props.get("operating_temp_c")
 
     # 1. ASTM C795 CUI Prevention
     c_astm_c795 = cand_props.get("astm_c795_compliant", False) or "C795" in str(cand_props).upper()
-    c_chlorides = cand_props.get("leachable_chlorides_ppm")
+    c_chlorides = cand_props.get("chloride_ppm_max") or cand_props.get("leachable_chlorides_ppm")
 
     if is_ss_or_duplex and not c_astm_c795:
         if c_chlorides and float(c_chlorides) > 50.0:
@@ -48,7 +48,8 @@ def check_thermal_insulation_cui(
     # 2. ASTM C552 Cellular Glass for Cryogenic
     is_cryo = (temp is not None and float(temp) < -29.0) or query_props.get("cryogenic", False)
     c_ins_type = str(cand_props.get("insulation_type", "")).upper()
-    if is_cryo and ("MINERAL WOOL" in c_ins_type or "FIBERGLASS" in c_ins_type or "CALCIUM SILICATE" in c_ins_type):
+    c_closed_cell = cand_props.get("closed_cell", True)
+    if is_cryo and ("MINERAL WOOL" in c_ins_type or "FIBERGLASS" in c_ins_type or "CALCIUM SILICATE" in c_ins_type or not c_closed_cell or "OPEN_CELL" in str(cand_props).upper()):
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
             0.0,
@@ -56,7 +57,7 @@ def check_thermal_insulation_cui(
                 module_name="ASTM_C552_CRYOGENIC",
                 standard_code="ASTM C552",
                 failure_mode_prevented="Atmospheric vapor condensation ice-jacking and thermal boil-off runaway",
-                explanation="CRYOGENIC INSULATION SHATTERING TRAP: Permeable fibrous insulation allows water vapor ingress at cryogenic temperatures, freezing into ice and destroying thermal insulation.",
+                explanation="CRYOGENIC INSULATION SHATTERING TRAP: Permeable fibrous/open-cell insulation allows water vapor ingress at cryogenic temperatures, freezing into ice and destroying thermal insulation.",
             ),
         )
 

@@ -24,12 +24,13 @@ def check_rupture_disk(
     """
     is_psv_upstream = upstream_of_psv or query_props.get("upstream_of_psv", False)
 
-    q_type = str(query_props.get("disk_type", "")).upper()
-    c_type = str(cand_props.get("disk_type", "")).upper()
+    q_type = str(query_props.get("disk_type") or query_props.get("type", "")).upper()
+    c_type = str(cand_props.get("disk_type") or cand_props.get("type", "")).upper()
 
     # 1. Non-Fragmenting Mandate upstream of PSV
-    c_non_frag = cand_props.get("non_fragmenting", False) or "NON-FRAGMENTING" in c_type or "REVERSE_BUCKLING" in c_type
-    if is_psv_upstream and not c_non_frag:
+    c_non_frag = cand_props.get("non_fragmenting", False) or "NON-FRAGMENTING" in c_type or "NON_FRAGMENTING" in c_type or "REVERSE_BUCKLING" in c_type
+    is_frag = "FRAGMENTING" in c_type and "NON" not in c_type
+    if (is_psv_upstream or cand_props.get("upstream_of_psv")) and (not c_non_frag or is_frag):
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
             0.0,

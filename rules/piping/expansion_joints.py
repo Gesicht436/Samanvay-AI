@@ -23,10 +23,9 @@ def check_expansion_joint_and_hose(
     Evaluates EJMA metallic expansion joints and ISO 10380 flexible metal hoses.
     """
     # 1. Tied vs Unrestrained Bellows
-    q_tied = query_props.get("tied_joint", False) or query_props.get("restrained_bellows", False)
-    c_tied = cand_props.get("tied_joint", True)
-    if "tied_joint" not in cand_props and "unrestrained" in str(cand_props).lower():
-        c_tied = False
+    q_tied = "TIED" in str(query_props.get("restraint", "")).upper() or query_props.get("tied_joint", False) or query_props.get("restrained_bellows", False)
+    c_unrestrained = "UNRESTRAINED" in str(cand_props.get("restraint", "")).upper() or "unrestrained" in str(cand_props).lower()
+    c_tied = not c_unrestrained and cand_props.get("tied_joint", True)
 
     if q_tied and not c_tied:
         return (

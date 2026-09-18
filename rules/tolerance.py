@@ -41,7 +41,7 @@ from backend.app.schemas.material import (
 # ASME Rules
 from rules.asme.pressure_class import check_pressure_class, check_pressure_rating_psi
 from rules.asme.large_flanges import check_large_flange_series
-from rules.asme.fittings import check_forged_fittings_rating, check_buttweld_elbow_radius
+from rules.asme.fittings import check_forged_fittings_rating, check_buttweld_elbow_radius, check_pipeline_fittings_smys
 from rules.asme.facings import check_flange_facing
 from rules.asme.gaskets import check_gasket_compatibility
 from rules.asme.line_blinds import check_line_blind_compatibility
@@ -122,6 +122,23 @@ def evaluate_material_compatibility(
     q_props = dict(query.properties or {})
     c_props = dict(candidate.properties or {})
 
+    # 0. Canonical Alias Normalization across Benchmarks & Ingested Catalogs
+    for p in (q_props, c_props):
+        if "sched" in p and "schedule" not in p:
+            p["schedule"] = p["sched"]
+        if "schedule" in p and "sched" not in p:
+            p["sched"] = p["schedule"]
+        if "trim" in p and "trim_no" not in p:
+            p["trim_no"] = p["trim"]
+        if "trim_no" in p and "trim" not in p:
+            p["trim"] = p["trim_no"]
+        if "port" in p and "port_bore" not in p:
+            p["port_bore"] = p["port"]
+        if "port_bore" in p and "port" not in p:
+            p["port"] = p["port_bore"]
+        if "orifice_letter" in p and "orifice" not in p:
+            p["orifice"] = p["orifice_letter"]
+
     # ─────────────────────────────────────────────────────────────────────────
     # 1. Primary Dimensions: Zero-Tolerance Check
     # ─────────────────────────────────────────────────────────────────────────
@@ -156,8 +173,9 @@ def evaluate_material_compatibility(
     # ─────────────────────────────────────────────────────────────────────────
     # 2. Pressure Evaluation (ASME B16.5 / B16.34 Class & PSI)
     # ─────────────────────────────────────────────────────────────────────────
+    is_spool = q_props.get("is_spool_adapter", False) or c_props.get("is_spool_adapter", False)
     p_tier, p_score, p_viol = check_pressure_class(
-        query.pressure_class, candidate.pressure_class, query.item_type
+        query.pressure_class, candidate.pressure_class, query.item_type, is_spool_adapter=is_spool
     )
     if p_viol:
         violations.append(p_viol)
@@ -210,9 +228,13 @@ def evaluate_material_compatibility(
     q_face = query.facing_end or q_props.get("facing") or q_props.get("end_conn")
     c_face = candidate.facing_end or c_props.get("facing") or c_props.get("end_conn")
 
-    if q_face or c_face:
+    if q_face or c_face or "attachment" in q_props or "severe_cyclic" in q_props:
         f_tier, f_score, f_viol = check_flange_facing(
-            q_face, c_face, body_material=c_mat
+            q_face, c_face,
+            body_material=c_mat,
+            severe_cyclic=q_props.get("severe_cyclic", False) or c_props.get("severe_cyclic", False),
+            query_flange_type=q_props.get("attachment"),
+            cand_flange_type=c_props.get("attachment"),
         )
         if f_viol:
             violations.append(f_viol)
@@ -228,8 +250,8 @@ def evaluate_material_compatibility(
     # ─────────────────────────────────────────────────────────────────────────
     # 5. Pipe Schedules (ASME B36.10M / B36.19M)
     # ─────────────────────────────────────────────────────────────────────────
-    q_sch = query.schedule or q_props.get("schedule")
-    c_sch = candidate.schedule or c_props.get("schedule")
+    q_sch = query.schedule or q_props.get("schedule") or q_props.get("sched")
+    c_sch = candidate.schedule or c_props.get("schedule") or c_props.get("sched")
     if q_sch or c_sch:
         sch_t, sch_s, sch_v = check_pipe_schedule(q_sch, c_sch)
         if sch_v:
@@ -252,14 +274,19 @@ def evaluate_material_compatibility(
     _run_rule("NACE_SOUR", check_nace_sour_service(q_props, c_props))
 
     # Fasteners, Studs, LME, and Yield Strength
-    _run_rule("FASTENERS_LME", check_fastener_integrity(q_mat, c_mat, q_props, c_props))
+    is_fastener = (
+        str(query.item_type).upper() in ("STUD_BOLT", "BOLT", "FASTENER", "NUT") or
+        "nut" in q_props or "nut_grade" in q_props or "nut" in c_props or "nut_grade" in c_props
+    )
+    if is_fastener:
+        _run_rule("FASTENERS_LME", check_fastener_integrity(q_mat, c_mat, q_props, c_props))
 
     # Gaskets & Temperature
-    if str(query.item_type).upper() in ("GASKET", "O_RING") or "gasket" in str(query.item_type).lower() or "max_temp_c" in q_props:
+    if str(query.item_type).upper() in ("GASKET", "GASKET_SWG", "GASKET_RTJ", "GASKET_SHEET", "O_RING") or "gasket" in str(query.item_type).lower() or "max_temp_c" in q_props or "flange_hardness_hrb" in q_props or "gasket_hardness_hrb" in q_props or "inner_ring" in q_props:
         _run_rule("GASKETS", check_gasket_compatibility(q_props, c_props, query.pressure_class))
 
     # Valves (Trim, Bore, Fire-Safe, PSV, Rupture Disks)
-    is_pig = q_props.get("piggable", False)
+    is_pig = q_props.get("piggable", False) or c_props.get("piggable", False)
     is_valve = "VALVE" in str(query.item_type).upper()
     if is_valve or "trim_no" in q_props or "operation" in q_props or "end_conn" in q_props or "port_bore" in q_props:
         q_trim = q_props.get("trim_no")
@@ -274,45 +301,47 @@ def evaluate_material_compatibility(
 
         _run_rule("FIRE_SAFE_VALVES", check_fire_safe_and_categories(q_props, c_props))
 
-    if "orifice" in str(q_props) or "orifice" in str(c_props) or query.item_type in ("PSV", "RELIEF_VALVE"):
+    if "orifice" in q_props or "orifice" in c_props or query.item_type in ("PSV", "RELIEF_VALVE"):
         _run_rule("PSV_RELIEF", check_psv_orifice_and_pressure(
             q_props.get("orifice"), c_props.get("orifice"),
             q_props.get("cdtp_bar"), c_props.get("cdtp_bar")
         ))
 
-    if "disk_type" in q_props or "disk_type" in c_props or "rupture_disk" in str(query.item_type).lower():
+    if "disk_type" in q_props or "disk_type" in c_props or "rupture_disk" in str(query.item_type).lower() or "upstream_of_psv" in q_props or "upstream_of_psv" in c_props:
         _run_rule("RUPTURE_DISK", check_rupture_disk(q_props, c_props))
 
     # Large Flanges (ASME B16.47 Series A vs B)
     if (query.size_nb_mm and query.size_nb_mm >= 650.0) or "series" in str(q_props) or "series" in str(c_props):
         _run_rule("LARGE_FLANGES", check_large_flange_series(q_props.get("series"), c_props.get("series")))
 
-    # Fittings (ASME B16.9 / B16.11)
+    # Fittings (ASME B16.9 / B16.11 / MSS SP-75)
     if "FITTING" in str(query.item_type).upper() or "ELBOW" in str(query.item_type).upper() or "TEE" in str(query.item_type).upper():
         q_fit_rat = q_props.get("rating")
         c_fit_rat = c_props.get("rating")
         if q_fit_rat or c_fit_rat:
             _run_rule("FORGED_FITTINGS", check_forged_fittings_rating(q_fit_rat, c_fit_rat))
         _run_rule("ELBOW_RADIUS", check_buttweld_elbow_radius(q_props.get("radius"), c_props.get("radius"), is_pig))
+    if "smys_psi" in q_props or "smys_psi" in c_props:
+        _run_rule("PIPELINE_FITTINGS_SMYS", check_pipeline_fittings_smys(q_props, c_props))
 
     # Rotating Equipment (Motors, Seals, Bearings, Pumps, Compressors)
-    if query.item_type == "MOTOR" or "ex_rating" in q_props or "ip_rating" in q_props or "voltage" in q_props:
+    if "MOTOR" in str(query.item_type).upper() or "ex_rating" in q_props or "ip_rating" in q_props or "voltage" in q_props or "area" in q_props or ("zone" in q_props and "SAFE" not in str(q_props)):
         _run_rule("MOTOR_EQUIPMENT", check_motor_compatibility(q_props, c_props))
 
-    if query.item_type in ("PUMP", "COMPRESSOR", "SEAL", "O_RING") or "seal_plan" in q_props or "api_plan" in q_props or "material" in q_props:
+    if query.item_type in ("PUMP", "COMPRESSOR", "SEAL", "PUMP_SEAL", "O_RING") or "seal_plan" in q_props or "api_plan" in q_props or "plan" in q_props or "plan" in c_props:
         _run_rule("SEALS_ELASTOMERS", check_mechanical_seal_and_elastomer(q_props, c_props))
 
-    if query.item_type == "BEARING" or "bearing" in str(query.item_type).lower() or "clearance" in q_props or "type" in q_props:
+    if query.item_type == "BEARING" or "bearing" in str(query.item_type).lower() or "clearance" in q_props or "clearance" in c_props:
         _run_rule("BEARINGS", check_bearing_compatibility(q_props, c_props))
 
-    if query.item_type == "PUMP" or "flow_rate_m3h" in q_props or "coupling" in q_props or "api_mount" in q_props:
+    if query.item_type == "PUMP" or "flow_rate_m3h" in q_props or "coupling" in q_props or "api_mount" in q_props or "api610_type" in q_props or "hardness_delta_hb" in c_props:
         _run_rule("PUMP_EQUIPMENT", check_centrifugal_pump(q_props, c_props))
 
-    if query.item_type == "COMPRESSOR" or "valve_role" in q_props or "dgs_type" in q_props:
+    if "COMPRESSOR" in str(query.item_type).upper() or "valve_role" in q_props or "valve_function" in q_props or "dgs_type" in q_props or ("seal_type" in q_props and "DRY_GAS" in str(q_props)):
         _run_rule("COMPRESSOR_EQUIPMENT", check_compressor_compatibility(q_props, c_props))
 
     # Line Pipe & Fluid Service
-    if query.item_type == "PIPE" or "psl" in q_props or "category_m" in q_props:
+    if query.item_type == "PIPE" or "psl" in q_props or "category_m" in q_props or "mfg" in q_props or "service" in q_props:
         _run_rule("LINE_PIPE", check_line_pipe_quality(q_props, c_props))
 
     # Tubing
@@ -320,11 +349,11 @@ def evaluate_material_compatibility(
         _run_rule("INSTRUMENT_TUBING", check_instrumentation_tubing(q_props, c_props))
 
     # Expansion Joints
-    if "bellows" in str(query.item_type).lower() or "hose" in str(query.item_type).lower() or "tied_joint" in q_props:
+    if "EXPANSION" in str(query.item_type).upper() or "bellows" in str(query.item_type).lower() or "hose" in str(query.item_type).lower() or "tied_joint" in q_props or "restraint" in q_props or "restraint" in c_props:
         _run_rule("EXPANSION_JOINTS", check_expansion_joint_and_hose(q_props, c_props))
 
     # Equipment & Tank Safety
-    if "TANK" in str(query.item_type).upper() or "paint_sys" in q_props or "venting" in str(q_props):
+    if "TANK" in str(query.item_type).upper() or "FLAME_ARRESTOR" in str(query.item_type).upper() or "PVRV" in str(query.item_type).upper() or "paint_sys" in q_props or "venting" in str(q_props) or "required_scfh" in q_props or ("zone" in q_props and "DETONATION" in str(q_props)):
         _run_rule("TANK_SAFETY", check_tank_safety_and_paint(q_props, c_props))
 
     # Strainers, Filters & Traps
@@ -332,15 +361,15 @@ def evaluate_material_compatibility(
         _run_rule("STRAINERS_FILTERS_TRAPS", check_strainer_filter_and_steam_trap(q_props, c_props))
 
     # Coating Thickness
-    if "coating_thickness_um" in q_props or "coating_thickness_um" in c_props:
+    if "coating" in q_props or "coating" in c_props or "coating_thickness_um" in q_props or "coating_thickness_um" in c_props:
         _run_rule("COATING_THICKNESS", check_coating_thickness(q_props, c_props))
 
     # Insulation (ASTM C795 / C552)
-    if "insulation" in str(query.item_type).lower() or "astm_c795" in str(q_props) or "cui" in str(q_props):
+    if "INSULATION" in str(query.item_type).upper() or "insulation" in str(query.item_type).lower() or "astm_c795" in str(q_props) or "cui" in str(q_props) or "closed_cell" in q_props or "closed_cell" in c_props:
         _run_rule("THERMAL_INSULATION", check_thermal_insulation_cui(q_props, c_props, substrate_material=c_mat))
 
     # Heat Exchangers
-    if "EXCHANGER" in str(query.item_type).upper() or "TUBE_BUNDLE" in str(query.item_type).upper() or "tema_class" in q_props:
+    if "EXCHANGER" in str(query.item_type).upper() or "HE_" in str(query.item_type).upper() or "TUBE" in str(query.item_type).upper() or "tema_class" in q_props:
         _run_rule("HEAT_EXCHANGERS", check_heat_exchanger_tubes(q_props, c_props))
 
     # Line Blinds & Flange Insulation

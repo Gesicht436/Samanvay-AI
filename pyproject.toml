@@ -37,6 +37,7 @@ dependencies = [
     "torchvision",
     "onnxruntime>=1.30.0",
     "pymupdf>=1.28.2",
+    "neo4j>=6.3.1",
 ]
 
 [[tool.uv.index]]

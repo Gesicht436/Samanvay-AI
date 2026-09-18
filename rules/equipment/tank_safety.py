@@ -25,8 +25,8 @@ def check_tank_safety_and_paint(
     Evaluates API 2000 PVRV venting capacity, ISO 16852 detonation arrestors, and paint systems.
     """
     # 1. API 2000 In-Breathing Flow Capacity
-    q_vent = query_props.get("inbreathing_capacity_nm3h") or query_props.get("venting_capacity_nm3h")
-    c_vent = cand_props.get("inbreathing_capacity_nm3h") or cand_props.get("venting_capacity_nm3h")
+    q_vent = query_props.get("required_scfh") or query_props.get("inbreathing_capacity_nm3h") or query_props.get("venting_capacity_nm3h")
+    c_vent = cand_props.get("required_scfh") or cand_props.get("inbreathing_capacity_nm3h") or cand_props.get("venting_capacity_nm3h")
     if q_vent and c_vent:
         try:
             if float(c_vent) < float(q_vent):
@@ -37,16 +37,16 @@ def check_tank_safety_and_paint(
                         module_name="API_2000_PVRV",
                         standard_code="API 2000 7th Edition",
                         failure_mode_prevented="Atmospheric storage tank shell vacuum implosion collapse",
-                        explanation=f"TANK VACUUM IMPLOSION TRAP: Candidate in-breathing capacity {c_vent} Nm³/h < required {q_vent} Nm³/h. Liquid pump-out creates vacuum that buckles atmospheric tank walls.",
+                        explanation=f"TANK VACUUM IMPLOSION TRAP: Candidate in-breathing capacity {c_vent} < required {q_vent}. Liquid pump-out creates vacuum that buckles atmospheric tank walls.",
                     ),
                 )
         except (ValueError, TypeError):
             pass
 
     # 2. ISO 16852 Detonation vs Deflagration Arrestors
-    q_arr = str(query_props.get("arrestor_type", "")).upper()
-    c_arr = str(cand_props.get("arrestor_type", "")).upper()
-    if ("DETONATION" in q_arr or "IN-LINE" in q_arr) and ("DEFLAGRATION" in c_arr or "END-OF-LINE" in c_arr):
+    q_arr = str(query_props.get("zone") or query_props.get("arrestor_type", "")).upper()
+    c_arr = str(cand_props.get("zone") or cand_props.get("arrestor_type", "")).upper()
+    if ("DETONATION" in q_arr or "IN_LINE" in q_arr or "IN-LINE" in q_arr) and ("DEFLAGRATION" in c_arr or "END_OF_LINE" in c_arr or "END-OF-LINE" in c_arr):
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
             0.0,

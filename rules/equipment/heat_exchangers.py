@@ -29,9 +29,19 @@ def check_heat_exchanger_tubes(
     Evaluates TEMA class, seamless tubing, BWG wall specification, and U-bend heat treatment.
     """
     # 1. TEMA Class
-    q_tema = str(query_props.get("tema_class", "")).upper()
-    c_tema = str(cand_props.get("tema_class", "")).upper()
-    if q_tema in TEMA_HIERARCHY and c_tema in TEMA_HIERARCHY:
+    def _norm_tema(s: str) -> Optional[str]:
+        u = s.upper()
+        if "TEMA R" in u or "TEMA_R" in u or "REFINERY" in u:
+            return "TEMA R"
+        if "TEMA C" in u or "TEMA_C" in u or "COMMERCIAL" in u:
+            return "TEMA C"
+        if "TEMA B" in u or "TEMA_B" in u:
+            return "TEMA B"
+        return None
+
+    q_tema = _norm_tema(str(query_props.get("tema_class", "")))
+    c_tema = _norm_tema(str(cand_props.get("tema_class", "")))
+    if q_tema and c_tema and q_tema in TEMA_HIERARCHY and c_tema in TEMA_HIERARCHY:
         if TEMA_HIERARCHY.index(c_tema) < TEMA_HIERARCHY.index(q_tema):
             return (
                 DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
@@ -45,8 +55,8 @@ def check_heat_exchanger_tubes(
             )
 
     # 2. Seamless vs Welded Exchanger Tubes
-    q_tube_mfg = str(query_props.get("tube_mfg", query_props.get("mfg_method", ""))).upper()
-    c_tube_mfg = str(cand_props.get("tube_mfg", cand_props.get("mfg_method", ""))).upper()
+    q_tube_mfg = str(query_props.get("mfg") or query_props.get("tube_mfg") or query_props.get("design") or query_props.get("mfg_method", "")).upper()
+    c_tube_mfg = str(cand_props.get("mfg") or cand_props.get("tube_mfg") or cand_props.get("design") or cand_props.get("mfg_method", "")).upper()
     if ("SEAMLESS" in q_tube_mfg or "A213" in q_tube_mfg) and ("WELDED" in c_tube_mfg or "A249" in c_tube_mfg):
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,

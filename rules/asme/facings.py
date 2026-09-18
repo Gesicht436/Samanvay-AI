@@ -36,6 +36,21 @@ def check_flange_facing(
     """
     Evaluates flange facing and attachment geometry compatibility.
     """
+    # Flange Attachment Type: Slip-On vs Weld Neck in severe cyclic
+    qt = (query_flange_type or "").upper().replace("_", " ")
+    ct = (cand_flange_type or "").upper().replace("_", " ")
+    if severe_cyclic and ("WELD NECK" in qt or "WN" in qt) and ("SLIP ON" in ct or "SO" in ct):
+        return (
+            DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
+            0.0,
+            RuleViolation(
+                module_name="ASME_B31_3_CYCLIC",
+                standard_code="ASME B31.3 Severe Cyclic Service",
+                failure_mode_prevented="Slip-on flange fillet weld fatigue fracture",
+                explanation="FATIGUE FRACTURE TRAP: Slip-On flanges are prohibited in Severe Cyclic Service. Weld Neck with full penetration butt weld is mandatory.",
+            ),
+        )
+
     if not query_facing and not candidate_facing:
         return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
 

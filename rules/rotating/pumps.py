@@ -72,9 +72,9 @@ def check_centrifugal_pump(
         )
 
     # 3. OH1 vs OH2 Centerline Mounting
-    q_mount = str(query_props.get("api_mount", query_props.get("pump_type", ""))).upper()
-    c_mount = str(cand_props.get("api_mount", cand_props.get("pump_type", ""))).upper()
-    temp = service_temp_c or _parse_num(query_props.get("operating_temp_c")) or _parse_num(query_props.get("temp"))
+    q_mount = str(query_props.get("api610_type") or query_props.get("api_mount") or query_props.get("pump_type", "")).upper()
+    c_mount = str(cand_props.get("api610_type") or cand_props.get("api_mount") or cand_props.get("pump_type", "")).upper()
+    temp = service_temp_c or _parse_num(query_props.get("temp_c")) or _parse_num(query_props.get("operating_temp_c")) or _parse_num(query_props.get("temp"))
 
     if temp and temp > 150.0 and "OH2" in q_mount and "OH1" in c_mount:
         return (
@@ -109,6 +109,19 @@ def check_centrifugal_pump(
     # 5. Wear Ring Hardness Differential
     imp_hb = _parse_num(cand_props.get("impeller_wear_ring_hb"))
     cas_hb = _parse_num(cand_props.get("casing_wear_ring_hb"))
+    delta_hb = _parse_num(cand_props.get("hardness_delta_hb"))
+    if delta_hb is not None and delta_hb < 50.0:
+        return (
+            DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
+            0.0,
+            RuleViolation(
+                module_name="API_610_WEAR_RING",
+                standard_code="API 610 Clause 6.7.2",
+                failure_mode_prevented="Rotating/stationary wear ring galling seizure and rotor lockup",
+                explanation=f"WEAR RING GALLING TRAP: Wear ring hardness differential is only {delta_hb} HB. API 610 mandates minimum 50 HB differential.",
+            ),
+        )
+
     if imp_hb and cas_hb and abs(imp_hb - cas_hb) < 50.0:
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,

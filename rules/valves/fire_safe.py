@@ -44,7 +44,9 @@ def check_fire_safe_and_categories(
     # 2. API 609 Butterfly Valves (Category A vs Category B)
     q_cat = str(query_props.get("category", "")).upper()
     c_cat = str(cand_props.get("category", "")).upper()
-    if "CATEGORY B" in q_cat and "CATEGORY A" in c_cat:
+    is_q_cat_b = "CATEGORY B" in q_cat or "CAT_B" in q_cat or "CAT B" in q_cat
+    is_c_cat_a = "CATEGORY A" in c_cat or "CAT_A" in c_cat or "CAT A" in c_cat
+    if is_q_cat_b and is_c_cat_a:
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
             0.0,
@@ -55,6 +57,25 @@ def check_fire_safe_and_categories(
                 explanation="ELASTOMER BLOWOUT TRAP: Category A concentric resilient-seated valve proposed for Category B high-performance offset duty.",
             ),
         )
+
+    # High Temperature Soft Seat Failure (API 608 / ASME B16.34)
+    temp_val = query_props.get("temp_c") or cand_props.get("temp_c")
+    c_seat = str(cand_props.get("seat", "")).upper()
+    if temp_val is not None:
+        try:
+            if float(temp_val) > 200.0 and any(s in c_seat for s in ["PTFE", "TEFLON", "RPTFE", "VIRGIN_PTFE"]):
+                return (
+                    DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
+                    0.0,
+                    RuleViolation(
+                        module_name="API_608_SOFT_SEAT",
+                        standard_code="API 608 / ASME B16.34",
+                        failure_mode_prevented="Polymer seat liquefaction and catastrophic loss of shutoff at elevated temperature",
+                        explanation=f"HIGH TEMPERATURE SEAT LIQUEFACTION TRAP: Operating temperature is {temp_val}°C. PTFE seats liquefy above 200°C. Metal-to-metal or Stellite seats are mandatory.",
+                    ),
+                )
+        except (ValueError, TypeError):
+            pass
 
     # 3. Check Valve Retainerless Design in Toxic Service (API 594)
     q_toxic = query_props.get("toxic_service", False) or query_props.get("category_m", False)
@@ -70,6 +91,24 @@ def check_fire_safe_and_categories(
                 explanation="FUGITIVE EMISSION TRAP: Toxic fluid service mandates retainerless dual plate check valve design.",
             ),
         )
+
+    # Valve offset safe upgrade (Single -> Double offset)
+    q_off = str(query_props.get("offset", "")).upper()
+    c_off = str(cand_props.get("offset", "")).upper()
+    if q_off and c_off and q_off != c_off:
+        return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.90, None)
+
+    # Valve operator safe upgrade (Lever -> Gear Actuator)
+    q_opr = str(query_props.get("operator", "")).upper()
+    c_opr = str(cand_props.get("operator", "")).upper()
+    if q_opr and c_opr and q_opr != c_opr:
+        return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.90, None)
+
+    # Check valve disc type safe upgrade (Single Disc -> Dual Plate)
+    q_disc = str(query_props.get("disc_type", "")).upper()
+    c_disc = str(cand_props.get("disc_type", "")).upper()
+    if q_disc and c_disc and q_disc != c_disc:
+        return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.90, None)
 
     # 4. Valve Operation Mismatch (Pneumatic vs Manual)
     q_op = str(query_props.get("operation", "")).upper()

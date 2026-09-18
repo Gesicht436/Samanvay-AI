@@ -28,12 +28,13 @@ def check_flange_insulation_kit(
     """
     Evaluates NACE SP0286 Flange Insulation Kit compatibility.
     """
-    q_type = str(query_props.get("fik_type", "")).upper()
-    c_type = str(cand_props.get("fik_type", "")).upper()
+    q_type = str(query_props.get("fik_type") or query_props.get("type", "")).upper()
+    c_type = str(cand_props.get("fik_type") or cand_props.get("type", "")).upper()
+    is_bimetallic = is_dissimilar_metal or query_props.get("bimetallic", False) or cand_props.get("bimetallic", False)
 
     # Galvanic bridging check
-    if (is_dissimilar_metal or is_buried_or_subsea) and ("TYPE E" in q_type or "FULL_FACE" in q_type):
-        if "TYPE F" in c_type or "RAISED_FACE" in c_type:
+    if (is_bimetallic or is_buried_or_subsea) and ("TYPE E" in q_type or "FULL_FACE" in q_type or "TYPE_E" in q_type):
+        if "TYPE F" in c_type or "RAISED_FACE" in c_type or "TYPE_F" in c_type:
             return (
                 DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
                 0.0,

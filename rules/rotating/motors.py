@@ -42,9 +42,12 @@ def check_motor_compatibility(
     # 1. Hazardous Area Ex Rating
     q_ex = query_props.get("ex_rating")
     c_ex = cand_props.get("ex_rating")
-    q_zone = query_props.get("zone", 1 if q_ex else 0)
+    q_zone_str = str(query_props.get("zone") or query_props.get("area", "")).upper()
+    c_zone_str = str(cand_props.get("zone") or cand_props.get("area", "")).upper()
+    is_q_hazardous = q_ex or "ZONE_1" in q_zone_str or "ZONE 1" in q_zone_str or "ZONE_2" in q_zone_str or "EX" in q_zone_str or query_props.get("zone") in (1, 2)
+    is_c_safe_only = not c_ex and ("SAFE" in c_zone_str or "NON_EX" in c_zone_str or not is_q_hazardous)
 
-    if (q_ex or q_zone in (1, 2)) and not c_ex:
+    if is_q_hazardous and (not c_ex or is_c_safe_only):
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
             0.0,

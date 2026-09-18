@@ -22,10 +22,11 @@ def check_line_blind_compatibility(
     """
     Evaluates ASME B16.48 line blind compliance.
     """
-    is_certified = cand_props.get("asme_b16_48_certified", True)
-    is_shop_cut = cand_props.get("is_shop_fabricated", False) or cand_props.get("shop_cut_plate", False)
+    cand_std = str(cand_props.get("certified_standard", "")).upper()
+    is_certified = cand_props.get("asme_b16_48_certified", True) and "SHOP_CUT" not in cand_std and "UNCERTIFIED" not in cand_std
+    is_shop_cut = cand_props.get("is_shop_fabricated", False) or cand_props.get("shop_cut_plate", False) or "SHOP_CUT" in cand_std or "UNCERTIFIED" in cand_std
 
-    if is_shop_cut and not is_certified:
+    if (is_shop_cut and not is_certified) or "SHOP_CUT" in cand_std:
         return (
             DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
             0.0,

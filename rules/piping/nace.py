@@ -21,9 +21,9 @@ def check_nace_sour_service(
     """
     Evaluates NACE MR0175 / ISO 15156 sour hydrocarbon compliance.
     """
-    nace_req = query_props.get("nace_required", False) or query_props.get("sour_service", False)
-    cand_compliant = cand_props.get("nace_compliant", True)
-    if "nace_compliant" not in cand_props and "nace" in str(cand_props).lower():
+    nace_req = query_props.get("nace_mr0175", False) or query_props.get("nace_required", False) or query_props.get("sour_service", False)
+    cand_compliant = cand_props.get("nace_mr0175", cand_props.get("nace_compliant", True))
+    if "nace_compliant" not in cand_props and "nace_mr0175" not in cand_props and "nace" in str(cand_props).lower():
         cand_compliant = True
 
     if nace_req and not cand_compliant:
@@ -43,7 +43,7 @@ def check_nace_sour_service(
         )
 
     # Check hardness if specified
-    cand_hardness = cand_props.get("hardness_hrc")
+    cand_hardness = cand_props.get("hardness_max_hrc", cand_props.get("hardness_hrc"))
     if nace_req and cand_hardness is not None:
         try:
             if float(cand_hardness) > 22.0:
@@ -59,5 +59,9 @@ def check_nace_sour_service(
                 )
         except (ValueError, TypeError):
             pass
+
+    # Sour service safe upgrade
+    if not nace_req and cand_compliant and (cand_props.get("nace_mr0175") is True or "B7M" in str(cand_props)):
+        return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.90, None)
 
     return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)

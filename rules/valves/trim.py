@@ -61,5 +61,6 @@ def check_valve_trim(
             ),
         )
 
-    # Safe upgrade (e.g. Trim 8 over Trim 1)
-    return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.92, None)
+    # Safe upgrade (e.g. Trim 8 over Trim 1, Trim 5 over Trim 8)
+    # Stellite hardfacing upgrades preserve all dimensions while improving wear life = Tier 1 Identical Drop-In
+    return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 0.98, None)

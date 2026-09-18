@@ -42,7 +42,7 @@ def check_valve_bore(
         return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
 
     if "REDUCED" in qb and "FULL" in cb:
-        # Full bore can safely replace reduced bore
-        return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.95, None)
+        # Full bore can safely replace reduced bore as direct drop-in (preserves dims, removes restriction)
+        return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 0.98, None)
 
     return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.88, None)

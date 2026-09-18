@@ -30,9 +30,10 @@ def check_large_flange_series(
 
     # Normalize series indicators
     def _extract_series(s: str) -> Optional[str]:
-        if "SERIES A" in s or "MSS SP-44" in s or "SERIES-A" in s:
+        norm = s.replace("_", " ").replace("-", " ")
+        if "SERIES A" in norm or "MSS SP 44" in norm:
             return "SERIES_A"
-        if "SERIES B" in s or "API 605" in s or "SERIES-B" in s:
+        if "SERIES B" in norm or "API 605" in norm:
             return "SERIES_B"
         return None
 

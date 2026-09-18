@@ -108,3 +108,30 @@ def check_buttweld_elbow_radius(
         return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
 
     return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.88, None)
+
+
+def check_pipeline_fittings_smys(
+    query_props: Dict[str, Any],
+    cand_props: Dict[str, Any],
+) -> Tuple[DynamicCompatibilityTier, float, Optional[RuleViolation]]:
+    """
+    Evaluates MSS SP-75 specified minimum yield strength (SMYS) down-rating.
+    """
+    q_smys = query_props.get("smys_psi")
+    c_smys = cand_props.get("smys_psi")
+    if q_smys is not None and c_smys is not None:
+        try:
+            if float(c_smys) < float(q_smys):
+                return (
+                    DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
+                    0.0,
+                    RuleViolation(
+                        module_name="MSS_SP_75_SMYS",
+                        standard_code="MSS SP-75 / API 5L",
+                        failure_mode_prevented="Fitting yield deformation and burst under transmission gas pressure",
+                        explanation=f"HIGH-YIELD FITTING DOWNGRADE: Candidate SMYS {c_smys} PSI is below required {q_smys} PSI (MSS SP-75 WPHY).",
+                    ),
+                )
+        except (ValueError, TypeError):
+            pass
+    return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
