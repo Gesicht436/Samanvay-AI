@@ -1,15 +1,45 @@
-# Samanvay-AI Sovereign Docker Architecture
+# Samanvay-AI Sovereign Docker Infrastructure (`docker/`)
 
 **Project Name:** `Samanvay-AI`  
 **Version:** `2.0.0-PROD`  
 **Organization:** Ministry of Petroleum & Natural Gas (MoPNG) / BharatCodex  
 **Target Milestone:** 100% Private, Sovereign Air-Gapped Deployment  
 
+This directory contains the production multi-container orchestration manifests, Dockerfiles, initialization scripts, and environment configurations powering **Samanvay-AI**.
+
 ---
 
-## 1. Personalized Container & Image Matrix
+## 1. Container & Image Architecture
 
-All services, containers, network interfaces, and volume mounts are explicitly named and branded for `Samanvay-AI`:
+The stack consists of 5 tightly integrated, healthcheck-coordinated services connected over an isolated Docker bridge network (`samanvay-network`):
+
+```
+                       ┌─────────────────────────────────────────┐
+                       │   Frontend UI (samanvay-ai-frontend)    │
+                       │   Next.js 16.3.5 / Turbopack (Port 3000)│
+                       └────────────────────┬────────────────────┘
+                                            │
+                                            ▼ HTTP / REST
+                       ┌─────────────────────────────────────────┐
+                       │    Backend API (samanvay-ai-backend)    │
+                       │    FastAPI / Python 3.11 (Port 8000)    │
+                       └───────────┬──────────────┬──────────────┘
+                                   │              │
+                   ┌───────────────┘              └───────────────┐
+                   ▼                                              ▼
+     ┌───────────────────────────┐                  ┌───────────────────────────┐
+     │  PostgreSQL 16 Database   │                  │   Qdrant Vector Database  │
+     │  (samanvay-ai-postgres)   │                  │    (samanvay-ai-qdrant)   │
+     │  Port 5432 / Persistent   │                  │    Port 6333 / HNSW Index │
+     └─────────────┬─────────────┘                  └───────────────────────────┘
+                   │
+                   ▼ CDC Mirroring
+     ┌───────────────────────────┐
+     │    Neo4j 5.20 Graph DB    │
+     │    (samanvay-ai-neo4j)    │
+     │    Port 7474 / Port 7687  │
+     └───────────────────────────┘
+```
 
 | Service | Container Name | Image Name & Tag | Port Bindings | Role & Responsibilities |
 |---|---|---|---|---|
@@ -21,46 +51,60 @@ All services, containers, network interfaces, and volume mounts are explicitly n
 
 ---
 
-## 2. Quick Start Commands
+## 2. Directory Structure
 
-### A. Launch All Services (Sovereign Air-Gapped Stack)
-```bash
-# From repository root:
-docker compose up -d
-
-# Or explicitly targeting the docker directory:
-docker compose -f docker/docker-compose.yml up -d
 ```
-
-### B. View Running Samanvay-AI Containers
-```bash
-docker ps --filter "name=samanvay-ai"
-```
-
-### C. Check Logs
-```bash
-# Tail logs for all Samanvay-AI services:
-docker compose logs -f
-
-# Tail backend service logs:
-docker logs -f samanvay-ai-backend
-
-# Tail frontend service logs:
-docker logs -f samanvay-ai-frontend
-```
-
-### D. Tear Down & Clean Volumes
-```bash
-# Stop containers without removing persistent data:
-docker compose down
-
-# Stop and purge persistent data volumes:
-docker compose down -v
+docker/
+├── .dockerignore             # Production build context exclusions
+├── .env.docker               # Container environment variables
+├── docker-compose.yml        # Multi-service stack definition
+├── Dockerfile.backend        # Multi-stage hardened Python 3.11 backend container
+├── Dockerfile.frontend       # Multi-stage optimized Next.js standalone container
+├── init-db/                  # Database initialization hooks
+│   ├── 01-init-samanvay.sql  # SQL script creating extensions and permissions
+│   └── README.md             # Documentation for database init
+└── README.md                 # This file
 ```
 
 ---
 
-## 3. Sovereign Air-Gapped Guarantees
+## 3. Quick Start Commands
+
+### A. Launch All Services
+```bash
+# Launch stack in background
+docker compose -f docker/docker-compose.yml up -d
+```
+
+### B. Verify Health & Running Containers
+```bash
+docker ps --filter "name=samanvay-ai"
+```
+
+### C. Tail Logs
+```bash
+# All services
+docker compose -f docker/docker-compose.yml logs -f
+
+# Backend only
+docker logs -f samanvay-ai-backend
+
+# Frontend only
+docker logs -f samanvay-ai-frontend
+```
+
+### D. Tear Down & Purge Volumes
+```bash
+# Stop containers preserving data:
+docker compose -f docker/docker-compose.yml down
+
+# Stop containers and purge persistent database volumes:
+docker compose -f docker/docker-compose.yml down -v
+```
+
+---
+
+## 4. Sovereign Air-Gapped Guarantees
 
 1. **Zero External Cloud Calls:** Runs entirely local inference using ONNX Runtime, HuggingFace local models, and local PostgreSQL/Neo4j/Qdrant.
 2. **Hardened Non-Root Users:** Backend (`samanvay:10001`) and frontend (`nextjs:1001`) run as unprivileged non-root users.
