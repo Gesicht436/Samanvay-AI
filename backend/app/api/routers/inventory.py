@@ -6,6 +6,7 @@ from backend.app.services.inventory_service import list_inventory, get_item, cre
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
+@router.get("")
 @router.get("/")
 def get_inventory_list(
     filters: InventoryFilterParams = Depends(), 
@@ -29,6 +30,7 @@ def get_hitl_items(db: Session = Depends(get_db_session)):
 def get_inventory_item(sku_code: str, cpse: str = Depends(verify_cpse_access), db: Session = Depends(get_db_session)):
     return get_item(db, sku_code, cpse)
 
+@router.post("")
 @router.post("/")
 def create_inventory_item(payload: Dict[str, Any], db: Session = Depends(get_db_session)):
     return create_item(db, payload)

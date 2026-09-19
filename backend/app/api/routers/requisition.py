@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import Dict, Any, Optional
 from backend.app.api.dependencies import get_db_session, validate_idempotency_key
 from backend.app.services.requisition_service import (
@@ -17,6 +18,7 @@ from backend.app.core.exceptions import ResourceNotFoundError
 router = APIRouter(prefix="/requisition", tags=["Requisition"])
 
 
+@router.post("", status_code=status.HTTP_201_CREATED)
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_req(
     payload: Dict[str, Any],
@@ -39,8 +41,12 @@ def create_req(
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Requisition ID already exists")
 
 
+@router.get("")
 @router.get("/")
 def list_reqs(
     cpse: Optional[str] = None,

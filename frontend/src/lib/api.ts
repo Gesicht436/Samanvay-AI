@@ -1,4 +1,5 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1';
+const rawUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = rawUrl.endsWith('/api/v1') ? rawUrl : `${rawUrl.replace(/\/+$/, '')}/api/v1`;
 
 async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
@@ -86,6 +87,7 @@ export const api = {
   getAuditEntry: (logId: string) => fetchAPI<any>(`/audit/${logId}`),
 
   // Pre-Purchase Radar & Graph
+  getTopology: () => fetchAPI<any>('/graph/topology'),
   discoverSurplus: (itemType?: string, maxDistanceKm?: number) => {
     const query = new URLSearchParams();
     if (itemType) query.append('item_type', itemType);

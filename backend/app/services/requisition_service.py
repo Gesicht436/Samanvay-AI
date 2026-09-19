@@ -38,7 +38,7 @@ def get_requisition(db: Session, req_id: str) -> Dict[str, Any]:
 
 
 def create_requisition(db: Session, request: Dict[str, Any], idempotency_key: str) -> Requisition:
-    sku_code = request.get("sku_code")
+    sku_code = request.get("sku_code") or request.get("item_sku_code")
     quantity = int(request.get("required_qty") or request.get("quantity", 1))
 
     # Atomic lock on inventory item using SELECT ... FOR UPDATE
@@ -57,20 +57,20 @@ def create_requisition(db: Session, request: Dict[str, Any], idempotency_key: st
 
     req = Requisition(
         requisition_id=req_id,
-        source_cpse=request.get("source_cpse", item.cpse),
-        source_depot=request.get("source_depot", item.depot_id),
+        source_cpse=request.get("source_cpse") or request.get("supplying_cpse") or item.cpse,
+        source_depot=request.get("source_depot") or request.get("supplying_depot") or item.depot_id,
         source_unit=request.get("source_unit", "Main Depot Stores"),
-        target_cpse=request.get("target_cpse", "ONGC"),
-        target_depot=request.get("target_depot", "Uran Gas Plant"),
+        target_cpse=request.get("target_cpse") or request.get("requester_cpse") or "ONGC",
+        target_depot=request.get("target_depot") or request.get("requester_depot") or "Uran Gas Plant",
         sku_code=sku_code,
         item_description=request.get("item_description", item.description),
         required_qty=quantity,
         unit_cost_inr=unit_cost,
         total_value_inr=total_val,
         justification=request.get("justification", "Emergency mutual aid requisition"),
-        urgency_level=request.get("urgency_level", "EMERGENCY"),
+        urgency_level=request.get("urgency_level") or request.get("urgency", "EMERGENCY"),
         status="PENDING_APPROVAL",
-        requested_by=request.get("requested_by", "MATERIALS_ENGINEER"),
+        requested_by=request.get("requested_by") or request.get("requester_officer", "MATERIALS_ENGINEER"),
         audit_hash=audit_hash,
     )
     db.add(req)

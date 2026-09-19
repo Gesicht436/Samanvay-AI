@@ -5,7 +5,7 @@ services:
   postgres:
     image: samanvay-ai/postgres:16-alpine
     build:
-      context: .
+      context: ./docker
       dockerfile_inline: |
         FROM postgres:16-alpine
         LABEL project="Samanvay-AI"
@@ -33,7 +33,7 @@ services:
       - "5432:5432"
     volumes:
       - samanvay-ai-postgres-data:/var/lib/postgresql/data
-      - ./init-db:/docker-entrypoint-initdb.d:ro
+      - ./docker/init-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-samanvay} -d ${POSTGRES_DB:-samanvay_db}"]
       interval: 5s
@@ -55,7 +55,7 @@ services:
   qdrant:
     image: samanvay-ai/qdrant:v1.12.0
     build:
-      context: .
+      context: ./docker
       dockerfile_inline: |
         FROM qdrant/qdrant:v1.12.0
         LABEL project="Samanvay-AI"
@@ -95,7 +95,7 @@ services:
   neo4j:
     image: samanvay-ai/neo4j:5.20
     build:
-      context: .
+      context: ./docker
       dockerfile_inline: |
         FROM neo4j:5.20
         LABEL project="Samanvay-AI"
@@ -137,7 +137,7 @@ services:
   # ── Samanvay-AI Backend Gateway & Physics Core ─────────────────────────────
   backend:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.backend
     image: samanvay-ai/backend:2.0.0-PROD
     container_name: samanvay-ai-backend
@@ -169,12 +169,12 @@ services:
       - MALLOC_ARENA_MAX=2
       - ENABLE_EMBEDDED_CDC=true
     volumes:
-      - ../backend:/app/backend
-      - ../ml:/app/ml
-      - ../rules:/app/rules
-      - ../graph:/app/graph
-      - ../datasets:/app/datasets
-      - ../scripts:/app/scripts
+      - ./backend:/app/backend
+      - ./ml:/app/ml
+      - ./rules:/app/rules
+      - ./graph:/app/graph
+      - ./datasets:/app/datasets
+      - ./scripts:/app/scripts
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 10s
@@ -221,11 +221,11 @@ services:
       - PYTHONUNBUFFERED=1
       - MALLOC_ARENA_MAX=2
     volumes:
-      - ../backend:/app/backend
-      - ../graph:/app/graph
-      - ../scripts:/app/scripts
-      - ../rules:/app/rules
-      - ../ml:/app/ml
+      - ./backend:/app/backend
+      - ./graph:/app/graph
+      - ./scripts:/app/scripts
+      - ./rules:/app/rules
+      - ./ml:/app/ml
     command: ["python", "-m", "scripts.cdc_worker"]
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import psycopg2; from neo4j import GraphDatabase; exit(0)' || exit 1"]
@@ -247,7 +247,7 @@ services:
   # ── Samanvay-AI Industrial Web Portal & Command Center ─────────────────────
   frontend:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.frontend
     image: samanvay-ai/frontend:2.0.0-PROD
     container_name: samanvay-ai-frontend

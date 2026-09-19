@@ -18,9 +18,31 @@ from backend.app.api.routers import ingest, match, inventory, requisition, graph
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan: initialize DB tables on startup."""
+    """Application lifespan: initialize DB tables, auto-seed, and start CDC worker."""
     init_db()
+    try:
+        from backend.app.services.seeder import seed_database_if_empty
+        seed_database_if_empty()
+    except Exception as e:
+        import logging
+        logging.getLogger("samanvay.startup").warning(f"Auto-seed notification: {e}")
+
+    # Start Real-Time CDC Worker if enabled (or standalone daemon)
+    import os
+    import threading
+    stop_cdc = threading.Event()
+    if os.getenv("ENABLE_EMBEDDED_CDC", "true").lower() in ("true", "1", "yes"):
+        try:
+            from backend.app.services.cdc_manager import start_cdc_worker
+            cdc_thread = threading.Thread(target=start_cdc_worker, args=(stop_cdc,), daemon=True, name="Samanvay-CDC-Worker")
+            cdc_thread.start()
+        except Exception as e:
+            import logging
+            logging.getLogger("samanvay.startup").warning(f"CDC worker startup notice: {e}")
+
     yield
+
+    stop_cdc.set()
 
 
 app = FastAPI(

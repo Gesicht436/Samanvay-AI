@@ -1,21 +1,102 @@
-FROM python:3.14-slim AS builder
+# ==============================================================================
+# Samanvay-AI: Sovereign Air-Gapped FastAPI Gateway & Physics Engine
+# Project: Samanvay-AI | Version: 2.0.0-PROD
+# Organization: Ministry of Petroleum & Natural Gas (MoPNG) / BharatCodex
+# ==============================================================================
 
-RUN pip install uv
+# Stage 1: Dependency resolution and compilation
+FROM python:3.12-slim AS builder
+
+LABEL maintainer="BharatCodex Team <samanvay-ai@mopng.gov.in>"
+LABEL org.opencontainers.image.title="Samanvay-AI Backend Service (Builder)"
+LABEL org.opencontainers.image.vendor="MoPNG / BharatCodex"
+LABEL project="Samanvay-AI"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for deterministic, rapid package installations
+RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml ./
+
+# Install core runtime dependencies
+RUN uv pip install --system --no-cache \
+    fastapi \
+    "uvicorn[standard]" \
+    pydantic \
+    pydantic-settings \
+    sqlalchemy \
+    psycopg2-binary \
+    python-dotenv \
+    python-multipart \
+    qdrant-client \
+    neo4j \
+    pymupdf \
+    numpy \
+    pandas \
+    openpyxl \
+    scikit-learn \
+    qrcode \
+    pillow \
+    httpx \
+    onnxruntime
+
+# Stage 2: Production Runtime
+FROM python:3.12-slim AS runner
+
+LABEL maintainer="BharatCodex Team <samanvay-ai@mopng.gov.in>"
+LABEL org.opencontainers.image.title="Samanvay-AI Backend Service"
+LABEL org.opencontainers.image.description="Sovereign AI-Powered Cross-CPSE Spare Parts Discovery & Compatibility Platform for MoPNG"
+LABEL org.opencontainers.image.version="2.0.0-PROD"
+LABEL org.opencontainers.image.vendor="MoPNG / BharatCodex"
+LABEL org.opencontainers.image.licenses="Proprietary"
+LABEL project="Samanvay-AI"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PORT=8000 \
+    APP_ENV=production
+
+# Install essential runtime system libraries (libgomp for ONNX/Torch, curl for healthcheck)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    libgomp1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create dedicated non-root application user for sovereign container security
+RUN groupadd -g 10001 samanvay && \
+    useradd -u 10001 -g samanvay -s /bin/bash -m samanvay
 
 WORKDIR /app
-COPY pyproject.toml .
-RUN uv pip install --system fastapi uvicorn pydantic sqlalchemy psycopg2-binary || echo "Fallback dependencies"
 
-FROM python:3.14-slim
-
-WORKDIR /app
-COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
+# Copy python site-packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-COPY backend/ ./backend/
-COPY ml/ ./ml/
-COPY rules/ ./rules/
-COPY graph/ ./graph/
+# Copy application modules and dataset benchmarks
+COPY --chown=samanvay:samanvay backend/ ./backend/
+COPY --chown=samanvay:samanvay ml/ ./ml/
+COPY --chown=samanvay:samanvay rules/ ./rules/
+COPY --chown=samanvay:samanvay graph/ ./graph/
+COPY --chown=samanvay:samanvay datasets/ ./datasets/
+COPY --chown=samanvay:samanvay pyproject.toml ./
+
+USER samanvay
 
 EXPOSE 8000
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

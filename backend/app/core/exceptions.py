@@ -10,14 +10,22 @@ from fastapi import HTTPException, status
 class ResourceNotFoundError(HTTPException):
     """Raised when a requested resource does not exist in the database."""
 
-    def __init__(self, resource: str, identifier: str):
+    def __init__(self, resource: str, identifier: str = ""):
+        if not identifier:
+            message = resource
+            res_name = "Resource"
+            res_id = resource
+        else:
+            message = f"{resource} with identifier '{identifier}' not found."
+            res_name = resource
+            res_id = identifier
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "error": "RESOURCE_NOT_FOUND",
-                "resource": resource,
-                "identifier": identifier,
-                "message": f"{resource} with identifier '{identifier}' not found.",
+                "resource": res_name,
+                "identifier": res_id,
+                "message": message,
             },
         )
 

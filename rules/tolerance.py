@@ -38,6 +38,9 @@ from backend.app.schemas.material import (
     CompatibilityResult,
 )
 
+# Alias for backwards compatibility
+ToleranceResult = CompatibilityResult
+
 # ASME Rules
 from rules.asme.pressure_class import check_pressure_class, check_pressure_rating_psi
 from rules.asme.large_flanges import check_large_flange_series

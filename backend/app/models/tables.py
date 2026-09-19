@@ -218,3 +218,20 @@ class IdempotencyKey(Base):
     response_body = Column(JSONB, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class CdcOutbox(Base):
+    """Transactional Change Data Capture Outbox table for real-time Neo4j synchronization."""
+
+    __tablename__ = "cdc_outbox"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    table_name = Column(String(64), nullable=False, index=True)
+    operation = Column(String(16), nullable=False)  # INSERT, UPDATE, DELETE
+    record_id = Column(String(128), nullable=False, index=True)
+    payload = Column(JSONB, nullable=False)
+    status = Column(String(20), nullable=False, default="PENDING", index=True)  # PENDING, PROCESSED, FAILED
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    processed_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+

@@ -306,3 +306,11 @@ class CompatibilityResult(BaseModel):
     @property
     def score(self) -> float:
         return self.composite_score
+
+    @property
+    def explanation(self) -> str:
+        if self.rule_violations:
+            return self.rule_violations[0].explanation
+        if self.engineering_upgrades:
+            return "; ".join(self.engineering_upgrades)
+        return self.summary or "Direct interchangeable engineering match"

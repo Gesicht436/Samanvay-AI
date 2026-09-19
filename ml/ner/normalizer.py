@@ -90,8 +90,13 @@ def extract_metadata_from_dialect(text: str) -> dict:
         meta["metallurgy"] = "ASTM A350 LF2"
     elif "F316" in text or "CF8M" in text:
         meta["metallurgy"] = "ASTM A182 F316"
+    elif "F53" in text or "SUPER DUPLEX" in text:
+        meta["metallurgy"] = "ASTM A182 F53"
+    elif "F51" in text or "DUPLEX" in text:
+        meta["metallurgy"] = "ASTM A182 F51"
     elif "ASTM" in text or "STEEL" in text or "INCONEL" in text or "HASTELLOY" in text:
-        meta["metallurgy"] = text
+        m = re.search(r'(?:ASTM\s+[A-Z0-9]+(?:\s+[A-Z0-9]+)?|INCONEL\s+\w+|HASTELLOY\s+\w+|STAINLESS\s+STEEL|CARBON\s+STEEL)', text)
+        meta["metallurgy"] = m.group(0) if m else text[:60]
 
     # Pressure Class
     match_class = re.search(r'(?:CLASS|#)\s*(\d+)|(\d+)\s*#', text)
@@ -138,3 +143,5 @@ class DialectNormalizer:
             except (ValueError, TypeError):
                 pass
         return metadata
+
+    normalize_description = normalize

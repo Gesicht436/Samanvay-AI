@@ -167,3 +167,116 @@ def get_route_logistics(source_depot: str, target_depot: str):
         "co2_saved_kg": round(co2, 1),
         "estimated_freight_inr": round(freight, 2),
     }
+
+
+@router.get("/topology")
+def get_network_topology(db: Session = Depends(get_db_session)):
+    """
+    Returns the sovereign multi-CPSE logistics topology including depot coordinates,
+    real inventory counts, surplus value, and active inter-CPSE corridors.
+    """
+    from sqlalchemy import func
+
+    # 1. CPSE breakdown
+    cpse_stats = db.query(
+        InventoryItem.cpse,
+        func.count(InventoryItem.id).label("total_items"),
+        func.count(InventoryItem.id).filter(
+            (InventoryItem.status == "IDLE_SURPLUS")
+            | (InventoryItem.status == "SURPLUS_DECLARED")
+            | (InventoryItem.status == "POTENTIAL_SURPLUS")
+            | (InventoryItem.is_broadcasted_surplus == True)
+        ).label("surplus_items"),
+        func.coalesce(func.sum(InventoryItem.total_value_inr), 0).label("total_value"),
+    ).group_by(InventoryItem.cpse).all()
+
+    # 2. Depot breakdown
+    depot_rows = db.query(
+        InventoryItem.depot_id,
+        InventoryItem.depot_location,
+        InventoryItem.cpse,
+        func.count(InventoryItem.id).label("total_items"),
+        func.count(InventoryItem.id).filter(
+            (InventoryItem.status == "IDLE_SURPLUS")
+            | (InventoryItem.status == "SURPLUS_DECLARED")
+            | (InventoryItem.status == "POTENTIAL_SURPLUS")
+            | (InventoryItem.is_broadcasted_surplus == True)
+        ).label("surplus_items"),
+        func.coalesce(func.sum(InventoryItem.total_value_inr), 0).label("total_value"),
+    ).group_by(InventoryItem.depot_id, InventoryItem.depot_location, InventoryItem.cpse).all()
+
+    # Build node models
+    depot_nodes = []
+    for row in depot_rows:
+        loc = row.depot_location or ""
+        matched_coord = None
+        for name, coord in DEPOT_COORDINATES.items():
+            if name.lower() in loc.lower() or name.lower() in (row.depot_id or "").lower():
+                matched_coord = coord
+                break
+        if not matched_coord:
+            matched_coord = (22.3217, 73.1384)
+
+        lat, lon = matched_coord
+        svg_x = round(max(10.0, min(90.0, (lon - 68.0) / 28.0 * 75.0 + 15.0)), 1)
+        svg_y = round(max(10.0, min(90.0, 100.0 - ((lat - 8.0) / 24.0 * 75.0 + 15.0))), 1)
+
+        depot_nodes.append({
+            "depot_id": row.depot_id,
+            "name": f"{row.cpse} {loc.title() if loc else row.depot_id}",
+            "cpse": row.cpse,
+            "location": loc,
+            "latitude": lat,
+            "longitude": lon,
+            "coords": {"x": svg_x, "y": svg_y},
+            "items_count": row.total_items,
+            "surplus_count": row.surplus_items,
+            "unlocked_value_cr": round(float(row.total_value) / 10000000.0, 2),
+        })
+
+    # 3. Key logistics corridors
+    key_corridors = [
+        ("Panipat", "Visakh", "IOCL to HPCL Critical Inter-CPSE Route"),
+        ("Mumbai", "Uran", "BPCL to ONGC Offshore Corridor"),
+        ("Pata", "Panipat", "GAIL to IOCL Feedstock Spares Corridor"),
+        ("Mathura", "Bina", "IOCL to BPCL Central Pipeline Corridor"),
+        ("Koyali", "Hazira", "IOCL to ONGC West Coast Hub"),
+    ]
+    corridor_data = []
+    for src, tgt, label in key_corridors:
+        c1 = DEPOT_COORDINATES.get(src, (29.3909, 76.9635))
+        c2 = DEPOT_COORDINATES.get(tgt, (17.6868, 83.2185))
+        dist = road_distance(c1[0], c1[1], c2[0], c2[1])
+        corridor_data.append({
+            "source": src,
+            "target": tgt,
+            "name": label,
+            "distance_km": round(dist, 1),
+            "transit_hours": round(estimate_transit_hours(dist), 1),
+            "co2_saved_kg": round(compute_co2_saved(dist), 1),
+            "status": "OPERATIONAL",
+        })
+
+    total_val = sum(d["unlocked_value_cr"] for d in depot_nodes)
+    total_itms = sum(d["items_count"] for d in depot_nodes)
+    total_surplus = sum(d["surplus_count"] for d in depot_nodes)
+
+    return {
+        "network_id": "MOPNG-SOVEREIGN-MESH-01",
+        "total_depots": len(depot_nodes),
+        "total_items": total_itms,
+        "total_surplus_items": total_surplus,
+        "total_unlocked_value_cr": round(total_val, 2),
+        "cpse_summary": [
+            {
+                "cpse": c.cpse,
+                "total_items": c.total_items,
+                "surplus_items": c.surplus_items,
+                "total_value_cr": round(float(c.total_value) / 10000000.0, 2),
+            }
+            for c in cpse_stats
+        ],
+        "depots": depot_nodes,
+        "corridors": corridor_data,
+    }
+

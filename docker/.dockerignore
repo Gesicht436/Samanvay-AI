@@ -1,0 +1,22 @@
+# Git
+.git
+.gitignore
+
+# Python Virtual Environments & Caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+
+# Frontend Node Modules & Next.js Builds
+frontend/node_modules/
+frontend/.next/
+frontend/.turbo/
+frontend/out/
+
+# Development & Scratch
+scratch/
+*.log

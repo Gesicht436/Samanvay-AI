@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Python Virtual Environments & Caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Frontend Node Modules & Next.js Builds
+frontend/node_modules/
+frontend/.next/
+frontend/.turbo/
+frontend/out/
+
+# Development & Scratch
+scratch/
+*.log
+.DS_Store
+Thumbs.db
