@@ -13,7 +13,7 @@ This directory contains the controller endpoints of the **Samanvay-AI** REST API
     - Executes 4-stage pipeline: (1) NFKC Normalization $\rightarrow$ (2) DeBERTa Slot Tagging $\rightarrow$ (3) Qdrant BGE-M3 Dense Retrieval $\rightarrow$ (4) Cross-Encoder Reranking $\rightarrow$ (5) Deterministic 21-Rule Engineering Safety Engine.
     - Returns ranked candidates with Dynamic Compatibility Tiers (1 to 4), subvector similarity radar scores, and audit violations.
   - `POST /api/v1/match/benchmark`:
-    - Runs automated accuracy benchmarking across the 100+ public sector test cases in `data/golden_benchmarks.json`.
+    - Runs automated accuracy benchmarking across the 100+ public sector test cases in `datasets/golden_benchmarks.json`.
 
 ### `requisition.py` — Requisition & Order Lifecycle
 - **Endpoints:**

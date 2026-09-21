@@ -7,7 +7,7 @@ This directory contains CLI utilities, background workers, database seeders, and
 ## 1. File-by-File Breakdown
 
 ### `seed_database.py` — Master Database Seeder
-- **Purpose:** Populates PostgreSQL tables and Qdrant vector collections from `data/inventory_catalog.csv`.
+- **Purpose:** Populates PostgreSQL tables and Qdrant vector collections from `datasets/inventory_catalog.csv`.
 - **Key Functions:**
   - `seed_database()`: Reads 5,001 items, computes BGE-M3 dense embeddings, upserts records to Qdrant, and creates relational `InventoryItem` records in PostgreSQL.
 - **Usage:**

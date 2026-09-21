@@ -22,7 +22,7 @@ This directory implements the Human-in-the-Loop (HITL) active learning cache and
     - `export_dataset()`: Serializes active learning logs for fine-tuning offline cross-encoders.
 
 ### `bootstrapper.py` — Golden Benchmark Preloader
-- **Purpose:** Bootstraps cold-start performance by seeding the active learning cache with known validated pairs from `data/golden_benchmarks.json`.
+- **Purpose:** Bootstraps cold-start performance by seeding the active learning cache with known validated pairs from `datasets/golden_benchmarks.json`.
 - **Key Functions:**
   - `seed_from_golden_benchmarks(cache, benchmarks_path)`: Reads verified public enterprise benchmark pairs (e.g. cross-plant interchanges between IOCL Paradip and ONGC Hazira) and pre-populates the cache.
 
@@ -46,7 +46,7 @@ from ml.active_learning.bootstrapper import seed_from_golden_benchmarks
 
 cache = ActiveLearningCache()
 # Bootstrap from verified golden benchmarks
-seed_from_golden_benchmarks(cache, "data/golden_benchmarks.json")
+seed_from_golden_benchmarks(cache, "datasets/golden_benchmarks.json")
 
 # Record a new human approval
 cache.record(

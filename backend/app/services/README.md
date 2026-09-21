@@ -48,7 +48,7 @@ This directory contains the business logic layer, database transactional coordin
   - `backfill_graph_if_empty(syncer)`: Backfills Neo4j from relational database on first boot.
 
 ### `seeder.py` — Cold-Start Database Seeder
-- **Purpose:** Automatically seeds PostgreSQL with realistic public sector inventory data from `data/inventory_catalog.csv` upon first boot.
+- **Purpose:** Automatically seeds PostgreSQL with realistic public sector inventory data from `datasets/inventory_catalog.csv` upon first boot.
 - **Key Functions:**
   - `derive_depot_id(cpse, location) -> str`: Normalizes location codes.
   - `seed_database_if_empty()`: Populates inventory items, depots, and plants if the table is empty.

@@ -7,7 +7,7 @@ This directory contains integration test suites that validate end-to-end perform
 ## 1. File Breakdown
 
 ### `test_benchmarks.py` — Golden Benchmark Accuracy Suite
-- **Purpose:** Executes the entire hybrid matching pipeline (NER $\rightarrow$ Vector Search $\rightarrow$ Cross-Encoder $\rightarrow$ Engineering Safety Core) across the 100+ verified test cases in `data/golden_benchmarks.json`.
+- **Purpose:** Executes the entire hybrid matching pipeline (NER $\rightarrow$ Vector Search $\rightarrow$ Cross-Encoder $\rightarrow$ Engineering Safety Core) across the 100+ verified test cases in `datasets/golden_benchmarks.json`.
 - **Key Functions:**
   - `_load_benchmarks()`: Loads benchmark cases.
   - `test_golden_benchmark_case(case)`: Parameterized test verifying:

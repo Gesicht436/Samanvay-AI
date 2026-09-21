@@ -75,6 +75,14 @@ def seed_database_if_empty():
             metallurgy = str(meta.get("metallurgy") or "")[:60] if meta.get("metallurgy") else None
             facing_end = str(meta.get("facing_end") or "")[:30] if meta.get("facing_end") else None
 
+            po_no = str(row["po_no"]).strip() if "po_no" in row and pd.notna(row["po_no"]) else None
+            heat_no = str(row["heat_no"]).strip() if "heat_no" in row and pd.notna(row["heat_no"]) else None
+            standard = str(row["standard"]).strip() if "standard" in row and pd.notna(row["standard"]) else None
+
+            for field in ["hsn_code", "gem_category", "mesc_code", "cppp_tender_id"]:
+                if field in row and pd.notna(row[field]):
+                    meta[field] = str(row[field]).strip()
+
             if days_idle >= 365:
                 status = "SURPLUS_DECLARED"
                 broadcast = True
@@ -90,12 +98,15 @@ def seed_database_if_empty():
                 cpse=cpse,
                 depot_id=depot_id,
                 depot_location=location,
+                po_no=po_no,
+                heat_no=heat_no,
                 description=desc,
                 item_type=item_type,
                 size_nb_mm=size_nb_mm,
                 pressure_class=pressure_class,
                 metallurgy=metallurgy,
                 facing_end=facing_end,
+                standard=standard,
                 quantity=qty,
                 unit_cost_inr=unit_cost,
                 status=status,

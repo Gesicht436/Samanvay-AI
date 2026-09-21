@@ -74,26 +74,61 @@ def extract_metadata_from_dialect(text: str) -> dict:
     }
 
     # Item Type extractions
-    if "FLANGE" in text or "FLG" in text or "WNRF" in text:
-        meta["item_type"] = "FLANGE"
-    elif "VALVE" in text:
+    if "VALVE" in text or "VLV" in text or "NRV" in text or "BFV" in text:
         meta["item_type"] = "VALVE"
+    elif "FLANGE" in text or "FLG" in text or "WNRF" in text:
+        meta["item_type"] = "FLANGE"
     elif "BLIND" in text:
         meta["item_type"] = "BLIND"
     elif "PIPE" in text:
         meta["item_type"] = "PIPE"
+    elif "STUD" in text or "BOLT" in text:
+        meta["item_type"] = "STUD_BOLT"
+    elif "GASKET" in text or "GSKT" in text:
+        meta["item_type"] = "GASKET"
+    elif "ELBOW" in text or "TEE" in text or "REDUCER" in text or "FITTING" in text:
+        meta["item_type"] = "FITTING"
+    elif "PUMP" in text:
+        meta["item_type"] = "PUMP_SPARE"
 
     # Metallurgy
-    if "A105" in text or "ASTM A105" in text:
+    if "A105" in text:
         meta["metallurgy"] = "ASTM A105"
     elif "LF2" in text or "A350" in text:
         meta["metallurgy"] = "ASTM A350 LF2"
-    elif "F316" in text or "CF8M" in text:
+    elif "WCB" in text or "A216" in text:
+        meta["metallurgy"] = "ASTM A216 WCB"
+    elif "LCB" in text or "A352" in text:
+        meta["metallurgy"] = "ASTM A352 LCB"
+    elif "A106" in text:
+        meta["metallurgy"] = "ASTM A106 GR.B"
+    elif "A333" in text:
+        meta["metallurgy"] = "ASTM A333 GR.6"
+    elif "A234" in text or "WPB" in text:
+        meta["metallurgy"] = "ASTM A234 WPB"
+    elif "A420" in text or "WPL6" in text:
+        meta["metallurgy"] = "ASTM A420 WPL6"
+    elif "B7" in text and ("A193" in text or "STUD" in text or "BOLT" in text):
+        meta["metallurgy"] = "ASTM A193 B7"
+    elif "B16" in text and ("A193" in text or "STUD" in text or "BOLT" in text):
+        meta["metallurgy"] = "ASTM A193 B16"
+    elif "L7" in text and ("A320" in text or "STUD" in text or "BOLT" in text):
+        meta["metallurgy"] = "ASTM A320 L7"
+    elif "B8M" in text:
+        meta["metallurgy"] = "ASTM A193 B8M"
+    elif "B7M" in text:
+        meta["metallurgy"] = "ASTM A193 B7M"
+    elif "F316" in text or "CF8M" in text or "TP316" in text or "SS316" in text:
         meta["metallurgy"] = "ASTM A182 F316"
+    elif "F304" in text or "TP304" in text or "SS304" in text:
+        meta["metallurgy"] = "ASTM A182 F304"
     elif "F53" in text or "SUPER DUPLEX" in text:
         meta["metallurgy"] = "ASTM A182 F53"
     elif "F51" in text or "DUPLEX" in text:
         meta["metallurgy"] = "ASTM A182 F51"
+    elif "API 5L" in text or "API5L" in text:
+        m = re.search(r'API\s*5L\s*(?:X\d+|GR\.?[A-Z0-9]+)?', text)
+        meta["metallurgy"] = m.group(0) if m else "API 5L GR.B"
     elif "ASTM" in text or "STEEL" in text or "INCONEL" in text or "HASTELLOY" in text:
         m = re.search(r'(?:ASTM\s+[A-Z0-9]+(?:\s+[A-Z0-9]+)?|INCONEL\s+\w+|HASTELLOY\s+\w+|STAINLESS\s+STEEL|CARBON\s+STEEL)', text)
         meta["metallurgy"] = m.group(0) if m else text[:60]
@@ -102,16 +137,35 @@ def extract_metadata_from_dialect(text: str) -> dict:
     match_class = re.search(r'(?:CLASS|#)\s*(\d+)|(\d+)\s*#', text)
     if match_class:
         meta["pressure_class"] = match_class.group(1) or match_class.group(2)
+    else:
+        match_pn = re.search(r'PN\s*(\d+)', text)
+        if match_pn:
+            pn_val = int(match_pn.group(1))
+            pn_map = {20: 150, 50: 300, 100: 600, 150: 900, 250: 1500, 420: 2500}
+            meta["pressure_class"] = str(pn_map.get(pn_val, pn_val))
 
     # Size
     match_size = re.search(r'(\d+\.?\d*)\s*mm', text, re.IGNORECASE)
     if match_size:
         meta["size_nb_mm"] = match_size.group(1)
     else:
-        match_inch = re.search(r'(\d+)\s*(?:IN|INCH|")', text, re.IGNORECASE)
-        if match_inch:
-            inches = float(match_inch.group(1))
-            meta["size_nb_mm"] = str(inches * 25.0)
+        match_dn = re.search(r'\bDN\s*(\d+)\b', text)
+        if match_dn:
+            meta["size_nb_mm"] = str(float(match_dn.group(1)))
+        else:
+            match_m = re.search(r'\bM(\d+)\b', text)
+            if match_m:
+                meta["size_nb_mm"] = str(float(match_m.group(1)))
+            else:
+                match_frac = re.search(r'(\d+)/(\d+)\s*(?:IN|INCH|")', text, re.IGNORECASE)
+                if match_frac:
+                    num, den = float(match_frac.group(1)), float(match_frac.group(2))
+                    meta["size_nb_mm"] = str(round((num / den) * 25.4, 1))
+                else:
+                    match_inch = re.search(r'(\d+\.?\d*)\s*(?:IN|INCH|")', text, re.IGNORECASE)
+                    if match_inch:
+                        inches = float(match_inch.group(1))
+                        meta["size_nb_mm"] = str(inches * 25.0)
 
     # Facing
     if "RF" in text:

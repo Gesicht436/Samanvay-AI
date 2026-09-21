@@ -20,7 +20,7 @@ class SamanvayQdrantClient:
         try:
             from qdrant_client import QdrantClient
             from qdrant_client.http import models
-            self.client = QdrantClient(host=host, port=port)
+            self.client = QdrantClient(host=host, port=port, check_compatibility=False)
             self.models = models
             self.active = True
             self.connect()
