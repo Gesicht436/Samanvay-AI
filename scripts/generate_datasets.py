@@ -32,6 +32,18 @@ os.makedirs(DATASETS_DIR, exist_ok=True)
 # ----------------------------------------------------------------------
 
 CPSE_DEPOTS = {
+    "OIL": [
+        "OIL Central Materials Warehouse, Duliajan, Assam",
+        "OIL Moran Drilling & Production Supply Base, Charaideo, Assam",
+        "OIL Digboi Exploration Support Depot, Tinsukia, Assam",
+        "OIL Guwahati Pipeline Operations HQ, Kamrup, Assam",
+        "OIL Jorhat Subsurface & Logistics Base, Jorhat, Assam",
+        "OIL Jodhpur Heavy Oil Project Base, Rajasthan",
+        "OIL Kakinada KG Basin Offshore Supply Base, Andhra Pradesh",
+    ],
+    "NRL": [
+        "NRL Numaligarh Refinery Materials Yard, Golaghat, Assam",
+    ],
     "IOCL": [
         "Panipat Refinery, Haryana",
         "Mathura Refinery, Uttar Pradesh",
@@ -274,6 +286,50 @@ CLASSES_METRIC = ["PN20", "PN50", "PN100", "PN150", "PN250", "PN420"]
 BOLT_DIAMETERS_IMPERIAL = ["1/2IN", "5/8IN", "3/4IN", "7/8IN", "1IN", "1-1/8IN", "1-1/4IN", "1-1/2IN"]
 BOLT_DIAMETERS_METRIC = ["M16", "M20", "M24", "M27", "M30", "M33", "M36", "M42"]
 
+INDIAN_STANDARDS_SPEC = {
+    "FLANGE": ("IS 2062 Grade E250 / IS 6392", "EIL 6-44-0005", "04.01"),
+    "GATE_VALVE": ("IS 14846 Grade FG 200", "OISD-RP-126 / EIL 6-44-0012", "02.10"),
+    "GLOBE_VALVE": ("IS 14846 / BS 1873", "OISD-RP-126 / EIL 6-44-0012", "02.12"),
+    "CHECK_VALVE": ("IS 5312 Part 1", "OISD-RP-126 / EIL 6-44-0012", "02.16"),
+    "BALL_VALVE": ("IS 9890 / BS EN ISO 17292", "OISD-STD-118 / EIL 6-44-0012", "02.14"),
+    "BUTTERFLY_VALVE": ("IS 13095", "OISD-STD-118 / EIL 6-44-0012", "02.18"),
+    "PIPE": ("IS 1239 Part 1 Heavy / IS 3589 Fe 410", "EIL 6-44-0005", "03.10"),
+    "ELBOW_90": ("IS 1239 Part 2 / IS 2062", "EIL 6-44-0005", "04.20"),
+    "TEE_EQUAL": ("IS 1239 Part 2 / IS 2062", "EIL 6-44-0005", "04.20"),
+    "REDUCER_CONC": ("IS 1239 Part 2 / IS 2062", "EIL 6-44-0005", "04.20"),
+    "STUD_BOLT": ("IS 1367 Part 3 Class 8.8", "EIL 6-44-0005", "05.02"),
+    "GASKET_SWG": ("IS 778 / ASME B16.20", "EIL 6-44-0005", "04.35"),
+    "GASKET_RTJ": ("IS 778 / ASME B16.20", "EIL 6-44-0005", "04.35"),
+    "PSV_VALVE": ("IS 14846 / API 526", "OISD-RP-126", "02.40"),
+    "CENTRIFUGAL_PUMP_SPARE": ("IS 5120 / API 610", "OISD-STD-118 / API 682", "06.10"),
+}
+
+SIZE_TO_NB_MM = {
+    "1/2IN": 15.0, "DN15": 15.0,
+    "3/4IN": 20.0, "DN20": 20.0,
+    "1IN": 25.0, "DN25": 25.0,
+    "1.5IN": 40.0, "DN40": 40.0,
+    "2IN": 50.0, "DN50": 50.0,
+    "3IN": 80.0, "DN80": 80.0,
+    "4IN": 100.0, "DN100": 100.0,
+    "6IN": 150.0, "DN150": 150.0,
+    "8IN": 200.0, "DN200": 200.0,
+    "10IN": 250.0, "DN250": 250.0,
+    "12IN": 300.0, "DN300": 300.0,
+    "16IN": 400.0, "DN400": 400.0,
+    "20IN": 500.0, "DN500": 500.0,
+    "24IN": 600.0, "DN600": 600.0,
+}
+
+CLASS_TO_BAR = {
+    "150#": 20.0, "PN20": 20.0,
+    "300#": 50.0, "PN50": 50.0,
+    "600#": 100.0, "PN100": 100.0,
+    "900#": 150.0, "PN150": 150.0,
+    "1500#": 250.0, "PN250": 250.0,
+    "2500#": 420.0, "PN420": 420.0,
+}
+
 def generate_catalog_row(cpse: str, item_family: str, counter: int) -> Dict[str, Any]:
     spec = EQUIPMENT_CATALOG[item_family]
     depot = random.choice(CPSE_DEPOTS[cpse])
@@ -295,9 +351,27 @@ def generate_catalog_row(cpse: str, item_family: str, counter: int) -> Dict[str,
     hsn_code = spec["hsn_code"]
     gem_cat = spec["gem_category"]
     mesc_base = spec["mesc_prefix"]
+
+    # Indian standards and OIL specifics
+    ind_spec_tuple = INDIAN_STANDARDS_SPEC.get(item_family, ("IS 2062", "EIL 6-44-0005", "04.01"))
+    ind_std = ind_spec_tuple[0]
+    oil_spec = ind_spec_tuple[1]
+    oil_mesc_pfx = ind_spec_tuple[2]
+
+    # Make in India (PPP-MII) Local Content
+    rand_mii = random.random()
+    if rand_mii < 0.80:
+        mii_class = "Class-I"
+        local_pct = round(random.uniform(52.0, 95.0), 1)
+    elif rand_mii < 0.95:
+        mii_class = "Class-II"
+        local_pct = round(random.uniform(22.0, 48.0), 1)
+    else:
+        mii_class = "Non-Local"
+        local_pct = round(random.uniform(8.0, 18.0), 1)
     
     # Sizes and Classes
-    if cpse in ["IOCL", "ONGC"]:
+    if cpse in ["OIL", "NRL", "IOCL", "ONGC"]:
         size = random.choice(BOLT_DIAMETERS_IMPERIAL) if item_family == "STUD_BOLT" else random.choice(SIZES_IMPERIAL)
         cls = random.choice(CLASSES_IMPERIAL)
         facing = "RTJ" if cls in ["900#", "1500#", "2500#"] else ("RF" if cls != "150#" or random.random() > 0.2 else "FF")
@@ -305,27 +379,63 @@ def generate_catalog_row(cpse: str, item_family: str, counter: int) -> Dict[str,
         size = random.choice(BOLT_DIAMETERS_METRIC) if item_family == "STUD_BOLT" else random.choice(SIZES_METRIC)
         cls = random.choice(CLASSES_METRIC)
         facing = "RTJ" if cls in ["PN150", "PN250", "PN420"] else "RF"
-        
+
+    nb_mm = SIZE_TO_NB_MM.get(size, 100.0 if "4" in size else 50.0)
+    bar_val = CLASS_TO_BAR.get(cls, 20.0)
+
+    # 8-digit OIL SAP MESC material code
+    oil_mat_code = f"{oil_mesc_pfx}.{random.randint(10, 99)}.{random.randint(10, 99)}.{random.randint(10, 99)}"
+    gem_product_id = f"GEM-PRD-{item_family[:4]}-{counter:05d}"
+    cppp_tender_ref = f"OIL/DUL/MAT/2026/{counter:04d}" if cpse in ["OIL", "NRL"] else f"2026_{cpse}_{random.randint(100000, 999999)}_1"
+
     # Generate description based on authentic CPSE ERP Dialects
-    if cpse == "IOCL":
+    if cpse in ["OIL", "NRL"]:
+        # OIL Dialect: Side-by-side Dual Standards Display with OIL SAP Material Code
+        nb_str = f"{int(nb_mm)} MM NB"
+        pn_str = f"PN {int(bar_val)}"
+        if item_family == "FLANGE":
+            flg_code = random.choice(spec["iocl_types"])
+            raw_desc = f"OIL MESC {oil_mat_code} FLG {flg_code} {nb_str} ({size}) {pn_str} ({cls}) {ind_std} / {standard} {metallurgy} {facing} MII {mii_class} ({local_pct}%)"
+        elif "VALVE" in item_family and item_family != "PSV_VALVE":
+            v_code = spec["iocl_types"][0]
+            raw_desc = f"OIL MESC {oil_mat_code} VLV {v_code} {nb_str} ({size}) {pn_str} ({cls}) {ind_std} / {standard} {metallurgy} {trim or ''} {oil_spec} MII {mii_class} ({local_pct}%)"
+        elif item_family == "PIPE":
+            p_code = random.choice(spec["iocl_types"])
+            raw_desc = f"OIL MESC {oil_mat_code} {p_code} {nb_str} ({size}) {sched or 'SCH 40'} {ind_std} / {standard} {metallurgy} BE {oil_spec} MII {mii_class} ({local_pct}%)"
+        elif item_family in ["ELBOW_90", "TEE_EQUAL", "REDUCER_CONC"]:
+            f_code = spec["iocl_types"][0]
+            raw_desc = f"OIL MESC {oil_mat_code} {f_code} {nb_str} ({size}) {sched or 'SCH 40'} {ind_std} / {standard} {metallurgy} MII {mii_class} ({local_pct}%)"
+        elif item_family == "STUD_BOLT":
+            raw_desc = f"OIL MESC {oil_mat_code} STUD BLT {size} X {length} {ind_std} / {standard} STUD {stud_mat} NUT {nut_mat.replace('ASTM A194 ', '')} MII {mii_class} ({local_pct}%)"
+        elif item_family.startswith("GASKET"):
+            g_code = spec["iocl_types"][0]
+            raw_desc = f"OIL MESC {oil_mat_code} {g_code} {nb_str} ({size}) {pn_str} ({cls}) {ind_std} / {standard} {metallurgy} MII {mii_class} ({local_pct}%)"
+        elif item_family == "PSV_VALVE":
+            orf = random.choice(spec["orifices"])
+            raw_desc = f"OIL MESC {oil_mat_code} VLV PSV {nb_str} ({size}) {pn_str} ({cls}) ORF-{orf} {ind_std} / {standard} {metallurgy} MII {mii_class} ({local_pct}%)"
+        else: # PUMP SPARE
+            p_code = random.choice(spec["iocl_types"])
+            raw_desc = f"OIL MESC {oil_mat_code} {p_code} {nb_str} ({size}) {ind_std} / {standard} {metallurgy} {oil_spec} MII {mii_class} ({local_pct}%)"
+
+    elif cpse == "IOCL":
         # IOCL Dialect: Compact tokens with hash ratings
         if item_family == "FLANGE":
             flg_code = random.choice(spec["iocl_types"])
-            tokens = ["FLG", flg_code, size, cls, metallurgy]
+            tokens = ["FLG", flg_code, size, cls, metallurgy, ind_std]
         elif "VALVE" in item_family and item_family != "PSV_VALVE":
             v_code = spec["iocl_types"][0]
-            tokens = ["VLV", v_code, size, cls, metallurgy]
+            tokens = ["VLV", v_code, size, cls, metallurgy, ind_std]
             if trim and not is_sparse:
                 tokens.append(trim)
             tokens.append(facing)
         elif item_family == "PIPE":
             p_code = random.choice(spec["iocl_types"])
-            tokens = [p_code, size, sched if not is_sparse else "", metallurgy, "BE"]
+            tokens = [p_code, size, sched if not is_sparse else "", metallurgy, "BE", ind_std]
         elif item_family in ["ELBOW_90", "TEE_EQUAL", "REDUCER_CONC"]:
             f_code = spec["iocl_types"][0]
-            tokens = [f_code, size, sched if not is_sparse else "", metallurgy]
+            tokens = [f_code, size, sched if not is_sparse else "", metallurgy, ind_std]
         elif item_family == "STUD_BOLT":
-            tokens = ["STUD BLT", size, f"X {length}", stud_mat, f"W/ {nut_mat.replace('ASTM A194 ', '')} NUTS"]
+            tokens = ["STUD BLT", size, f"X {length}", stud_mat, f"W/ {nut_mat.replace('ASTM A194 ', '')} NUTS", ind_std]
         elif item_family.startswith("GASKET"):
             g_code = spec["iocl_types"][0]
             tokens = [g_code, size, cls, metallurgy]
@@ -344,21 +454,21 @@ def generate_catalog_row(cpse: str, item_family: str, counter: int) -> Dict[str,
         
         if item_family == "FLANGE":
             flg_name = random.choice(spec["ongc_types"])
-            parts = ["FLANGE", flg_name, size_verbose, cls_verbose, metallurgy, standard, f"{facing} FACING"]
+            parts = ["FLANGE", flg_name, size_verbose, cls_verbose, metallurgy, ind_std, standard, f"{facing} FACING"]
         elif "VALVE" in item_family and item_family != "PSV_VALVE":
             v_name = spec["ongc_types"][0]
-            parts = [v_name, size_verbose, cls_verbose, f"BODY {metallurgy}"]
+            parts = [v_name, size_verbose, cls_verbose, f"BODY {metallurgy}", ind_std]
             if trim and not is_sparse:
                 parts.append(f"TRIM {trim.replace('TR', '')}")
             parts.extend([standard, f"{facing} FACING"])
         elif item_family == "PIPE":
             p_name = random.choice(spec["ongc_types"])
-            parts = [p_name, size_verbose, sched if not is_sparse else "", metallurgy, standard, "BEVELED ENDS"]
+            parts = [p_name, size_verbose, sched if not is_sparse else "", metallurgy, ind_std, standard, "BEVELED ENDS"]
         elif item_family in ["ELBOW_90", "TEE_EQUAL", "REDUCER_CONC"]:
             f_name = spec["ongc_types"][0]
-            parts = [f_name, size_verbose, sched if not is_sparse else "", metallurgy, standard]
+            parts = [f_name, size_verbose, sched if not is_sparse else "", metallurgy, ind_std, standard]
         elif item_family == "STUD_BOLT":
-            parts = [spec["ongc_types"][0], size_verbose, f"LENGTH {length}", f"STUD {stud_mat}", f"NUTS {nut_mat}", standard]
+            parts = [spec["ongc_types"][0], size_verbose, f"LENGTH {length}", f"STUD {stud_mat}", f"NUTS {nut_mat}", ind_std, standard]
         elif item_family.startswith("GASKET"):
             parts = [spec["ongc_types"][0], size_verbose, cls_verbose, standard, metallurgy]
         elif item_family == "PSV_VALVE":
@@ -422,7 +532,14 @@ def generate_catalog_row(cpse: str, item_family: str, counter: int) -> Dict[str,
     po_no = f"{cpse}/PO/2024/{random.randint(100000, 999999)}"
     heat_no = f"HT-{random.choice(['A', 'B', 'C', 'X', 'Z'])}{random.randint(10000, 99999)}"
     mesc_code = f"{mesc_base}.{random.randint(10, 99)}.{random.randint(10, 99)}.{random.randint(100, 999)}.1"
-    cppp_id = f"CPPP/2025/{cpse}_{random.randint(100000, 999999)}"
+    cppp_id = cppp_tender_ref
+
+    # Location state
+    location_state = "Assam"
+    for state in ["Assam", "Haryana", "Uttar Pradesh", "Gujarat", "Odisha", "Bihar", "West Bengal", "Maharashtra", "Andhra Pradesh", "Tamil Nadu", "Kerala", "Madhya Pradesh", "Punjab", "Rajasthan"]:
+        if state in depot:
+            location_state = state
+            break
     
     return {
         "sku_code": sku_code,
@@ -439,17 +556,31 @@ def generate_catalog_row(cpse: str, item_family: str, counter: int) -> Dict[str,
         "gem_category": gem_cat,
         "mesc_code": mesc_code,
         "cppp_tender_id": cppp_id,
+        "indian_standard": ind_std,
+        "oil_std_spec": oil_spec,
+        "oil_material_code": oil_mat_code,
+        "gem_category_id": gem_cat,
+        "gem_product_id": gem_product_id,
+        "cppp_tender_ref": cppp_tender_ref,
+        "make_in_india_class": mii_class,
+        "local_content_percentage": local_pct,
+        "nominal_bore_mm": nb_mm,
+        "pressure_rating_bar": bar_val,
+        "location_state": location_state,
     }
 
 def generate_inventory_catalog(count: int = 5000) -> List[Dict[str, Any]]:
     rows = []
-    # Allocations: IOCL 30% (1500), ONGC 30% (1500), BPCL 15% (750), HPCL 15% (750), GAIL 10% (500)
+    # Allocations for Pan-India CPSE distribution with OIL as flagship:
+    # OIL: 30% (1500), NRL: 10% (500), IOCL: 15% (750), ONGC: 15% (750), BPCL: 10% (500), HPCL: 10% (500), GAIL: 10% (500)
     allocations = [
-        ("IOCL", int(count * 0.30)),
-        ("ONGC", int(count * 0.30)),
-        ("BPCL", int(count * 0.15)),
-        ("HPCL", int(count * 0.15)),
-        ("GAIL", count - int(count * 0.30) - int(count * 0.30) - int(count * 0.15) - int(count * 0.15))
+        ("OIL", int(count * 0.30)),
+        ("NRL", int(count * 0.10)),
+        ("IOCL", int(count * 0.15)),
+        ("ONGC", int(count * 0.15)),
+        ("BPCL", int(count * 0.10)),
+        ("HPCL", int(count * 0.10)),
+        ("GAIL", count - int(count * 0.30) - int(count * 0.10) - int(count * 0.15) - int(count * 0.15) - int(count * 0.10) - int(count * 0.10))
     ]
     
     sku_counter = 1
@@ -867,7 +998,10 @@ def main():
     fieldnames = [
         "sku_code", "cpse_name", "depot_location", "raw_description",
         "quantity", "unit_cost_inr", "days_idle",
-        "po_no", "heat_no", "standard", "hsn_code", "gem_category", "mesc_code", "cppp_tender_id"
+        "po_no", "heat_no", "standard", "hsn_code", "gem_category", "mesc_code", "cppp_tender_id",
+        "indian_standard", "oil_std_spec", "oil_material_code", "gem_category_id", "gem_product_id",
+        "cppp_tender_ref", "make_in_india_class", "local_content_percentage", "nominal_bore_mm",
+        "pressure_rating_bar", "location_state"
     ]
     
     # 1. Inventory Catalog

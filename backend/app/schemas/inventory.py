@@ -35,6 +35,16 @@ class InventoryItemResponse(BaseModel):
     metallurgy: Optional[str] = None
     facing_end: Optional[str] = None
     standard: Optional[str] = None
+    indian_standard: Optional[str] = None
+    oil_std_spec: Optional[str] = None
+    oil_material_code: Optional[str] = None
+    gem_category_id: Optional[str] = None
+    gem_product_id: Optional[str] = None
+    cppp_tender_ref: Optional[str] = None
+    make_in_india_class: Optional[str] = "Class-I"
+    local_content_percentage: Optional[float] = 75.0
+    pressure_rating_bar: Optional[float] = None
+    location_state: Optional[str] = None
     properties: dict[str, Any] = Field(default_factory=dict)
     quantity: int
     status: InventoryStatus
@@ -75,6 +85,16 @@ class InventoryCreateRequest(BaseModel):
     metallurgy: Optional[str] = None
     facing_end: Optional[str] = None
     standard: Optional[str] = None
+    indian_standard: Optional[str] = None
+    oil_std_spec: Optional[str] = None
+    oil_material_code: Optional[str] = None
+    gem_category_id: Optional[str] = None
+    gem_product_id: Optional[str] = None
+    cppp_tender_ref: Optional[str] = None
+    make_in_india_class: Optional[str] = "Class-I"
+    local_content_percentage: Optional[float] = 75.0
+    pressure_rating_bar: Optional[float] = None
+    location_state: Optional[str] = None
     properties: dict[str, Any] = Field(default_factory=dict)
     quantity: int = Field(..., ge=0)
     unit_cost_inr: float = Field(..., ge=0)

@@ -1,4 +1,13 @@
-export function exportToCSV(filename: string, rows: object[]) {
+export function exportToCSV(filenameOrRows: string | object[], rowsOrFilename?: object[] | string) {
+  let filename = 'export.csv';
+  let rows: object[] = [];
+  if (typeof filenameOrRows === 'string') {
+    filename = filenameOrRows;
+    rows = (rowsOrFilename as object[]) || [];
+  } else {
+    rows = filenameOrRows || [];
+    filename = (rowsOrFilename as string) || 'export.csv';
+  }
   if (!rows || !rows.length) return;
 
   const separator = ',';

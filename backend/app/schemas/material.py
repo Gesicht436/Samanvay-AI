@@ -44,6 +44,15 @@ class ExtractedMaterialAttributes(BaseModel):
     metallurgy: Optional[str] = Field(None, description="Material grade (e.g. ASTM A105, A182 F316L)")
     facing_end: Optional[str] = Field(None, description="e.g. RF, RTJ, FF, BW, SW")
     standard: Optional[str] = Field(None, description="e.g. ASME B16.5, API 600, ASTM A269")
+    indian_standard: Optional[str] = Field(None, description="BIS / IS (e.g. IS 14846, IS 1239, IS 2062)")
+    oil_std_spec: Optional[str] = Field(None, description="OISD / EIL (e.g. OISD-RP-126 / EIL 6-44-0012)")
+    oil_material_code: Optional[str] = Field(None, description="OIL SAP 8-digit MESC (e.g. 02.14.05.21)")
+    gem_category_id: Optional[str] = Field(None, description="GeM Category ID")
+    gem_product_id: Optional[str] = Field(None, description="GeM Product ID")
+    cppp_tender_ref: Optional[str] = Field(None, description="CPPP Tender Reference")
+    make_in_india_class: Optional[str] = Field("Class-I", description="Make in India class (Class-I, Class-II, Non-Local)")
+    local_content_percentage: Optional[float] = Field(75.0, description="Make in India local content %")
+    pressure_rating_bar: Optional[float] = Field(None, description="Pressure rating in Bar (PN)")
     properties: dict[str, Any] = Field(
         default_factory=dict,
         description="Equipment-specific: trim_no, port_bore, seal_plan, coating, etc.",
@@ -124,6 +133,9 @@ class ExtractedMaterialAttributes(BaseModel):
             known_fields = {
                 "item_type", "size_nb_mm", "pressure_class", "pressure_rating_psi",
                 "schedule", "metallurgy", "facing_end", "standard", "properties",
+                "indian_standard", "oil_std_spec", "oil_material_code", "gem_category_id",
+                "gem_product_id", "cppp_tender_ref", "make_in_india_class",
+                "local_content_percentage", "pressure_rating_bar", "location_state",
                 "is_incomplete", "missing_attributes", "confidence_score", "requires_hitl"
             }
             extra_keys = [k for k in obj.keys() if k not in known_fields]
@@ -147,7 +159,17 @@ class PhysicalAttributes(BaseModel):
     schedule: Optional[str] = Field(None, description="Pipe schedule")
     metallurgy: Optional[str] = Field(None, description="Material grade")
     facing_end: Optional[str] = Field(None, description="Flange facing type")
-    standard: Optional[str] = Field(None, description="Manufacturing standard")
+    standard: Optional[str] = Field(None, description="Manufacturing standard (ASME/API/ASTM)")
+    indian_standard: Optional[str] = Field(None, description="BIS / IS standard")
+    oil_std_spec: Optional[str] = Field(None, description="OISD / EIL spec")
+    oil_material_code: Optional[str] = Field(None, description="OIL SAP 8-digit MESC code")
+    gem_category_id: Optional[str] = Field(None, description="GeM Category ID")
+    gem_product_id: Optional[str] = Field(None, description="GeM Product ID")
+    cppp_tender_ref: Optional[str] = Field(None, description="CPPP Tender Reference")
+    make_in_india_class: Optional[str] = Field("Class-I", description="Make in India class")
+    local_content_percentage: Optional[float] = Field(75.0, description="Local content %")
+    pressure_rating_bar: Optional[float] = Field(None, description="PN pressure in bar")
+    location_state: Optional[str] = Field(None, description="State of depot")
     properties: dict[str, Any] = Field(default_factory=dict)
     is_incomplete: bool = Field(default=False)
     missing_attributes: list[str] = Field(default_factory=list)
@@ -169,6 +191,15 @@ class MatchRequest(BaseModel):
     )
     target_depots: Optional[list[str]] = Field(
         None, description="Filter candidate search radius to specific depots"
+    )
+    preferred_indian_standard: Optional[str] = Field(
+        None, description="Preferred BIS/IS standard (e.g. IS 1239, IS 14846)"
+    )
+    min_local_content_pct: Optional[float] = Field(
+        None, description="Minimum Make in India local content %"
+    )
+    make_in_india_only: bool = Field(
+        False, description="Filter strictly for Class-I Make in India suppliers"
     )
     top_k: int = Field(default=10, ge=1, le=50)
 
@@ -264,6 +295,18 @@ class CandidateMatchResult(BaseModel):
 
     # TreeSHAP Attribution Explanations
     shap_explanations: list[str] = Field(default_factory=list)
+
+    # Indian Public Procurement & Sovereign Standards
+    oil_material_code: Optional[str] = None
+    indian_standard: Optional[str] = None
+    oil_std_spec: Optional[str] = None
+    gem_category_id: Optional[str] = None
+    cppp_tender_ref: Optional[str] = None
+    make_in_india_class: Optional[str] = "Class-I"
+    local_content_percentage: Optional[float] = 75.0
+    pressure_rating_bar: Optional[float] = None
+    mii_compliant: bool = True
+    mii_warning: Optional[str] = None
 
     # Inter-CPSE Logistics Summary
     cisf_eligible: bool = True

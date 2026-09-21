@@ -2,6 +2,22 @@ import math
 from typing import List, Dict, Any
 
 DEPOT_COORDINATES = {
+    "OIL Duliajan": (27.3575, 95.3188),
+    "Duliajan": (27.3575, 95.3188),
+    "OIL Moran": (27.1856, 94.9282),
+    "Moran": (27.1856, 94.9282),
+    "OIL Digboi": (27.3826, 95.6262),
+    "NRL Numaligarh": (26.5982, 93.7543),
+    "Numaligarh": (26.5982, 93.7543),
+    "ONGC Nazira": (26.9183, 94.7342),
+    "Nazira": (26.9183, 94.7342),
+    "OIL Guwahati": (26.1855, 91.8214),
+    "OIL Jorhat": (26.7509, 94.2037),
+    "Jorhat": (26.7509, 94.2037),
+    "OIL Jodhpur": (26.2389, 73.0243),
+    "Jodhpur": (26.2389, 73.0243),
+    "OIL Kakinada": (16.9891, 82.2475),
+    "Kakinada": (16.9891, 82.2475),
     "Panipat": (29.3909, 76.9635),
     "Mathura": (27.4924, 77.6737),
     "Koyali": (22.3217, 73.1384),

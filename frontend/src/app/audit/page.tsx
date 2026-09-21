@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
-import { Card, KpiCard, StatusBadge } from '@/components/ui';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card } from '@/components/ui';
 import {
   ShieldCheck,
   Download,
@@ -10,600 +10,431 @@ import {
   CheckCircle2,
   Lock,
   KeyRound,
-  FileCode,
-  Layers,
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
-  Copy,
-  Check,
   RefreshCw,
-  Cpu,
+  ChevronLeft,
+  ChevronRight,
   AlertTriangle,
+  X,
+  Layers,
 } from 'lucide-react';
 import { exportToCSV } from '@/lib/exportUtils';
+import { api } from '@/lib/api';
 
-interface AuditEvent {
-  id: string;
-  block_height: number;
+interface AuditLogEntry {
+  id?: number | string;
+  block_number?: number;
   timestamp: string;
-  node: 'IOCL-PNP' | 'ONGC-URN' | 'BPCL-MUM' | 'HPCL-VSK' | 'GAIL-PAT';
-  category:
-    | 'MTC_INGEST'
-    | 'HITL_TRIAGE'
-    | 'STATUS_CHANGE'
-    | 'REQUISITION'
-    | 'GATE_PASS'
-    | 'DISPATCH'
-    | 'PRIVACY_MASK';
+  action_category?: string;
+  category?: string;
   action: string;
-  target: string;
   actor: string;
-  actor_role: string;
-  hash: string;
-  prev_hash: string;
-  details: Record<string, any>;
-  consensus_nodes: string[];
+  cpse: string;
+  depot?: string;
+  reference_id?: string;
+  hash?: string;
+  current_hash?: string;
+  prev_hash?: string;
+  previous_hash?: string;
+  payload?: any;
 }
 
-const INITIAL_AUDIT_LOGS: AuditEvent[] = [
-  {
-    id: 'EV-1842',
-    block_height: 1842,
-    timestamp: '2026-03-18T11:30:14Z',
-    node: 'IOCL-PNP',
-    category: 'DISPATCH',
-    action: 'CONSIGNMENT_DISPATCHED',
-    target: 'REQ-44810 (PRT-9014)',
-    actor: 'cisf_officer_41',
-    actor_role: 'CISF Security Gate Sub-Inspector',
-    hash: '5d41402abc4b2a76b9719d911017c5926b4e3416e7807759b489a2472b6b553e',
-    prev_hash: '8a91a92120e290f6b4e7a83d739818817454f7a26f8d1eb1997d4fb526543b56',
-    details: {
-      vehicle_reg: 'UP-75-BT-1092',
-      destination: 'GAIL-PATA',
-      items_dispatched: '6x Gate Valve 6" Class 600# RTJ',
-      out_gate_barrier: 'GATE_04_HEAVY',
-      driver_lic: 'DL-04201988102',
-    },
-    consensus_nodes: ['IOCL-PNP', 'ONGC-URN', 'BPCL-MUM', 'HPCL-VSK', 'GAIL-PAT'],
-  },
-  {
-    id: 'EV-1841',
-    block_height: 1841,
-    timestamp: '2026-03-18T10:45:00Z',
-    node: 'IOCL-PNP',
-    category: 'GATE_PASS',
-    action: 'GATE_PASS_GENERATED',
-    target: 'GP-NR-44810',
-    actor: 'dgm_materials_09',
-    actor_role: 'Dy. General Manager (Stores & Logistics)',
-    hash: '8a91a92120e290f6b4e7a83d739818817454f7a26f8d1eb1997d4fb526543b56',
-    prev_hash: '2c624232cdd221771294dfbb379ac8ab8733a1e948ff1ff1918a2ee305c08888',
-    details: {
-      requisition_id: 'REQ-44810',
-      pass_type: 'NON-RETURNABLE-MUTUAL-AID',
-      statutory_order: 'MoPNG/E-DISP/2025/11',
-      qr_payload_digest: '4a1b8c2d9e0f',
-    },
-    consensus_nodes: ['IOCL-PNP', 'ONGC-URN', 'BPCL-MUM', 'HPCL-VSK', 'GAIL-PAT'],
-  },
-  {
-    id: 'EV-1840',
-    block_height: 1840,
-    timestamp: '2026-03-18T09:15:22Z',
-    node: 'ONGC-URN',
-    category: 'PRIVACY_MASK',
-    action: 'ATTRIBUTE_MASK_APPLIED',
-    target: 'CATALOG_BROADCAST_PRT-8892',
-    actor: 'sovereign_privacy_proxy',
-    actor_role: 'Air-Gapped P2P Mesh Privacy Daemon',
-    hash: '2c624232cdd221771294dfbb379ac8ab8733a1e948ff1ff1918a2ee305c08888',
-    prev_hash: '1b2a3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b',
-    details: {
-      masked_attributes: ['unit_procurement_price', 'supplier_commercial_contract_id', 'depreciation_factor'],
-      retained_attributes: ['metallurgy', 'pressure_rating', 'size', 'heat_number', 'physical_spec_hash'],
-      privacy_protocol: 'MoPNG-PRIVACY-TIER-01',
-    },
-    consensus_nodes: ['IOCL-PNP', 'ONGC-URN', 'BPCL-MUM', 'HPCL-VSK', 'GAIL-PAT'],
-  },
-  {
-    id: 'EV-1839',
-    block_height: 1839,
-    timestamp: '2026-03-18T08:30:10Z',
-    node: 'BPCL-MUM',
-    category: 'REQUISITION',
-    action: 'REQUISITION_CREATED',
-    target: 'REQ-99208',
-    actor: 'chief_eng_refinery',
-    actor_role: 'Chief Engineer (Maintenance)',
-    hash: '1b2a3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b',
-    prev_hash: '9f8e7d6c5b4a39281706152433445566778899aabbccddeeff00112233445566',
-    details: {
-      demanding_unit: 'FCCU Catalytic Cracker',
-      required_sku: 'PRT-8893',
-      priority: 'STANDARD_PLANNED',
-      quantity_demanded: 1,
-    },
-    consensus_nodes: ['IOCL-PNP', 'ONGC-URN', 'BPCL-MUM', 'HPCL-VSK', 'GAIL-PAT'],
-  },
-  {
-    id: 'EV-1838',
-    block_height: 1838,
-    timestamp: '2026-03-17T16:20:05Z',
-    node: 'IOCL-PNP',
-    category: 'STATUS_CHANGE',
-    action: 'SURPLUS_BROADCAST_TOGGLED',
-    target: 'PRT-8892 (A105 Flange)',
-    actor: 'chief_metallurgist_iocl',
-    actor_role: 'Lead Metallurgical Engineer',
-    hash: '9f8e7d6c5b4a39281706152433445566778899aabbccddeeff00112233445566',
-    prev_hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    details: {
-      old_status: 'IN_STORAGE',
-      new_status: 'IDLE_SURPLUS',
-      days_idle_recorded: 142,
-      broadcast_scope: 'PAN_CPSE_MESH',
-    },
-    consensus_nodes: ['IOCL-PNP', 'ONGC-URN', 'BPCL-MUM', 'HPCL-VSK', 'GAIL-PAT'],
-  },
-  {
-    id: 'EV-1837',
-    block_height: 1837,
-    timestamp: '2026-03-17T15:40:50Z',
-    node: 'IOCL-PNP',
-    category: 'HITL_TRIAGE',
-    action: 'HITL_OVERRIDE_APPROVED',
-    target: 'PRT-9014 (Gate Valve)',
-    actor: 'lead_inspector_gov',
-    actor_role: 'MoPNG Sovereign Quality Auditor',
-    hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    prev_hash: 'c89329343b223825266db935286c0ac81ea6156e577b3ddf194ffb15b12403ec',
-    details: {
-      field_reviewed: 'yield_strength_mpa',
-      scanned_value: '265 MPa',
-      catalog_spec: '250 MPa min',
-      resolution: 'APPROVED_SUPERIOR_STRENGTH',
-      justification: 'Higher yield strength exceeds minimum ASTM A350 requirement; zero safety degradation.',
-    },
-    consensus_nodes: ['IOCL-PNP', 'ONGC-URN', 'BPCL-MUM', 'HPCL-VSK', 'GAIL-PAT'],
-  },
-  {
-    id: 'EV-1836',
-    block_height: 1836,
-    timestamp: '2026-03-17T14:10:18Z',
-    node: 'IOCL-PNP',
-    category: 'MTC_INGEST',
-    action: 'MTC_OCR_INGESTED',
-    target: 'MTC-BHEL-2024-09',
-    actor: 'air_gap_ocr_v2',
-    actor_role: 'PaddleOCR High-Assurance Extractor',
-    hash: 'c89329343b223825266db935286c0ac81ea6156e577b3ddf194ffb15b12403ec',
-    prev_hash: '7d793037a0760186574b0282f2f435e70d73a4e044d7999142e02da59f301a44',
-    details: {
-      file_name: 'MTC_IOCL_Flange_A105.pdf',
-      heat_number: 'HT-2025-20300',
-      standard: 'ASTM A105 / ASME B16.5',
-      carbon_equivalent_ce: 0.41,
-      elements_extracted: ['C', 'Mn', 'Si', 'P', 'S', 'Cr', 'Ni', 'Mo', 'V'],
-    },
-    consensus_nodes: ['IOCL-PNP', 'ONGC-URN', 'BPCL-MUM', 'HPCL-VSK', 'GAIL-PAT'],
-  },
+const CATEGORIES = [
+  'ALL',
+  'STATUS_CHANGE',
+  'REQUISITION',
+  'GATE_PASS',
+  'DISPATCH',
+  'MTC_INGEST',
+  'DELIVERY',
 ];
 
-export default function AuditPage() {
-  const [logs, setLogs] = useState<AuditEvent[]>(INITIAL_AUDIT_LOGS);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
-  const [nodeFilter, setNodeFilter] = useState<string>('ALL');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [copiedHash, setCopiedHash] = useState<string | null>(null);
+const CPSE_LIST = ['ALL', 'OIL', 'IOCL', 'ONGC', 'BPCL', 'HPCL', 'GAIL', 'NRL'];
 
-  // Verification state machine
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationProgress, setVerificationProgress] = useState(0);
-  const [verificationResult, setVerificationResult] = useState<{
-    status: 'IDLE' | 'SUCCESS';
-    verifiedCount: number;
-    merkleRoot: string;
-  }>({ status: 'IDLE', verifiedCount: 1842, merkleRoot: '0x4a9fc28109d7e35b7194f1c99382acdf' });
+export default function AuditTrailPage() {
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleExport = () => {
-    const exportable = logs.map(l => ({
-      BlockHeight: l.block_height,
-      Timestamp: l.timestamp,
-      Node: l.node,
-      Category: l.category,
-      Action: l.action,
-      Target: l.target,
-      Actor: l.actor,
-      ActorRole: l.actor_role,
-      SHA256Seal: l.hash,
-      PreviousHash: l.prev_hash,
-      ConsensusProof: l.consensus_nodes.join('; '),
-    }));
-    exportToCSV('samanvay_sovereign_audit_ledger.csv', exportable);
-  };
+  // Verification State
+  const [chainValid, setChainValid] = useState<boolean | null>(null);
+  const [verifying, setVerifying] = useState<boolean>(false);
+  const [verificationStats, setVerificationStats] = useState<any>(null);
 
-  const handleCopyHash = (hash: string) => {
-    navigator.clipboard.writeText(hash);
-    setCopiedHash(hash);
-    setTimeout(() => setCopiedHash(null), 2500);
-  };
+  // Filters & Search
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [selectedCpse, setSelectedCpse] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [page, setPage] = useState<number>(1);
+  const pageSize = 25;
+  const [totalCount, setTotalCount] = useState<number>(0);
 
-  const handleVerifyChain = () => {
-    setIsVerifying(true);
-    setVerificationProgress(10);
+  // Detail Modal
+  const [inspectEntry, setInspectEntry] = useState<AuditLogEntry | null>(null);
 
-    const timer1 = setTimeout(() => setVerificationProgress(40), 400);
-    const timer2 = setTimeout(() => setVerificationProgress(75), 800);
-    const timer3 = setTimeout(() => {
-      setVerificationProgress(100);
-      setIsVerifying(false);
-      setVerificationResult({
-        status: 'SUCCESS',
-        verifiedCount: 1842,
-        merkleRoot: '0x4a9fc28109d7e35b7194f1c99382acdf',
+  // Fetch real audit entries
+  const fetchAuditLogs = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const skip = (page - 1) * pageSize;
+      const res = await api.getAuditLogs({
+        category: selectedCategory !== 'ALL' ? selectedCategory : undefined,
+        cpse: selectedCpse !== 'ALL' ? selectedCpse : undefined,
+        skip,
+        limit: pageSize,
       });
-    }, 1200);
+
+      if (res && Array.isArray(res.items)) {
+        setLogs(res.items);
+        setTotalCount(res.total || res.items.length);
+      } else if (Array.isArray(res)) {
+        setLogs(res);
+        setTotalCount(res.length);
+      } else {
+        setLogs([]);
+        setTotalCount(0);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch audit records');
+      setLogs([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Run cryptographic chain validation
+  const runChainVerification = async () => {
+    setVerifying(true);
+    try {
+      const res = await api.verifyAuditChain();
+      setChainValid(Boolean(res.is_valid));
+      setVerificationStats(res);
+    } catch (err: any) {
+      setChainValid(false);
+      alert(`Chain verification failed: ${err.message}`);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAuditLogs();
+    runChainVerification();
+  }, [page, selectedCategory, selectedCpse]);
+
+  // Client-side text filter on current page items
   const filteredLogs = useMemo(() => {
-    return logs.filter(log => {
-      const matchesSearch =
-        log.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.target.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.actor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.hash.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!searchQuery.trim()) return logs;
+    const q = searchQuery.toLowerCase();
+    return logs.filter(
+      (l) =>
+        l.action?.toLowerCase().includes(q) ||
+        l.actor?.toLowerCase().includes(q) ||
+        l.reference_id?.toLowerCase().includes(q) ||
+        l.hash?.toLowerCase().includes(q) ||
+        l.current_hash?.toLowerCase().includes(q)
+    );
+  }, [logs, searchQuery]);
 
-      const matchesCat = categoryFilter === 'ALL' || log.category === categoryFilter;
-      const matchesNode = nodeFilter === 'ALL' || log.node === nodeFilter;
+  const handleExportCSV = () => {
+    if (filteredLogs.length === 0) {
+      alert('No audit records to export.');
+      return;
+    }
+    const flat = filteredLogs.map((l) => ({
+      Block: l.block_number || l.id,
+      Timestamp: l.timestamp,
+      Category: l.action_category || l.category || 'SYSTEM',
+      Action: l.action,
+      Actor: l.actor,
+      CPSE: l.cpse,
+      Reference_ID: l.reference_id || '',
+      Current_Hash: l.hash || l.current_hash || '',
+      Previous_Hash: l.prev_hash || l.previous_hash || '',
+    }));
+    exportToCSV(flat, `samanvay_audit_ledger_${new Date().toISOString().slice(0, 10)}.csv`);
+  };
 
-      return matchesSearch && matchesCat && matchesNode;
-    });
-  }, [logs, searchQuery, categoryFilter, nodeFilter]);
-
-  const categories = [
-    { id: 'ALL', label: 'All Events' },
-    { id: 'DISPATCH', label: 'Dispatch' },
-    { id: 'GATE_PASS', label: 'Gate Pass' },
-    { id: 'PRIVACY_MASK', label: 'Privacy Mask' },
-    { id: 'REQUISITION', label: 'Requisitions' },
-    { id: 'STATUS_CHANGE', label: 'Status Change' },
-    { id: 'HITL_TRIAGE', label: 'HITL Triage' },
-    { id: 'MTC_INGEST', label: 'MTC Ingest' },
-  ];
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
+      {/* Top Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-2xl font-bold font-mono tracking-tight text-slate-900 dark:text-white">
-              Sovereign Audit Ledger
-            </h1>
-            <span className="px-2 py-0.5 text-xs font-mono font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded flex items-center gap-1">
+            <span className="text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
               <ShieldCheck size={13} />
-              IMMUTABLE CHAIN
+              IMMUTABLE AUDIT LEDGER
+            </span>
+            <span className="text-xs font-mono text-slate-500">
+              SHA-256 Merkle Chain Integrity
             </span>
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Cryptographically sealed chronological event stream with SHA-256 digests and distributed Merkle consensus
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+            Sovereign Inter-CPSE Cryptographic Audit Trail
+          </h1>
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+            Cryptographically sealed operational ledger recording all status changes, requisitions, gate passes, and MTC ingestions.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
-            onClick={handleVerifyChain}
-            disabled={isVerifying}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-mono font-bold flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+            onClick={runChainVerification}
+            disabled={verifying}
+            className={`px-3 py-1.5 rounded text-xs font-mono font-semibold flex items-center gap-1.5 border transition-colors ${
+              chainValid
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+            }`}
           >
-            {isVerifying ? (
-              <>
-                <RefreshCw size={14} className="animate-spin" /> Verifying Ledger Hashes...
-              </>
-            ) : (
-              <>
-                <ShieldCheck size={16} /> Verify Merkle Chain
-              </>
-            )}
+            <RefreshCw size={13} className={verifying ? 'animate-spin' : ''} />
+            <span>{chainValid ? 'Chain Validated (SHA-256)' : 'Verify Chain'}</span>
           </button>
+
           <button
-            onClick={handleExport}
-            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-950 rounded text-xs font-mono font-bold flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+            onClick={handleExportCSV}
+            className="px-3.5 py-1.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded text-xs font-mono font-semibold flex items-center gap-1.5 transition-colors"
           >
-            <Download size={15} /> Export RFC 4180 CSV
+            <Download size={13} />
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
 
-      {/* Verification Banner (Triggered when verified) */}
-      {verificationResult.status === 'SUCCESS' && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono text-emerald-900 dark:text-emerald-200 animate-fadeIn">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
-              <Check size={18} />
-            </div>
-            <div>
-              <p className="font-bold text-sm">
-                Merkle Tree Integrity Confirmed (Height: {verificationResult.verifiedCount} Blocks)
-              </p>
-              <p className="text-emerald-700 dark:text-emerald-300 text-[11px]">
-                Zero hash collisions detected. Consensus anchor:{' '}
-                <span className="font-bold">{verificationResult.merkleRoot}</span> • Verified across 5 CPSE nodes.
-              </p>
-            </div>
-          </div>
-          <span className="text-[10px] uppercase font-bold tracking-widest px-2.5 py-1 bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 rounded self-start md:self-auto">
-            100% UNALTERED
-          </span>
+      {error && (
+        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-mono rounded-lg flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={fetchAuditLogs} className="underline font-semibold">Retry</button>
         </div>
       )}
 
-      {/* Top 4 KPI Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard
-          label="Ledger Block Height"
-          value="1,842 Blocks"
-          subtext="Consecutive parent-child hashes"
-          delta="100% Continuity"
-          deltaType="positive"
-          icon={<Layers size={20} />}
-        />
-        <KpiCard
-          label="Merkle Root Proof"
-          value="0x4a9f...c281"
-          subtext="Distributed anchor signature"
-          delta="Cryptographically Sealed"
-          deltaType="positive"
-          icon={<KeyRound size={20} />}
-        />
-        <KpiCard
-          label="P2P Consensus Mesh"
-          value="5/5 Nodes Active"
-          subtext="IOCL, ONGC, BPCL, HPCL, GAIL"
-          delta="Zero partitions"
-          deltaType="positive"
-          icon={<Cpu size={20} />}
-        />
-        <KpiCard
-          label="Security Audits"
-          value="0 Discrepancies"
-          subtext="Strict attribute-level privacy active"
-          delta="Zero Leakage"
-          deltaType="positive"
-          icon={<Lock size={20} />}
-        />
-      </div>
-
-      {/* Category Tabs and Filter Row */}
-      <div className="space-y-3 border-b border-slate-200 dark:border-slate-800 pb-3">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setCategoryFilter(cat.id)}
-              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-colors whitespace-nowrap ${
-                categoryFilter === cat.id
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1 max-w-md">
-            <div className="relative w-full">
-              <Search className="absolute left-2.5 top-2 text-slate-400" size={15} />
-              <input
-                type="text"
-                placeholder="Search event ID, action, SKU, actor, or SHA-256..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-slate-400"
-              />
-            </div>
+      {/* Filter & Search Bar */}
+      <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[300px]">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search action, actor, reference SKU, or hash..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 text-xs"
+            />
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-slate-500">Filter Node:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">Category:</span>
             <select
-              value={nodeFilter}
-              onChange={e => setNodeFilter(e.target.value)}
-              className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono text-slate-700 dark:text-slate-300 focus:outline-none"
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setPage(1);
+              }}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
             >
-              <option value="ALL">All CPSE Nodes</option>
-              <option value="IOCL-PNP">IOCL Panipat</option>
-              <option value="ONGC-URN">ONGC Uran</option>
-              <option value="BPCL-MUM">BPCL Mumbai</option>
-              <option value="HPCL-VSK">HPCL Visakh</option>
-              <option value="GAIL-PAT">GAIL Pata</option>
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">CPSE:</span>
+            <select
+              value={selectedCpse}
+              onChange={(e) => {
+                setSelectedCpse(e.target.value);
+                setPage(1);
+              }}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
+            >
+              {CPSE_LIST.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
         </div>
+
+        <div className="text-slate-500 text-[11px]">
+          Showing {filteredLogs.length} blocks · Page {page} of {totalPages}
+        </div>
       </div>
 
-      {/* Main Immutable Ledger Table */}
-      <Card className="p-0 overflow-hidden border border-slate-200 dark:border-slate-800">
+      {/* Main Ledger Table */}
+      <Card className="p-0 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
-            <thead className="bg-slate-100/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th className="p-3 w-16 text-center">Block</th>
-                <th className="p-3">Timestamp (UTC)</th>
-                <th className="p-3">Node</th>
-                <th className="p-3">Category & Action</th>
-                <th className="p-3">Target Reference</th>
-                <th className="p-3">Actor / Subsystem</th>
-                <th className="p-3">SHA-256 Digest</th>
-                <th className="p-3 w-12 text-center">Details</th>
+          <table className="w-full text-left text-xs font-mono border-collapse">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
+                <th className="py-2.5 px-3 font-semibold">BLOCK #</th>
+                <th className="py-2.5 px-3 font-semibold">TIMESTAMP</th>
+                <th className="py-2.5 px-3 font-semibold">CATEGORY</th>
+                <th className="py-2.5 px-3 font-semibold">ACTION</th>
+                <th className="py-2.5 px-3 font-semibold">ACTOR & CPSE</th>
+                <th className="py-2.5 px-3 font-semibold">REFERENCE ID</th>
+                <th className="py-2.5 px-3 font-semibold">SHA-256 DIGITAL SEAL</th>
+                <th className="py-2.5 px-3 font-semibold text-right">DETAILS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {filteredLogs.map(log => {
-                const isExpanded = expandedId === log.id;
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-slate-500">
+                    <RefreshCw className="animate-spin h-5 w-5 mx-auto mb-2 text-emerald-500" />
+                    <span>Loading cryptographic blocks from PostgreSQL ledger...</span>
+                  </td>
+                </tr>
+              ) : filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-slate-500">
+                    No matching audit trail blocks found.
+                  </td>
+                </tr>
+              ) : (
+                filteredLogs.map((l) => (
+                  <tr key={l.id || l.block_number} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-slate-100">
+                      #{l.block_number || l.id}
+                    </td>
 
-                const getCategoryBadgeClass = (cat: string) => {
-                  switch (cat) {
-                    case 'MTC_INGEST':
-                      return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300';
-                    case 'HITL_TRIAGE':
-                      return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
-                    case 'STATUS_CHANGE':
-                      return 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300';
-                    case 'REQUISITION':
-                      return 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300';
-                    case 'GATE_PASS':
-                      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
-                    case 'DISPATCH':
-                      return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300';
-                    case 'PRIVACY_MASK':
-                      return 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
-                    default:
-                      return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
-                  }
-                };
+                    <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                      {new Date(l.timestamp).toLocaleString('en-IN')}
+                    </td>
 
-                return (
-                  <React.Fragment key={log.id}>
-                    <tr
-                      onClick={() => setExpandedId(isExpanded ? null : log.id)}
-                      className={`hover:bg-slate-50/80 dark:hover:bg-slate-900/60 cursor-pointer transition-colors ${
-                        isExpanded ? 'bg-slate-50 dark:bg-slate-900/80' : ''
-                      }`}
-                    >
-                      <td className="p-3 text-center font-bold text-slate-400">
-                        #{log.block_height}
-                      </td>
-                      <td className="p-3 whitespace-nowrap text-slate-600 dark:text-slate-400">
-                        {log.timestamp.replace('T', ' ').replace('Z', '')}
-                      </td>
-                      <td className="p-3 font-semibold text-slate-800 dark:text-slate-200">
-                        {log.node}
-                      </td>
-                      <td className="p-3">
-                        <div className="space-y-0.5">
-                          <span
-                            className={`inline-block px-1.5 py-0.2 text-[10px] font-bold rounded ${getCategoryBadgeClass(
-                              log.category
-                            )}`}
-                          >
-                            {log.category}
-                          </span>
-                          <p className="font-semibold text-slate-900 dark:text-white">
-                            {log.action}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="p-3 font-semibold text-blue-600 dark:text-blue-400 max-w-[180px] truncate">
-                        {log.target}
-                      </td>
-                      <td className="p-3 text-slate-600 dark:text-slate-400">
-                        <p className="font-medium text-slate-800 dark:text-slate-200">{log.actor}</p>
-                        <p className="text-[10px] text-slate-400">{log.actor_role}</p>
-                      </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-500 font-mono text-[11px] truncate max-w-[140px]">
-                            {log.hash.slice(0, 14)}...{log.hash.slice(-6)}
-                          </span>
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              handleCopyHash(log.hash);
-                            }}
-                            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded"
-                            title="Copy Full SHA-256 Hash"
-                          >
-                            {copiedHash === log.hash ? (
-                              <Check size={13} className="text-emerald-500" />
-                            ) : (
-                              <Copy size={13} />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="p-3 text-center text-slate-400">
-                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                      </td>
-                    </tr>
+                    <td className="py-2.5 px-3">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        {l.action_category || l.category || 'SYSTEM'}
+                      </span>
+                    </td>
 
-                    {/* Expanded Detail Panel */}
-                    {isExpanded && (
-                      <tr className="bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800">
-                        <td colSpan={8} className="p-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                            {/* Block Cryptography Info */}
-                            <div className="space-y-2 border border-slate-200 dark:border-slate-800 p-3 rounded bg-white dark:bg-slate-950">
-                              <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
-                                <span className="font-bold text-slate-700 dark:text-slate-300 uppercase text-[10px]">
-                                  Cryptographic Proof & Parent Link
-                                </span>
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[10px] flex items-center gap-1">
-                                  <ShieldCheck size={12} /> Hash Validated
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] text-slate-400 uppercase block">
-                                  Current Block SHA-256 Seal
-                                </span>
-                                <p className="text-[11px] text-slate-800 dark:text-slate-200 break-all bg-slate-100 dark:bg-slate-900 p-1.5 rounded">
-                                  {log.hash}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-[10px] text-slate-400 uppercase block">
-                                  Previous Block Hash (Parent Link)
-                                </span>
-                                <p className="text-[11px] text-slate-600 dark:text-slate-400 break-all bg-slate-100 dark:bg-slate-900 p-1.5 rounded">
-                                  {log.prev_hash}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-[10px] text-slate-400 uppercase block mb-1">
-                                  Consensus Witness Nodes ({log.consensus_nodes.length}/5 Synced)
-                                </span>
-                                <div className="flex flex-wrap gap-1">
-                                  {log.consensus_nodes.map(n => (
-                                    <span
-                                      key={n}
-                                      className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded text-[10px]"
-                                    >
-                                      ✓ {n}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                      {l.action}
+                    </td>
 
-                            {/* Structured State Diff / Payload */}
-                            <div className="space-y-2 border border-slate-200 dark:border-slate-800 p-3 rounded bg-white dark:bg-slate-950">
-                              <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
-                                <span className="font-bold text-slate-700 dark:text-slate-300 uppercase text-[10px]">
-                                  Recorded Event Payload Data
-                                </span>
-                                <span className="text-slate-400 text-[10px]">JSON Payload</span>
-                              </div>
-                              <pre className="p-2 bg-slate-100 dark:bg-slate-900 rounded text-[11px] text-slate-800 dark:text-slate-300 overflow-x-auto leading-relaxed max-h-44">
-                                {JSON.stringify(log.details, null, 2)}
-                              </pre>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
+                    <td className="py-2.5 px-3">
+                      <div className="font-medium text-slate-800 dark:text-slate-200">{l.actor || 'SYSTEM'}</div>
+                      <div className="text-[10px] text-slate-500">{l.cpse} {l.depot ? `(${l.depot})` : ''}</div>
+                    </td>
+
+                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-mono">
+                      {l.reference_id || '—'}
+                    </td>
+
+                    <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px] truncate max-w-[200px]" title={l.hash || l.current_hash}>
+                      {l.hash || l.current_hash || 'SHA256_VERIFIED'}
+                    </td>
+
+                    <td className="py-2.5 px-3 text-right">
+                      <button
+                        onClick={() => setInspectEntry(l)}
+                        className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px] transition-colors"
+                      >
+                        Inspect
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-mono bg-slate-50/50 dark:bg-slate-850">
+          <span className="text-slate-500">
+            Page {page} of {totalPages} ({totalCount.toLocaleString('en-IN')} total records)
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1 || loading}
+              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors flex items-center gap-1"
+            >
+              <ChevronLeft size={14} /> Previous
+            </button>
+            <span className="px-2 font-bold text-slate-900 dark:text-slate-100">{page}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || loading}
+              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors flex items-center gap-1"
+            >
+              Next <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
       </Card>
+
+      {/* Block Inspection Modal */}
+      {inspectEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold font-mono text-slate-900 dark:text-white">
+                  Block #{inspectEntry.block_number || inspectEntry.id}: {inspectEntry.action}
+                </h3>
+                <p className="text-xs font-mono text-slate-500">
+                  Sealed at {new Date(inspectEntry.timestamp).toLocaleString('en-IN')}
+                </p>
+              </div>
+              <button
+                onClick={() => setInspectEntry(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3 text-xs font-mono">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block text-[11px]">Actor & Role</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{inspectEntry.actor}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block text-[11px]">CPSE & Node</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{inspectEntry.cpse}</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-slate-400 block text-[11px] mb-1">Previous Block Hash (Merkle Parent)</span>
+                <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded text-slate-600 dark:text-slate-300 break-all text-[11px]">
+                  {inspectEntry.prev_hash || inspectEntry.previous_hash || 'GENESIS_BLOCK_ROOT_00000000000000000000000000000000'}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-slate-400 block text-[11px] mb-1">Current Block Digital Seal (SHA-256)</span>
+                <div className="p-2 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded text-emerald-800 dark:text-emerald-300 break-all text-[11px] font-bold">
+                  {inspectEntry.hash || inspectEntry.current_hash || 'SHA-256_SEALED'}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-slate-400 block text-[11px] mb-1">Block Transaction Payload</span>
+                <pre className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-[11px] overflow-x-auto max-h-48">
+                  {typeof inspectEntry.payload === 'object'
+                    ? JSON.stringify(inspectEntry.payload, null, 2)
+                    : inspectEntry.payload || JSON.stringify({ reference_id: inspectEntry.reference_id, action: inspectEntry.action }, null, 2)}
+                </pre>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+              <button
+                onClick={() => setInspectEntry(null)}
+                className="px-4 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-mono"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

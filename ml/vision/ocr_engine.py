@@ -36,10 +36,14 @@ class OCREngine:
 
         # Check PyMuPDF
         try:
-            import fitz
+            import pymupdf as fitz
             self.fitz_available = True
         except ImportError:
-            pass
+            try:
+                import fitz
+                self.fitz_available = True
+            except ImportError:
+                pass
 
         # Check PaddleOCR
         try:
@@ -52,7 +56,9 @@ class OCREngine:
         # Check EasyOCR fallback
         try:
             import easyocr
-            self.easyocr_reader = easyocr.Reader(["en"], gpu=False)
+            import torch
+            use_gpu = torch.cuda.is_available()
+            self.easyocr_reader = easyocr.Reader(["en"], gpu=use_gpu)
             self.easyocr_available = True
         except Exception:
             self.easyocr_available = False
@@ -68,7 +74,10 @@ class OCREngine:
 
         if self.fitz_available:
             try:
-                import fitz
+                try:
+                    import pymupdf as fitz
+                except ImportError:
+                    import fitz
                 doc = fitz.open(stream=file_bytes, filetype="pdf")
                 total_chars = 0
                 for page in doc:
@@ -149,7 +158,10 @@ class OCREngine:
         if not self.fitz_available:
             raise RuntimeError("PyMuPDF (fitz) is not installed.")
 
-        import fitz
+        try:
+            import pymupdf as fitz
+        except ImportError:
+            import fitz
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         full_text_parts = []
         blocks_data = []
@@ -263,7 +275,10 @@ class OCREngine:
         # Raster Scan: PDF with raster pages or Image file
         fn_lower = filename.lower()
         if fn_lower.endswith(".pdf") and self.fitz_available:
-            import fitz
+            try:
+                import pymupdf as fitz
+            except ImportError:
+                import fitz
             doc = fitz.open(stream=file_bytes, filetype="pdf")
             all_text = []
             all_blocks = []

@@ -6,13 +6,22 @@ This directory contains fast, isolated unit tests validating individual determin
 
 ## 1. File-by-File Breakdown
 
-### `test_tolerance.py` — Engineering Safety Core Unit Tests (278 lines)
+### `test_tolerance.py` — Engineering Safety Core Unit Tests
 - **Purpose:** Exhaustively tests all 21 mechanical, metallurgical, and rotating equipment safety rules.
 - **Covers:**
   - Exact match (`TIER_1_EXACT`).
   - Safe upgrades (`TIER_2_SUPERSET`): e.g. Class 600 replacing Class 300, ASTM A350 LF2 replacing A105.
   - Functional equivalents with warnings (`TIER_3_FUNCTIONAL_EQUIVALENT`): e.g. heavier pipe schedule.
   - Hard rejections (`TIER_4_INCOMPATIBLE`): e.g. non-NACE in sour service, RF bolted to cast iron FF, reduced bore on piggable lines, lower pressure class.
+
+### `test_indian_procurement_alignment.py` — Indian Standards & Procurement Alignment
+- **Purpose:** Tests compliance with Indian public sector procurement frameworks (GeM, CPPP, BIS, OISD, EIL, MII).
+- **Covers:**
+  - Bureau of Indian Standards (BIS) mappings (`IS 2062 Grade E250`, `IS 14846 FG 200`, `IS 1239 Part 1 Heavy`, `IS 1367 Part 3 Class 8.8`, `IS 9890`).
+  - Oil Industry Technical Specifications (`OISD-RP-126`, `OISD-STD-118`, `EIL 6-44-0005`, `EIL 6-44-0012`).
+  - Standardized OIL Material Code format (10-digit dot-delimited MESC notation).
+  - Make In India (MII) preference classes (Class-I $\ge 50\%$, Class-II $20\%-50\%$, Non-Local $<20\%$).
+  - Dual metric/imperial dimension parsing (nominal bore in mm and pressure rating in Bar/PN).
 
 ### `test_chemistry.py` — Metallurgical Chemistry Tests
 - **Covers:**
@@ -30,12 +39,12 @@ This directory contains fast, isolated unit tests validating individual determin
 - **Covers:**
   - Unicode NFKC decomposition.
   - Expansion of fractional symbols (½ $\rightarrow$ 1/2).
-  - Dialect thesaurus substitutions.
+  - Dialect thesaurus substitutions across CPSE abbreviations.
 
 ### `test_ocr_and_mtc.py` — Vision & MTC Extraction Tests
 - **Covers:**
   - PyMuPDF fast-path vector text extraction.
-  - Image preprocessing (deskew, CLAHE, Otsu binarization).
+  - Image preprocessing (deskew, CLAHE, adaptive binarization).
   - EN 10204 Type 3.1 table parser for chemical heat analysis and tensile properties.
 
 ### `test_security.py` — Cryptographic Security Tests
@@ -49,5 +58,9 @@ This directory contains fast, isolated unit tests validating individual determin
 ## 2. Running Unit Tests
 
 ```bash
+# Run all unit tests
 pytest tests/unit/ -v
+
+# Run Indian procurement alignment tests specifically
+pytest tests/unit/test_indian_procurement_alignment.py -v
 ```

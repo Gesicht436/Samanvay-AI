@@ -64,7 +64,12 @@ def search_matches(
         "properties": payload.get("properties", {}),
     }
 
-    source_coord = DEPOT_COORDINATES.get("Panipat", (29.3909, 76.9635))
+    # Logistics origin: default to OIL Duliajan for OIL, or Panipat for IOCL
+    if x_cpse == "OIL":
+        source_coord = DEPOT_COORDINATES.get("OIL Duliajan", (27.3575, 95.3188))
+    else:
+        source_coord = DEPOT_COORDINATES.get("Panipat", (29.3909, 76.9635))
+
     matched_results = []
 
     for item in candidates:
@@ -83,6 +88,35 @@ def search_matches(
         ml_score = ranker.predict(query_part, cand_part)
         combined_score = (rule_eval.score * 0.7) + (ml_score * 0.3)
 
+        # Indian Cross-Standard Equivalence Bonus (BIS/IS <-> ASTM/ASME/API)
+        cand_is = item.indian_standard or ""
+        cand_met = item.metallurgy or ""
+        q_text_upper = query_text.upper() if query_text else ""
+        is_equiv = False
+
+        if ("IS 1239" in q_text_upper or "IS 3589" in q_text_upper) and ("A106" in cand_met or "API 5L" in cand_met or "IS 1239" in cand_is or "IS 3589" in cand_is):
+            is_equiv = True
+        elif ("IS 2062" in q_text_upper) and ("A105" in cand_met or "IS 2062" in cand_is):
+            is_equiv = True
+        elif ("IS 14846" in q_text_upper) and ("API 600" in (item.standard or "") or "WCB" in cand_met or "IS 14846" in cand_is):
+            is_equiv = True
+        elif ("IS 1367" in q_text_upper) and ("B7" in cand_met or "IS 1367" in cand_is):
+            is_equiv = True
+
+        if is_equiv and rule_eval.is_compatible:
+            combined_score = max(combined_score, 0.95)
+
+        # 3. Option A: Make in India (PPP-MII) Soft Scoring Boost & Badging
+        local_pct = float(item.local_content_percentage) if item.local_content_percentage is not None else 75.0
+        mii_class = item.make_in_india_class or ("Class-I" if local_pct >= 50.0 else "Class-II")
+        mii_compliant = local_pct >= 50.0 or mii_class == "Class-I"
+
+        if mii_compliant:
+            combined_score = min(1.0, combined_score + 0.03)  # Soft +3% Make-in-India boost
+            mii_warning = None
+        else:
+            mii_warning = "Make in India Alert: Local content is below 50% (Class-II / Non-Local)"
+
         # Invariant: Any zero-tolerance rule violation forces Tier 3
         if not rule_eval.is_compatible:
             dynamic_tier = "Tier 3"
@@ -94,15 +128,17 @@ def search_matches(
         else:
             dynamic_tier = "Tier 3"
 
-        # 3. Active Learning Cache Lookup
+        # 4. Active Learning Cache Lookup
         cache_entry = active_cache.lookup(query_text, item.sku_code)
         explanation_note = rule_eval.explanation
+        if is_equiv:
+            explanation_note += " | Dual-Certified: BIS/IS & ASTM/ASME Equivalent"
         if cache_entry:
             explanation_note += f" | {active_cache.sku_stamps.get(item.sku_code, '')}"
             if cache_entry.decision == "APPROVE":
                 dynamic_tier = cache_entry.tier_override
 
-        # 4. Logistics Computation
+        # 5. Logistics Computation
         target_depot = item.depot_location or item.depot_id or "Panipat"
         matched_coord = None
         for name, coord in DEPOT_COORDINATES.items():
@@ -110,11 +146,12 @@ def search_matches(
                 matched_coord = coord
                 break
         if not matched_coord:
-            matched_coord = (22.3217, 73.1384)
+            matched_coord = (27.3575, 95.3188) if "oil" in target_depot.lower() or "duliajan" in target_depot.lower() else (22.3217, 73.1384)
 
         dist = road_distance(source_coord[0], source_coord[1], matched_coord[0], matched_coord[1])
         transit_hrs = estimate_transit_hours(dist)
 
+        # Dual Standard Output: Indian Standards side-by-side with International
         cand_data = {
             "sku_code": item.sku_code,
             "cpse": item.cpse,
@@ -124,7 +161,19 @@ def search_matches(
             "item_type": item.item_type,
             "size_nb_mm": float(item.size_nb_mm) if item.size_nb_mm else None,
             "pressure_class": item.pressure_class,
+            "pressure_rating_bar": float(item.pressure_rating_bar) if item.pressure_rating_bar else (round(item.pressure_class * 0.0689476 * 1.45, 1) if item.pressure_class else None),
             "metallurgy": item.metallurgy,
+            "standard": item.standard,
+            "indian_standard": item.indian_standard,
+            "oil_std_spec": item.oil_std_spec,
+            "oil_material_code": item.oil_material_code,
+            "gem_category_id": item.gem_category_id,
+            "gem_product_id": item.gem_product_id,
+            "cppp_tender_ref": item.cppp_tender_ref,
+            "make_in_india_class": mii_class,
+            "local_content_percentage": local_pct,
+            "mii_compliant": mii_compliant,
+            "mii_warning": mii_warning,
             "quantity": item.quantity,
             "days_idle": item.days_idle,
             "compatibility_score": round(combined_score * 100, 1),

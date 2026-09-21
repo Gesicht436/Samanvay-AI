@@ -15,12 +15,14 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light');
-  const [cpse, setCpse] = useState<string>('depot-1');
+  const [cpse, setCpse] = useState<string>('OIL');
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? (localStorage.getItem('samanvay_theme') as Theme | null) : null;
     if (saved && (saved === 'light' || saved === 'dark')) {
       setTheme(saved);
+    } else {
+      setTheme('light');
     }
   }, []);
 

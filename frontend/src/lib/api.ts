@@ -32,10 +32,19 @@ async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise
 
 export const api = {
   // Inventory & Stock Ledger
-  getInventory: (params?: { cpse?: string; status?: string; item_type?: string }) => {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
-    return fetchAPI<any>(`/inventory${query ? `?${query}` : ''}`);
+  getInventory: (params?: { cpse?: string; depot?: string; status?: string; category?: string; item_type?: string; skip?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '' && v !== 'ALL') {
+          query.append(k, String(v));
+        }
+      });
+    }
+    const qs = query.toString();
+    return fetchAPI<any>(`/inventory${qs ? `?${qs}` : ''}`);
   },
+  getInventoryStats: () => fetchAPI<any>('/inventory/stats'),
   getInventoryItem: (skuCode: string) => fetchAPI<any>(`/inventory/${skuCode}`),
   getSurplusRadar: () => fetchAPI<any[]>('/inventory/surplus'),
   getHitlQueue: () => fetchAPI<any[]>('/inventory/hitl-queue'),
@@ -47,7 +56,7 @@ export const api = {
 
   // Requisitions & Consignments
   getRequests: (cpse?: string) =>
-    fetchAPI<any[]>(`/requisition${cpse ? `?cpse=${cpse}` : ''}`),
+    fetchAPI<any[]>(`/requisition${cpse && cpse !== 'ALL' ? `?cpse=${cpse}` : ''}`),
   getRequestById: (reqId: string) => fetchAPI<any>(`/requisition/${reqId}`),
   postRequisition: (data: any, idempotencyKey?: string) =>
     fetchAPI<any>('/requisition', {
@@ -76,10 +85,14 @@ export const api = {
     fetchAPI<any>(`/requisition/${reqId}/deliver`, { method: 'PUT' }),
 
   // Sovereign Audit Ledger
-  getAuditLogs: (category?: string, cpse?: string) => {
+  getAuditLogs: (params?: { category?: string; cpse?: string; skip?: number; limit?: number }) => {
     const query = new URLSearchParams();
-    if (category) query.append('category', category);
-    if (cpse) query.append('cpse', cpse);
+    if (params) {
+      if (params.category && params.category !== 'ALL') query.append('category', params.category);
+      if (params.cpse && params.cpse !== 'ALL') query.append('cpse', params.cpse);
+      if (params.skip !== undefined) query.append('skip', String(params.skip));
+      if (params.limit !== undefined) query.append('limit', String(params.limit));
+    }
     const qs = query.toString();
     return fetchAPI<any>(`/audit${qs ? `?${qs}` : ''}`);
   },

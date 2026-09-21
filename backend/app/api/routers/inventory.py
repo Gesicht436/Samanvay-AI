@@ -2,7 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 from backend.app.api.dependencies import get_db_session, verify_cpse_access, PaginationParams, InventoryFilterParams, validate_idempotency_key
-from backend.app.services.inventory_service import list_inventory, get_item, create_item, transition_status, get_surplus_radar, get_hitl_queue
+from backend.app.services.inventory_service import (
+    list_inventory,
+    get_item,
+    create_item,
+    transition_status,
+    get_surplus_radar,
+    get_hitl_queue,
+    get_inventory_stats,
+)
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
@@ -17,6 +25,10 @@ def get_inventory_list(
     filter_dict = {k: v for k, v in filters.__dict__.items() if v is not None}
     pag_dict = {"skip": pagination.skip, "limit": pagination.limit}
     return list_inventory(db, filter_dict, pag_dict, cpse)
+
+@router.get("/stats")
+def get_stats(cpse: str = Depends(verify_cpse_access), db: Session = Depends(get_db_session)):
+    return get_inventory_stats(db, cpse)
 
 @router.get("/surplus")
 def get_surplus_items(cpse: str = Depends(verify_cpse_access), db: Session = Depends(get_db_session)):

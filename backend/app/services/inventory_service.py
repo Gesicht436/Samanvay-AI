@@ -168,3 +168,61 @@ def get_hitl_queue(db: Session) -> List[Dict[str, Any]]:
         {c.name: getattr(item, c.name) for c in item.__table__.columns}
         for item in items
     ]
+
+
+def get_inventory_stats(db: Session, requesting_cpse: str) -> Dict[str, Any]:
+    """
+    Computes aggregate metrics across the sovereign inventory and requisition ledgers.
+    """
+    from sqlalchemy import func
+    from backend.app.models.tables import Requisition
+
+    total_items = db.query(InventoryItem).count()
+    total_surplus = db.query(InventoryItem).filter(
+        (InventoryItem.status == "IDLE_SURPLUS") | (InventoryItem.is_broadcasted_surplus == True)
+    ).count()
+    total_hitl = db.query(InventoryItem).filter(
+        (InventoryItem.status == "HITL_REVIEW") | (InventoryItem.days_idle >= 90)
+    ).count()
+    total_requisitions = db.query(Requisition).count()
+
+    capital_res = db.query(func.sum(InventoryItem.total_value_inr)).filter(
+        (InventoryItem.status == "IDLE_SURPLUS") | (InventoryItem.is_broadcasted_surplus == True)
+    ).scalar()
+    capital_unlocked_cr = round(float(capital_res or 0.0) / 1e7, 2)
+
+    cpse_rows = db.query(
+        InventoryItem.cpse,
+        func.count(InventoryItem.id).label("count"),
+        func.sum(InventoryItem.total_value_inr).label("total_val")
+    ).group_by(InventoryItem.cpse).all()
+
+    cpse_breakdown = [
+        {
+            "cpse": row.cpse,
+            "count": row.count,
+            "total_value_cr": round(float(row.total_val or 0.0) / 1e7, 2),
+        }
+        for row in cpse_rows
+    ]
+
+    cat_rows = db.query(
+        InventoryItem.item_type,
+        func.count(InventoryItem.id).label("count")
+    ).group_by(InventoryItem.item_type).all()
+
+    category_breakdown = [
+        {"category": row.item_type, "count": row.count}
+        for row in cat_rows
+    ]
+
+    return {
+        "total_items": total_items,
+        "total_surplus": total_surplus,
+        "total_hitl": total_hitl,
+        "total_requisitions": total_requisitions,
+        "capital_unlocked_cr": capital_unlocked_cr,
+        "cpse_breakdown": cpse_breakdown,
+        "category_breakdown": category_breakdown,
+    }
+

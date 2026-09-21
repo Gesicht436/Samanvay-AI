@@ -1,23 +1,22 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Card } from '@/components/ui';
 import {
   Upload,
   FileText,
   AlertTriangle,
   CheckCircle2,
-  Cpu,
-  Flame,
-  ShieldAlert,
   Loader2,
-  FileCode2,
+  RefreshCw,
+  Clock,
+  ArrowRight,
 } from 'lucide-react';
-import { MTC_PRESETS, MTCInspectionData } from '@/lib/mockMTCs';
 import { api } from '@/lib/api';
 
-export default function UploadPage() {
+export default function DocumentIntakePage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -25,73 +24,51 @@ export default function UploadPage() {
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const processAndNavigate = async (data: MTCInspectionData) => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('current_mtc', JSON.stringify(data));
+  // Ingested documents list
+  const [recentDocs, setRecentDocs] = useState<any[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState<boolean>(true);
+
+  const fetchRecentDocs = async () => {
+    setLoadingDocs(true);
+    try {
+      const res = await api.listDocuments(0, 10);
+      if (res && Array.isArray(res.documents)) {
+        setRecentDocs(res.documents);
+      } else if (Array.isArray(res)) {
+        setRecentDocs(res);
+      } else {
+        setRecentDocs([]);
+      }
+    } catch {
+      setRecentDocs([]);
+    } finally {
+      setLoadingDocs(false);
     }
-    router.push('/upload/review');
   };
+
+  useEffect(() => {
+    fetchRecentDocs();
+  }, []);
 
   const handleFileUpload = async (file: File) => {
     setIsProcessing(true);
     setErrorMsg(null);
-    setStatusMessage('Classifying document structure (Vector PDF vs Raster scan)...');
+    setStatusMessage('Uploading document to PyMuPDF & PaddleOCR parser...');
 
     try {
       const formData = new FormData();
       formData.append('file', file);
 
-      // Attempt live API upload
-      setStatusMessage('Extracting text stream & parsing EN 10204 3.1 MTC chemistry...');
-      let resultData: MTCInspectionData;
+      setStatusMessage('Extracting chemistry, IIW Carbon Equivalent & ASTM standards...');
+      const response = await api.uploadDocument(formData);
 
-      try {
-        const response = await api.uploadDocument(formData);
-        resultData = {
-          document_id: response.document_id || `doc-${Date.now()}`,
-          filename: response.filename || file.name,
-          doc_type: response.doc_type || 'MTC_CERTIFICATE',
-          is_scanned: Boolean(response.is_scanned),
-          confidence_score: response.confidence_score || 0.95,
-          requires_hitl: Boolean(response.requires_hitl),
-          is_incomplete: Boolean(response.is_incomplete),
-          missing_attributes: response.missing_attributes || [],
-          extracted_attributes: response.extracted_attributes || {
-            item_type: 'EQUIPMENT',
-            size_nb_mm: 100,
-            pressure_class: 300,
-            schedule: 'SCH 40',
-            metallurgy: 'ASTM A105',
-            facing_end: 'RF',
-            standard: 'EN 10204 3.1',
-            properties: {},
-          },
-          chemistry: response.chemistry || { C: 0.22, Mn: 0.85 },
-          carbon_equivalent_iiw: response.carbon_equivalent_iiw ?? 0.41,
-          weldability: response.weldability || 'STANDARD_WELDABLE',
-          pren: response.pren ?? null,
-          mechanical: response.mechanical || { yield_strength_mpa: 310, tensile_strength_mpa: 520 },
-          astm_conformance: response.astm_conformance ?? true,
-          warnings: response.warnings || [],
-          raw_text: response.raw_text || `Extracted MTC text from ${file.name}`,
-          bounding_boxes: response.bounding_boxes || [],
-        };
-      } catch (err) {
-        console.warn('Backend API ingest unavailable, falling back to simulated extraction:', err);
-        // Realistic simulated fallback for demo/offline resilience
-        await new Promise((r) => setTimeout(r, 600));
-        setStatusMessage('Evaluating IIW Carbon Equivalent and ASTM boundary rules...');
-        await new Promise((r) => setTimeout(r, 400));
-        resultData = {
-          ...MTC_PRESETS['preset-1'],
-          filename: file.name,
-          document_id: `upload-${Date.now()}`,
-        };
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('current_mtc', JSON.stringify(response));
       }
 
-      await processAndNavigate(resultData);
-    } catch (e: any) {
-      setErrorMsg(e.message || 'Failed to process document');
+      router.push('/upload/review');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to process document. Please check file format.');
       setIsProcessing(false);
     }
   };
@@ -104,42 +81,34 @@ export default function UploadPage() {
     }
   };
 
-  const handleSelectPreset = async (presetKey: string) => {
-    setIsProcessing(true);
-    setErrorMsg(null);
-    setStatusMessage(`Loading ${MTC_PRESETS[presetKey].filename}...`);
-    await new Promise((r) => setTimeout(r, 350));
-    await processAndNavigate(MTC_PRESETS[presetKey]);
-  };
-
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div>
-          <h1 className="text-2xl font-bold font-mono tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2.5">
-            <Cpu className="text-emerald-500" size={24} />
-            Smart Document Intake & Vision Core
-          </h1>
-          <p className="text-xs font-mono text-slate-500 mt-1">
-            Stage 01: Dual-Path OCR · EN 10204 3.1/3.2 MTC Intelligence · IIW Carbon Equivalent ($CE$)
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
-            FAST PATH &lt;50MS READY
+    <div className="flex flex-col space-y-5 max-w-[1400px] mx-auto pb-10">
+      {/* Top Banner */}
+      <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+            DOCUMENT INTAKE
+          </span>
+          <span className="text-xs font-mono text-slate-500">
+            PyMuPDF Vector Stream & PaddleOCR Multi-Modal Pipeline
           </span>
         </div>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+          Material Test Certificate (MTC) & Procurement Document Intake
+        </h1>
+        <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+          Automatic digital attribute extraction, chemical composition analysis (IIW CE / PREN), and ASTM boundary validation.
+        </p>
       </div>
 
       {errorMsg && (
-        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg text-rose-700 dark:text-rose-300 text-xs font-mono flex items-center gap-2">
-          <AlertTriangle size={16} />
+        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-mono rounded-lg flex items-center justify-between">
           <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="text-slate-500 hover:text-slate-700">&times;</button>
         </div>
       )}
 
-      {/* Main Upload Dropzone */}
+      {/* Upload Drop Zone */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -148,10 +117,10 @@ export default function UploadPage() {
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
         onClick={() => !isProcessing && fileInputRef.current?.click()}
-        className={`relative border-2 border-dashed rounded-xl p-10 text-center transition-all cursor-pointer select-none ${
+        className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors cursor-pointer select-none bg-white dark:bg-slate-900 ${
           isDragging
-            ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 scale-[1.01]'
-            : 'border-slate-300 dark:border-slate-700 hover:border-emerald-500/70 hover:bg-slate-50/50 dark:hover:bg-slate-900/40'
+            ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20'
+            : 'border-slate-300 dark:border-slate-700 hover:border-emerald-500 hover:bg-slate-50/50 dark:hover:bg-slate-800/40'
         }`}
       >
         <input
@@ -168,154 +137,113 @@ export default function UploadPage() {
 
         {isProcessing ? (
           <div className="py-6 flex flex-col items-center justify-center space-y-3">
-            <Loader2 className="h-10 w-10 text-emerald-500 animate-spin" />
+            <Loader2 className="h-9 w-9 text-emerald-600 dark:text-emerald-400 animate-spin" />
             <p className="font-mono text-sm font-semibold text-slate-800 dark:text-slate-200">
               {statusMessage || 'Processing certificate...'}
             </p>
-            <div className="w-64 bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 animate-pulse w-3/4"></div>
-            </div>
-            <p className="text-xs text-slate-400 font-mono">PyMuPDF text stream & ASTM rules validation</p>
+            <p className="text-xs text-slate-400 font-mono">
+              Running OCR and validating chemical tolerances against ASTM specifications
+            </p>
           </div>
         ) : (
-          <div className="py-2">
-            <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 mb-4 border border-slate-200 dark:border-slate-700">
-              <Upload className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+          <div className="py-4">
+            <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3 border border-slate-200 dark:border-slate-700">
+              <Upload size={22} />
             </div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              Drag & Drop Material Test Certificate (MTC) or Invoice
+              Select or Drag & Drop Material Test Certificate (MTC)
             </h3>
             <p className="text-xs text-slate-500 mt-1 font-mono">
-              Vector PDF (Fast Path), High-Res Scans, or Multi-page TIF
+              Supports EN 10204 3.1 PDF certificates, scanned delivery challans, and inspection reports (.pdf, .png, .jpg)
             </p>
-            <div className="mt-4 flex items-center justify-center gap-2">
-              <button
-                type="button"
-                className="px-4 py-2 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white text-xs font-mono font-semibold rounded shadow-xs transition-colors"
-              >
+            <div className="mt-4">
+              <span className="px-4 py-2 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white text-xs font-mono font-semibold rounded transition-colors inline-block">
                 Browse Files
-              </button>
+              </span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Demo Presets Section */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-mono font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-2">
-            <FileCode2 size={16} className="text-emerald-500" />
-            Test & Verification Presets (Production Ready)
-          </h2>
-          <span className="text-[11px] font-mono text-slate-400">Click any preset to trigger real-time review</span>
+      {/* Recently Ingested Documents from Backend */}
+      <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-3">
+          <div className="flex items-center gap-2">
+            <FileText size={16} className="text-emerald-600 dark:text-emerald-400" />
+            <h2 className="text-sm font-mono font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+              Recently Ingested Documents
+            </h2>
+          </div>
+
+          <button
+            onClick={fetchRecentDocs}
+            disabled={loadingDocs}
+            className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-xs transition-colors"
+            title="Refresh documents list"
+          >
+            <RefreshCw size={13} className={loadingDocs ? 'animate-spin' : ''} />
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Preset 1: Standard CS Flange */}
-          <Card
-            onClick={() => !isProcessing && handleSelectPreset('preset-1')}
-            className="cursor-pointer hover:border-emerald-500 hover:shadow-md transition-all duration-150 p-4 border-l-4 border-l-emerald-500"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <FileText className="text-emerald-600 dark:text-emerald-400" size={18} />
-                <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
-                  L&T Hazira · ASTM A105 WN Flange
-                </h3>
-              </div>
-              <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[10px] font-mono font-bold rounded">
-                CE 0.41% · PASS
-              </span>
+        <div className="overflow-x-auto">
+          {loadingDocs ? (
+            <div className="py-8 text-center text-xs font-mono text-slate-500">
+              Loading ingested documents from database...
             </div>
-            <p className="text-xs text-slate-500 line-clamp-2 font-mono">
-              EN 10204 3.1 Digital Vector PDF. L&T Hazira, 4" 300# RF SCH 40. Yield: 310 MPa, Tensile: 520 MPa.
-            </p>
-            <div className="mt-3 flex items-center gap-3 text-[11px] font-mono text-slate-400 border-t border-slate-100 dark:border-slate-800/80 pt-2">
-              <span>98.4% Confidence</span>
-              <span>·</span>
-              <span>Direct Auto-Approve</span>
+          ) : recentDocs.length === 0 ? (
+            <div className="py-8 text-center text-xs font-mono text-slate-500">
+              No documents ingested yet. Upload an MTC above to begin digital extraction.
             </div>
-          </Card>
-
-          {/* Preset 2: Cryogenic Valve Body */}
-          <Card
-            onClick={() => !isProcessing && handleSelectPreset('preset-2')}
-            className="cursor-pointer hover:border-amber-500 hover:shadow-md transition-all duration-150 p-4 border-l-4 border-l-amber-500"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Flame className="text-amber-500" size={18} />
-                <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
-                  BHEL Trichy · ASTM A350 LF2 Cryo Valve
-                </h3>
-              </div>
-              <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-mono font-bold rounded">
-                CE 0.45% · PREHEAT
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 line-clamp-2 font-mono">
-              EN 10204 3.2 Dual Inspection (EIL). 6" 600# RTJ. Charpy Impact 38J at -46°C. Preheat protocol mandated.
-            </p>
-            <div className="mt-3 flex items-center gap-3 text-[11px] font-mono text-slate-400 border-t border-slate-100 dark:border-slate-800/80 pt-2">
-              <span>97.5% Confidence</span>
-              <span>·</span>
-              <span>ASTM A350 Verified</span>
-            </div>
-          </Card>
-
-          {/* Preset 3: Stainless Steel Flange */}
-          <Card
-            onClick={() => !isProcessing && handleSelectPreset('preset-3')}
-            className="cursor-pointer hover:border-blue-500 hover:shadow-md transition-all duration-150 p-4 border-l-4 border-l-blue-500"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="text-blue-500" size={18} />
-                <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
-                  Pennar · ASTM A182 F316L Blind Flange
-                </h3>
-              </div>
-              <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 text-[10px] font-mono font-bold rounded">
-                PREN 25.02
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 line-clamp-2 font-mono">
-              EN 10204 3.1 LRQA. Low carbon (0.022%), Cr: 17.2%, Mo: 2.15%. Intergranular corrosion (IGC) passed.
-            </p>
-            <div className="mt-3 flex items-center gap-3 text-[11px] font-mono text-slate-400 border-t border-slate-100 dark:border-slate-800/80 pt-2">
-              <span>99.1% Confidence</span>
-              <span>·</span>
-              <span>Marine & Sour Duty</span>
-            </div>
-          </Card>
-
-          {/* Preset 4: Out-of-Spec Warning Scan */}
-          <Card
-            onClick={() => !isProcessing && handleSelectPreset('preset-4')}
-            className="cursor-pointer hover:border-rose-500 hover:shadow-md transition-all duration-150 p-4 border-l-4 border-l-rose-500"
-          >
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="text-rose-500" size={18} />
-                <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
-                  Vendor X · Smudged Scan (Out-of-Spec)
-                </h3>
-              </div>
-              <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 text-[10px] font-mono font-bold rounded">
-                HITL MANDATORY
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 line-clamp-2 font-mono">
-              Low OCR confidence (81.2%), Excessive Carbon (0.38% &gt; 0.35%), CE 0.67% High Cracking Risk.
-            </p>
-            <div className="mt-3 flex items-center gap-3 text-[11px] font-mono text-rose-600 dark:text-rose-400 border-t border-slate-100 dark:border-slate-800/80 pt-2 font-semibold">
-              <span>Non-Conformance Detected</span>
-              <span>·</span>
-              <span>Triage Queue Required</span>
-            </div>
-          </Card>
+          ) : (
+            <table className="w-full text-left text-xs font-mono border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
+                  <th className="py-2 pr-3 font-semibold">DOC ID</th>
+                  <th className="py-2 px-3 font-semibold">FILENAME</th>
+                  <th className="py-2 px-3 font-semibold">TYPE</th>
+                  <th className="py-2 px-3 font-semibold">CONFIDENCE</th>
+                  <th className="py-2 px-3 font-semibold">UPLOADED</th>
+                  <th className="py-2 pl-3 font-semibold text-right">INSPECT</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                {recentDocs.map((doc) => (
+                  <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-2.5 pr-3 font-bold text-slate-900 dark:text-slate-100">
+                      #{doc.id}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200 truncate max-w-[280px]">
+                      {doc.filename}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                      {doc.doc_type || 'MTC_CERTIFICATE'}
+                    </td>
+                    <td className="py-2.5 px-3 text-emerald-700 dark:text-emerald-400 font-semibold">
+                      {((doc.confidence || 0.95) * 100).toFixed(1)}%
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500 text-[11px]">
+                      {doc.created_at ? new Date(doc.created_at).toLocaleString('en-IN') : 'Recently'}
+                    </td>
+                    <td className="py-2.5 pl-3 text-right">
+                      <button
+                        onClick={() => {
+                          if (typeof window !== 'undefined') {
+                            sessionStorage.setItem('current_mtc', JSON.stringify(doc));
+                          }
+                          router.push('/upload/review');
+                        }}
+                        className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
+                      >
+                        Review &rarr;
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -29,9 +29,28 @@ def derive_depot_id(cpse: str, location: str) -> str:
     return f"{cpse}_{loc_clean}"
 
 
+from sqlalchemy import text
+
+
 def seed_database():
     print("[INIT] Initializing database tables...")
     init_db()
+
+    # Ensure schema migrations for Indian procurement columns
+    with engine.connect() as conn:
+        conn.execute(text("""
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS indian_standard VARCHAR(100);
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS oil_std_spec VARCHAR(100);
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS oil_material_code VARCHAR(32);
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS gem_category_id VARCHAR(100);
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS gem_product_id VARCHAR(64);
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS cppp_tender_ref VARCHAR(100);
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS make_in_india_class VARCHAR(32) DEFAULT 'Class-I';
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS local_content_percentage NUMERIC(5, 2) DEFAULT 75.0;
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS pressure_rating_bar NUMERIC(8, 2);
+            ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS location_state VARCHAR(64);
+        """))
+        conn.commit()
 
     csv_path = os.path.join(os.path.dirname(__file__), "..", "datasets", "inventory_catalog.csv")
     if not os.path.exists(csv_path):
@@ -83,8 +102,18 @@ def seed_database():
                 po_no = str(row["po_no"]).strip() if "po_no" in row and pd.notna(row["po_no"]) else None
                 heat_no = str(row["heat_no"]).strip() if "heat_no" in row and pd.notna(row["heat_no"]) else None
                 standard = str(row["standard"]).strip() if "standard" in row and pd.notna(row["standard"]) else None
+                indian_standard = str(row["indian_standard"]).strip() if "indian_standard" in row and pd.notna(row["indian_standard"]) else meta.get("indian_standard")
+                oil_std_spec = str(row["oil_std_spec"]).strip() if "oil_std_spec" in row and pd.notna(row["oil_std_spec"]) else meta.get("oil_std_spec")
+                oil_material_code = str(row["oil_material_code"]).strip() if "oil_material_code" in row and pd.notna(row["oil_material_code"]) else meta.get("oil_material_code")
+                gem_category_id = str(row["gem_category_id"]).strip() if "gem_category_id" in row and pd.notna(row["gem_category_id"]) else meta.get("gem_category_id")
+                gem_product_id = str(row["gem_product_id"]).strip() if "gem_product_id" in row and pd.notna(row["gem_product_id"]) else None
+                cppp_tender_ref = str(row["cppp_tender_ref"]).strip() if "cppp_tender_ref" in row and pd.notna(row["cppp_tender_ref"]) else meta.get("cppp_tender_ref")
+                make_in_india_class = str(row["make_in_india_class"]).strip() if "make_in_india_class" in row and pd.notna(row["make_in_india_class"]) else (meta.get("make_in_india_class") or "Class-I")
+                local_content_percentage = float(row["local_content_percentage"]) if "local_content_percentage" in row and pd.notna(row["local_content_percentage"]) else 75.0
+                pressure_rating_bar = float(row["pressure_rating_bar"]) if "pressure_rating_bar" in row and pd.notna(row["pressure_rating_bar"]) else meta.get("pressure_rating_bar")
+                location_state = str(row["location_state"]).strip() if "location_state" in row and pd.notna(row["location_state"]) else None
                 
-                for field in ["hsn_code", "gem_category", "mesc_code", "cppp_tender_id"]:
+                for field in ["hsn_code", "gem_category", "mesc_code", "cppp_tender_id", "indian_standard", "oil_std_spec", "oil_material_code", "gem_category_id", "cppp_tender_ref", "make_in_india_class"]:
                     if field in row and pd.notna(row[field]):
                         meta[field] = str(row[field]).strip()
 
@@ -113,6 +142,16 @@ def seed_database():
                     metallurgy=metallurgy,
                     facing_end=facing_end,
                     standard=standard,
+                    indian_standard=indian_standard,
+                    oil_std_spec=oil_std_spec,
+                    oil_material_code=oil_material_code,
+                    gem_category_id=gem_category_id,
+                    gem_product_id=gem_product_id,
+                    cppp_tender_ref=cppp_tender_ref,
+                    make_in_india_class=make_in_india_class,
+                    local_content_percentage=local_content_percentage,
+                    pressure_rating_bar=pressure_rating_bar,
+                    location_state=location_state,
                     quantity=qty,
                     unit_cost_inr=unit_cost,
                     status=status,

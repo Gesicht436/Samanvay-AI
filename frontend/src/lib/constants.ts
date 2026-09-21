@@ -1,20 +1,24 @@
 export interface CPSEDepot {
   id: string;
   name: string;
-  cpse: 'IOCL' | 'BPCL' | 'HPCL' | 'ONGC' | 'GAIL';
+  cpse: 'OIL' | 'NRL' | 'IOCL' | 'BPCL' | 'HPCL' | 'ONGC' | 'GAIL';
   city: string;
   state: string;
-  coords: { x: number; y: number }; // normalized SVG map coordinates [0..100]
-  itemsCount: number;
-  unlockedValueCr: number;
 }
 
 export const CPSE_DEPOTS: CPSEDepot[] = [
-  { id: 'depot-1', name: 'IOCL Panipat Refinery', cpse: 'IOCL', city: 'Panipat', state: 'Haryana', coords: { x: 38, y: 25 }, itemsCount: 412, unlockedValueCr: 14.2 },
-  { id: 'depot-2', name: 'BPCL Mumbai Refinery', cpse: 'BPCL', city: 'Mumbai', state: 'Maharashtra', coords: { x: 25, y: 58 }, itemsCount: 328, unlockedValueCr: 11.5 },
-  { id: 'depot-3', name: 'HPCL Visakh Refinery', cpse: 'HPCL', city: 'Visakhapatnam', state: 'Andhra Pradesh', coords: { x: 68, y: 62 }, itemsCount: 285, unlockedValueCr: 9.8 },
-  { id: 'depot-4', name: 'ONGC Uran Gas Terminal', cpse: 'ONGC', city: 'Uran', state: 'Maharashtra', coords: { x: 27, y: 60 }, itemsCount: 198, unlockedValueCr: 7.4 },
-  { id: 'depot-5', name: 'GAIL Pata Petrochemical', cpse: 'GAIL', city: 'Auraiya', state: 'Uttar Pradesh', coords: { x: 48, y: 35 }, itemsCount: 197, unlockedValueCr: 5.7 },
+  { id: 'depot-oil-1', name: 'OIL Central Materials Warehouse, Duliajan', cpse: 'OIL', city: 'Duliajan', state: 'Assam' },
+  { id: 'depot-oil-2', name: 'OIL Moran Supply Base, Charaideo', cpse: 'OIL', city: 'Moran', state: 'Assam' },
+  { id: 'depot-nrl-1', name: 'NRL Numaligarh Refinery Yard', cpse: 'NRL', city: 'Golaghat', state: 'Assam' },
+  { id: 'depot-ongc-naz', name: 'ONGC Assam Asset Base, Nazira', cpse: 'ONGC', city: 'Nazira', state: 'Assam' },
+  { id: 'depot-oil-gau', name: 'OIL Guwahati Pipeline HQ', cpse: 'OIL', city: 'Guwahati', state: 'Assam' },
+  { id: 'depot-1', name: 'IOCL Panipat Refinery', cpse: 'IOCL', city: 'Panipat', state: 'Haryana' },
+  { id: 'depot-2', name: 'BPCL Mumbai Refinery', cpse: 'BPCL', city: 'Mumbai', state: 'Maharashtra' },
+  { id: 'depot-3', name: 'HPCL Visakh Refinery', cpse: 'HPCL', city: 'Visakhapatnam', state: 'Andhra Pradesh' },
+  { id: 'depot-4', name: 'ONGC Uran Gas Terminal', cpse: 'ONGC', city: 'Uran', state: 'Maharashtra' },
+  { id: 'depot-5', name: 'GAIL Pata Petrochemical', cpse: 'GAIL', city: 'Auraiya', state: 'Uttar Pradesh' },
+  { id: 'depot-oil-jod', name: 'OIL Jodhpur Heavy Oil Project Base', cpse: 'OIL', city: 'Jodhpur', state: 'Rajasthan' },
+  { id: 'depot-oil-kak', name: 'OIL KG Basin Offshore Supply Depot', cpse: 'OIL', city: 'Kakinada', state: 'Andhra Pradesh' },
 ];
 
 export const STATUS_COLORS: Record<string, string> = {

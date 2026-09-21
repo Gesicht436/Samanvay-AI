@@ -24,3 +24,20 @@ def test_privacy_filtering():
     
     filtered_item_same = strip_price(item_from_db.copy(), "IOCL")
     assert "price" in filtered_item_same
+
+
+def test_inventory_stats_structure():
+    from backend.app.models.base import SessionLocal
+    from backend.app.services.inventory_service import get_inventory_stats
+    db = SessionLocal()
+    try:
+        stats = get_inventory_stats(db, "OIL")
+        assert "total_items" in stats
+        assert "total_surplus" in stats
+        assert "capital_unlocked_cr" in stats
+        assert "cpse_breakdown" in stats
+        assert isinstance(stats["total_items"], int)
+        assert isinstance(stats["cpse_breakdown"], list)
+    finally:
+        db.close()
+

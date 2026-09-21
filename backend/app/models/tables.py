@@ -59,7 +59,17 @@ class InventoryItem(Base):
     schedule = Column(String(32), nullable=True)
     metallurgy = Column(String(64), nullable=True)
     facing_end = Column(String(32), nullable=True)
-    standard = Column(String(64), nullable=True)
+    standard = Column(String(64), nullable=True)  # International equivalent (API / ASME / ASTM)
+    indian_standard = Column(String(100), nullable=True, index=True)  # BIS / IS (e.g. IS 14846, IS 1239, IS 2062)
+    oil_std_spec = Column(String(100), nullable=True)  # OISD / EIL (e.g. OISD-RP-126 / EIL 6-44-0012)
+    oil_material_code = Column(String(32), nullable=True, index=True)  # OIL SAP 8-digit MESC (e.g. 02.14.05.21)
+    gem_category_id = Column(String(100), nullable=True, index=True)  # GeM Category (e.g. GeM/OIL/VALVES/...)
+    gem_product_id = Column(String(64), nullable=True)  # GeM Product ID
+    cppp_tender_ref = Column(String(100), nullable=True)  # CPPP Tender Ref (e.g. OIL/DUL/MAT/2026/0412)
+    make_in_india_class = Column(String(32), nullable=True, default="Class-I")  # Class-I, Class-II, Non-Local
+    local_content_percentage = Column(Numeric(5, 2), nullable=True, default=75.0)  # Make-in-India %
+    pressure_rating_bar = Column(Numeric(8, 2), nullable=True)  # PN rating in Bar (e.g. 16.0, 20.0, 50.0)
+    location_state = Column(String(64), nullable=True)  # Assam, Gujarat, Maharashtra, etc.
     properties = Column(JSONB, default={})  # Equipment-specific: trim, port_bore, seal_plan
     quantity = Column(Integer, nullable=False)
     unit_cost_inr = Column(Numeric(14, 2), nullable=False)

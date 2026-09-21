@@ -26,32 +26,25 @@ datasets/
 Internal line-item warehouse stock balances are operational assets proprietary to each enterprise (the foundational rationale for SIH 26099: Inter-CPSE Inventory Silos). However, technical equipment specifications, procurement indents, and tender awards are strictly governed by Indian public sector standards:
 
 1. **Government of India Portals & Registries:**
-   - **data.gov.in (MoPNG / PPAC):** Ministry of Petroleum and Natural Gas refinery infrastructure throughput and CPSE operational facility profiles.
-   - **Central Public Procurement Portal (CPPP - `eprocure.gov.in`):** Public tender documents and equipment technical indents from IOCL, ONGC, BPCL, HPCL, and GAIL.
-   - **Government e-Marketplace (GeM - `gem.gov.in`):** Public industrial product categories (`GeM/CAT/VALVES/...`, `GeM/CAT/PIPES/...`, `GeM/CAT/FLANGES/...`).
-   - **Indian GST HSN Classification:** Official Harmonized System of Nomenclature tariff codes:
-     - `8481`: Industrial Valves (Gate, Globe, Check, Ball, Butterfly, PSV)
-     - `7304`: Seamless Iron and Steel Tubes & Line Pipes
-     - `7307`: Pipe Fittings & ASME Flanges
-     - `7318`: Stud Bolts and Heavy Hex Nuts
-     - `8484`: Spiral Wound & Metallic Ring Joint Gaskets
-     - `8413`: Centrifugal Pump Spares (Impellers, Sleeves, Mechanical Seals)
+   - **Central Public Procurement Portal (CPPP - `eprocure.gov.in`):** Public tender documents, equipment technical indents, and tender references from OIL, NRL, IOCL, ONGC, BPCL, HPCL, and GAIL.
+   - **Government e-Marketplace (GeM - `gem.gov.in`):** Official industrial product categories (`GeM/CAT/FLANGES/...`, `GeM/CAT/VALVES/...`, `GeM/CAT/PIPES/...`).
+   - **Public Procurement (Preference to Make in India) Order (DPIIT):** Class-I local suppliers ($\ge 50\%$ local content), Class-II local suppliers ($20\% - 50\%$), and Non-Local suppliers ($< 20\%$).
+   - **Indian GST HSN Classification:** Official Harmonized System of Nomenclature tariff codes (`8481` Valves, `7304` Line Pipes, `7307` Flanges & Fittings, `7318` Fasteners, `8484` Gaskets, `8413` Pumps).
 
-2. **Strict Metallurgy & Physical Compatibility Matrix:**
-   Unlike unconstrained random mock data, every catalog row enforces real-world ASME / ASTM / API physical pairings:
-   - **Flanges (ASME B16.5):** ASTM A105, A350 LF2, A182 F304L, A182 F316L, A182 F51 Duplex, A182 F53 Super Duplex, A182 F11, A182 F22, Inconel 625.
-   - **Valves (API 600 / 602 / 609 / 6D / ASME B16.34):** Cast bodies ASTM A216 WCB, A352 LCB, A351 CF8M; Forged bodies ASTM A105, A350 LF2, A182 F316L; API 600 Trims 1 (13Cr), 5 (Stellite), 8 (13Cr/Stellite), 12 (316/Stellite), 16 (Full 316L).
-   - **Line Pipes (ASME B36.10M / API 5L PSL2):** ASTM A106 Gr. B, ASTM A333 Gr. 6, API 5L Gr. B / X52 / X60 / X65, ASTM A312 TP304L / TP316L.
-   - **Buttweld Fittings (ASME B16.9):** ASTM A234 WPB, ASTM A420 WPL6, ASTM A403 WP304L / WP316L.
-   - **Fasteners (ASME B18.2.1 / B18.2.2):** Matched pairs: ASTM A193 B7 + A194 2H, ASTM A193 B16 + A194 7, ASTM A320 L7 + A194 7, ASTM A193 B7M + A194 2HM (NACE MR0175 sour service), ASTM A193 B8M + A194 8M.
-   - **Gaskets (ASME B16.20):** Spiral Wound SS316L/Grafoil with solid inner ring, Octagonal RTJ Soft Iron / SS316.
+2. **Indian National & Oil Industry Technical Standards:**
+   - **Bureau of Indian Standards (BIS):** `IS 2062 Grade E250` (Structural Carbon Steel), `IS 14846 FG 200` (Sluice/Gate Valves), `IS 1239 Part 1 Heavy` (Mild Steel Tubes/Pipes), `IS 1367 Part 3 Class 8.8` (Threaded Fasteners), `IS 9890` (Ball Valves).
+   - **Oil Industry Standards:** `EIL Standard Specifications 6-44-0005` (Piping Material), `EIL 6-44-0012` (Valves), `OISD-RP-126` (Refinery Valve Selection & Operation), `OISD-STD-118` (Pipeline Safety Layouts).
+   - **OIL Material Codes (MESC):** Standardized 10-digit dot-delimited MESC classifications (e.g. `04.01.24.18.02` for Weld Neck Flanges, `02.10.15.82.11` for Gate Valves).
+   - **Dual Engineering Units:** Metric Primary with Imperial Parenthetical notation (e.g. `100 mm NB (4 IN)`, `50 Bar (PN 50) / Class 300#`).
 
 3. **Multi-CPSE Facility Allocations (5,000 Records):**
-   - **IOCL (30% - 1,500 records):** Panipat, Mathura, Koyali, Paradip, Barauni, Guwahati, Digboi, Haldia, Bongaigaon.
-   - **ONGC (30% - 1,500 records):** Hazira Gas Complex, Uran Complex, Ankleshwar Asset, Mumbai High Offshore Base, Rajahmundry, Mehsana, Karaikal.
-   - **BPCL (15% - 750 records):** Mumbai Mahul Refinery, Kochi Refinery, Bina Refinery.
-   - **HPCL (15% - 750 records):** Mumbai Refinery, Visakh Refinery, Bathinda Refinery (HMEL JV).
-   - **GAIL (10% - 500 records):** Pata Petrochemicals, Vijaipur Gas Complex, Vaghodia Compressor Station, Usar LPG Plant.
+   - **Oil India Limited (OIL - 30%, 1,500 records):** Central Materials Warehouse Duliajan (Assam), Moran Supply Base (Charaideo), Guwahati Pipeline HQ, Jodhpur Heavy Oil Base (Rajasthan), Kakinada KG Offshore Depot (AP).
+   - **Numaligarh Refinery Limited (NRL - 10%, 500 records):** Numaligarh Refinery Yard (Golaghat, Assam).
+   - **IOCL (20%, 1,000 records):** Panipat, Mathura, Koyali, Paradip, Barauni, Digboi, Bongaigaon.
+   - **ONGC (16%, 800 records):** Assam Asset Base (Nazira), Hazira Gas Complex, Uran Complex, Mumbai High Offshore Base.
+   - **BPCL (10%, 500 records):** Mumbai Mahul Refinery, Kochi Refinery, Bina Refinery.
+   - **HPCL (8%, 400 records):** Mumbai Refinery, Visakh Refinery.
+   - **GAIL (6%, 300 records):** Pata Petrochemicals, Vijaipur Gas Complex.
 
 ---
 
@@ -59,27 +52,38 @@ Internal line-item warehouse stock balances are operational assets proprietary t
 
 | Column | Type | Example | Description |
 |---|---|---|---|
-| `sku_code` | String | `IOCL-FLG-00001` | Enterprise SKU identifier |
-| `cpse_name` | String | `IOCL` | Public sector enterprise (`IOCL`, `ONGC`, `BPCL`, `HPCL`, `GAIL`) |
-| `depot_location` | String | `Panipat Refinery, Haryana` | Authentic plant or logistics supply base |
-| `raw_description` | String | `FLG WNRF 4IN 300# ASTM A105` | Uncurated ERP description in enterprise dialect |
-| `quantity` | Integer | `85` | Physical stock count on hand |
-| `unit_cost_inr` | Float | `6480.50` | Book value in INR based on metallurgy tiers |
-| `days_idle` | Integer | `420` | Operating age (`<90` active, `91-365` potential surplus, `>365` declared surplus) |
-| `po_no` | String | `IOCL/PO/2024/198246` | CPSE purchase order reference |
-| `heat_no` | String | `HT-B40495` | Steel mill ladle test heat identifier |
-| `standard` | String | `ASME B16.5` | Manufacturing & dimensional engineering standard |
-| `hsn_code` | String | `73072100` | Indian Customs / GST 8-digit HSN code |
-| `gem_category` | String | `GeM/CAT/FLANGES/ASME/B16.5` | Government e-Marketplace category |
-| `mesc_code` | String | `74.20.15.150.1` | MESC industrial classification code |
-| `cppp_tender_id` | String | `CPPP/2025/IOCL_688508` | Central Public Procurement Portal tender ID |
+| `sku_code` | String | `OIL-FLG-00142` | Unique enterprise SKU identifier |
+| `oil_material_code` | String | `04.01.24.18.02` | Standardized OIL MESC classification code |
+| `cpse` | String | `OIL` | Operating CPSE (`OIL`, `NRL`, `IOCL`, `ONGC`, `BPCL`, `HPCL`, `GAIL`) |
+| `depot_location` | String | `Central Materials Warehouse, Duliajan` | Physical storage depot or supply base |
+| `description` | String | `OIL MESC 04.01.24.18.02 FLG WNRF 100 MM NB (4IN) PN 50 (300#) IS 2062 E250...` | Full engineering catalog description |
+| `category` | String | `FLANGE` | Component category (`FLANGE`, `VALVE`, `PIPE`, `FASTENER`, `GASKET`, `ROTATING`) |
+| `metallurgy` | String | `IS 2062 Grade E250 / ASTM A105` | Material grade (BIS / ASTM dual spec) |
+| `nominal_bore_mm` | String | `100 mm NB` | Metric nominal diameter |
+| `pressure_rating_bar` | String | `50 Bar (PN 50)` | Metric pressure rating in Bar / PN |
+| `pressure_class` | String | `300#` | Imperial pressure class rating |
+| `indian_standard` | String | `IS 2062 Grade E250 / IS 6392` | Bureau of Indian Standards (BIS) reference |
+| `oil_std_spec` | String | `EIL 6-44-0005` | Oil Industry (OISD / EIL) engineering specification |
+| `gem_category_id` | String | `GeM/CAT/FLANGES/PN50/IS2062` | Government e-Marketplace product category |
+| `cppp_tender_ref` | String | `OIL/DUL/MAT/2026/0142` | Central Public Procurement Portal tender reference |
+| `make_in_india_class` | String | `Class-I` | DPIIT MII preference category (`Class-I`, `Class-II`, `Non-Local`) |
+| `local_content_percentage` | Float | `84.5` | Declared indigenous manufacturing content ($\%$) |
+| `quantity` | Integer | `18` | Available physical stock count |
+| `unit` | String | `EA` | Unit of measurement (`EA`, `MTR`, `SET`) |
+| `unit_cost_inr` | Float | `14250.00` | Commercial inventory book value in INR |
+| `days_idle` | Integer | `142` | Days non-moving in warehouse storage |
+| `heat_no` | String | `HT-Z64987` | Steel mill ladle test heat identifier |
 
 ---
 
-## 4. Regenerating the Dataset
+## 4. Regenerating & Reseeding the Dataset
 
-To re-run the procedural generator:
-
+To regenerate the 5,000-item catalog:
 ```bash
 uv run python datasets/generators/generate_datasets.py
+```
+
+To reseed the PostgreSQL database and Qdrant vector collection:
+```bash
+uv run python scripts/seed_database.py --force
 ```

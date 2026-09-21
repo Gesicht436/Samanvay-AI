@@ -19,8 +19,9 @@ tests/
 │   └── test_benchmarks.py    # Automated execution across 100+ golden benchmarks
 ├── ml/                       # Machine learning & NLP tests
 │   └── test_ner.py           # Dialect normalizer & DeBERTa slot tagger extraction
-└── unit/                     # Focused unit tests
+└── unit/                     # Focused unit tests (231 tests in full suite)
     ├── test_chemistry.py     # Carbon Equivalent, weldability & PREN formulas
+    ├── test_indian_procurement_alignment.py # BIS IS standards, OIL specs, GeM, CPPP & MII rules
     ├── test_logistics.py     # Haversine, road circuity & BEE CO2 calculation
     ├── test_normalizer.py    # NFKC unicode cleaning & abbreviation expansion
     ├── test_ocr_and_mtc.py   # Dual-path PDF parsing & MTC table extraction
@@ -32,7 +33,7 @@ tests/
 
 ## 2. Running Tests
 
-### Run All Tests:
+### Run All 231 Tests:
 ```bash
 pytest tests/ -v
 ```

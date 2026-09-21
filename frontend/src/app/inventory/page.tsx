@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
-import { Card, KpiCard, StatusBadge } from '@/components/ui';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, KpiCard } from '@/components/ui';
 import {
   Package,
   Radio,
   AlertTriangle,
-  Archive,
   Search,
   Filter,
   Download,
@@ -15,649 +14,656 @@ import {
   ArrowRight,
   Database,
   Building2,
-  Check,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  X,
 } from 'lucide-react';
 import { exportToCSV } from '@/lib/exportUtils';
 import { useTheme } from '@/components/ThemeProvider';
-import { CPSE_DEPOTS } from '@/lib/constants';
+import { api } from '@/lib/api';
 
 interface InventoryItem {
-  id: string;
+  id?: number | string;
   sku_code: string;
+  oil_material_code?: string;
+  cpse: string;
+  depot_id?: string;
+  depot_location?: string;
   description: string;
-  category: 'FLANGE' | 'VALVE' | 'PIPE' | 'FASTENER' | 'GASKET' | 'ROTATING';
-  metallurgy: string;
-  pressure_class: string;
-  size: string;
+  category: string;
+  item_type?: string;
+  metallurgy?: string;
+  pressure_class?: string;
+  pressure_rating_bar?: string;
+  size_nb_mm?: number | string;
+  nominal_bore_mm?: string;
+  schedule?: string;
+  standard?: string;
+  indian_standard?: string;
+  oil_std_spec?: string;
+  gem_category_id?: string;
+  cppp_tender_ref?: string;
+  make_in_india_class?: string;
+  local_content_percentage?: number;
   quantity: number;
   unit: string;
-  status: 'IN_STORAGE' | 'IDLE_SURPLUS' | 'TO_BE_CONSUMED' | 'ARCHIVED';
+  unit_cost_inr?: number;
+  total_value_inr?: number;
+  status: string;
   days_idle: number;
-  heat_no: string;
+  heat_no?: string;
 }
 
-const INITIAL_INVENTORY: InventoryItem[] = [
-  {
-    id: 'inv-001',
-    sku_code: 'PRT-8892',
-    description: 'Weld Neck Flange 4" Class 300 RF SCH 40',
-    category: 'FLANGE',
-    metallurgy: 'ASTM A105',
-    pressure_class: '300#',
-    size: '100 mm (4")',
-    quantity: 12,
-    unit: 'EA',
-    status: 'IDLE_SURPLUS',
-    days_idle: 142,
-    heat_no: 'HT-2025-20300',
-  },
-  {
-    id: 'inv-002',
-    sku_code: 'PRT-8893',
-    description: 'Globe Valve 2" Class 150 RF Bolted Bonnet',
-    category: 'VALVE',
-    metallurgy: 'ASTM A182 F316',
-    pressure_class: '150#',
-    size: '50 mm (2")',
-    quantity: 4,
-    unit: 'EA',
-    status: 'IN_STORAGE',
-    days_idle: 38,
-    heat_no: 'HT-SS-9912',
-  },
-  {
-    id: 'inv-003',
-    sku_code: 'PRT-9014',
-    description: 'Gate Valve 6" Class 600 RTJ Full Bore API 600',
-    category: 'VALVE',
-    metallurgy: 'ASTM A350 LF2',
-    pressure_class: '600#',
-    size: '150 mm (6")',
-    quantity: 6,
-    unit: 'EA',
-    status: 'IDLE_SURPLUS',
-    days_idle: 210,
-    heat_no: 'HT-LF2-9014',
-  },
-  {
-    id: 'inv-004',
-    sku_code: 'PRT-7721',
-    description: 'Seamless Pipe 6" SCH 80 BE API 5L PSL 2',
-    category: 'PIPE',
-    metallurgy: 'API 5L Gr. B',
-    pressure_class: 'SCH 80',
-    size: '150 mm (6")',
-    quantity: 48,
-    unit: 'MTR',
-    status: 'TO_BE_CONSUMED',
-    days_idle: 15,
-    heat_no: 'HT-P-55102',
-  },
-  {
-    id: 'inv-005',
-    sku_code: 'PRT-6610',
-    description: 'Stud Bolts 1-1/8" x 7" Heavy Hex with 2H Nuts',
-    category: 'FASTENER',
-    metallurgy: 'ASTM A193 B7 / A194 2H',
-    pressure_class: 'High Temp',
-    size: '1-1/8" x 7"',
-    quantity: 120,
-    unit: 'SET',
-    status: 'IDLE_SURPLUS',
-    days_idle: 180,
-    heat_no: 'HT-B7-8821',
-  },
-  {
-    id: 'inv-006',
-    sku_code: 'PRT-5512',
-    description: 'Spiral Wound Gasket 4" 300# 316L/Graphite with Inner Ring',
-    category: 'GASKET',
-    metallurgy: 'SS316L / Flexible Graphite',
-    pressure_class: '300#',
-    size: '100 mm (4")',
-    quantity: 35,
-    unit: 'EA',
-    status: 'IN_STORAGE',
-    days_idle: 45,
-    heat_no: 'HT-SWG-4401',
-  },
-  {
-    id: 'inv-007',
-    sku_code: 'PRT-4401',
-    description: 'Centrifugal Pump Impeller Cast SS316 API 610 OH2',
-    category: 'ROTATING',
-    metallurgy: 'ASTM A743 CF8M',
-    pressure_class: 'API 610 S-6',
-    size: '250 mm dia',
-    quantity: 2,
-    unit: 'EA',
-    status: 'ARCHIVED',
-    days_idle: 340,
-    heat_no: 'HT-ROT-1092',
-  },
-];
+const CATEGORIES = ['ALL', 'FLANGE', 'VALVE', 'PIPE', 'FASTENER', 'GASKET', 'ROTATING'];
+const STATUSES = ['ALL', 'IN_STORAGE', 'IDLE_SURPLUS', 'TO_BE_CONSUMED', 'ARCHIVED'];
+const CPSE_LIST = ['ALL', 'OIL', 'IOCL', 'ONGC', 'BPCL', 'HPCL', 'GAIL', 'NRL'];
 
-interface HITLCase {
-  id: string;
-  sourceSku: string;
-  physicalPart: {
-    description: string;
-    metallurgy: string;
-    rating: string;
-    schedule: string;
-    facing: string;
-  };
-  extractedMTC: {
-    filename: string;
-    certificate_no: string;
-    description: string;
-    metallurgy: string;
-    rating: string;
-    schedule: string;
-    facing: string;
-    confidence: number;
-    varianceReason: string;
-  };
-}
-
-const HITL_CASES: HITLCase[] = [
-  {
-    id: 'hitl-01',
-    sourceSku: 'PRT-8892',
-    physicalPart: {
-      description: 'Weld Neck Flange 4" 300# RF SCH 40',
-      metallurgy: 'ASTM A105',
-      rating: 'Class 300#',
-      schedule: 'SCH 40',
-      facing: 'RF (Raised Face)',
-    },
-    extractedMTC: {
-      filename: 'MTC_L&T_Hazira_Scan_Smudged.pdf',
-      certificate_no: 'MTC/2026/5516',
-      description: 'WELD NECK FLG 4IN 300LBS RF SCH40 NORM',
-      metallurgy: 'ASTM A105N (Normalized)',
-      rating: 'Class 300#',
-      schedule: 'SCH 40',
-      facing: 'RF (Raised Face)',
-      confidence: 88.6,
-      varianceReason: 'Grade A105N is a superior heat-treated equivalent of A105. Zero tolerance dimensions match.',
-    },
-  },
-  {
-    id: 'hitl-02',
-    sourceSku: 'PRT-9014',
-    physicalPart: {
-      description: 'Gate Valve 6" 600# RTJ API 600',
-      metallurgy: 'ASTM A216 WCB',
-      rating: 'Class 600#',
-      schedule: 'SCH 80',
-      facing: 'RTJ (Ring Type Joint)',
-    },
-    extractedMTC: {
-      filename: 'BHEL_GateValve_OCR_Scan.pdf',
-      certificate_no: 'BHEL/QA/2026/8941',
-      description: 'GATE VALVE 6" 600# RTJ BODY A350 LF2',
-      metallurgy: 'ASTM A350 LF2 (Cryogenic)',
-      rating: 'Class 600#',
-      schedule: 'SCH 80',
-      facing: 'RTJ',
-      confidence: 91.2,
-      varianceReason: 'A350 LF2 exceeds A216 WCB impact toughness. Safe low-temp upgrade for general hydrocarbon duty.',
-    },
-  },
-];
-
-export default function InventoryPage() {
+export default function InventoryLedgerPage() {
   const { cpse } = useTheme();
-  const currentDepot = CPSE_DEPOTS.find((d) => d.id === cpse) || CPSE_DEPOTS[0];
+  const [activeTab, setActiveTab] = useState<'LEDGER' | 'HITL'>('LEDGER');
 
-  const [activeTab, setActiveTab] = useState<'ALL' | 'SURPLUS' | 'HITL' | 'ARCHIVED'>('ALL');
-  const [inventory, setInventory] = useState<InventoryItem[]>(INITIAL_INVENTORY);
-  const [hitlList, setHitlList] = useState<HITLCase[]>(HITL_CASES);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('ALL');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // Inventory Table State
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [totalItems, setTotalItems] = useState<number>(0);
+  const [page, setPage] = useState<number>(1);
+  const pageSize = 25;
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  // Filters
+  const [selectedCpse, setSelectedCpse] = useState<string>('ALL');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const handleToggleSurplus = (id: string) => {
-    setInventory((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const newStatus = item.status === 'IDLE_SURPLUS' ? 'IN_STORAGE' : 'IDLE_SURPLUS';
-          showToast(`Updated ${item.sku_code} status to ${newStatus}`);
-          return { ...item, status: newStatus };
-        }
-        return item;
-      })
-    );
-  };
+  // HITL Queue State
+  const [hitlQueue, setHitlQueue] = useState<InventoryItem[]>([]);
+  const [hitlLoading, setHitlLoading] = useState<boolean>(false);
 
-  const handleApproveHITL = (hitlId: string) => {
-    const item = hitlList.find((h) => h.id === hitlId);
-    if (!item) return;
+  // Modal / Detail State
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [transitioningSku, setTransitioningSku] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-    setHitlList((prev) => prev.filter((h) => h.id !== hitlId));
-    showToast(`Approved & Merged ${item.sourceSku} into Plant Ledger.`);
-  };
+  // Fetch Inventory from Live Backend
+  const fetchInventory = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const skip = (page - 1) * pageSize;
+      const res = await api.getInventory({
+        cpse: selectedCpse !== 'ALL' ? selectedCpse : undefined,
+        category: selectedCategory !== 'ALL' ? selectedCategory : undefined,
+        status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
+        skip,
+        limit: pageSize,
+      });
 
-  const handleRejectHITL = (hitlId: string) => {
-    setHitlList((prev) => prev.filter((h) => h.id !== hitlId));
-    showToast(`Rejected candidate match for ${hitlId}. Logged in Audit Trail.`);
-  };
-
-  const filteredItems = useMemo(() => {
-    return inventory.filter((item) => {
-      // Tab filter
-      if (activeTab === 'SURPLUS' && item.status !== 'IDLE_SURPLUS') return false;
-      if (activeTab === 'ARCHIVED' && item.status !== 'ARCHIVED') return false;
-
-      // Category filter
-      if (categoryFilter !== 'ALL' && item.category !== categoryFilter) return false;
-
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        return (
-          item.sku_code.toLowerCase().includes(q) ||
-          item.description.toLowerCase().includes(q) ||
-          item.metallurgy.toLowerCase().includes(q) ||
-          item.heat_no.toLowerCase().includes(q)
-        );
+      if (res && Array.isArray(res.items)) {
+        setItems(res.items);
+        setTotalItems(res.total || res.items.length);
+      } else if (Array.isArray(res)) {
+        setItems(res);
+        setTotalItems(res.length);
+      } else {
+        setItems([]);
+        setTotalItems(0);
       }
-      return true;
-    });
-  }, [inventory, activeTab, categoryFilter, searchQuery]);
-
-  const handleExport = () => {
-    exportToCSV(`plant_ledger_${currentDepot.city.toLowerCase()}.csv`, filteredItems);
-    showToast('Exported inventory catalog (RFC 4180 CSV).');
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch inventory from backend');
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Fetch HITL Queue from Live Backend
+  const fetchHitl = async () => {
+    setHitlLoading(true);
+    try {
+      const res: any = await api.getHitlQueue();
+      if (Array.isArray(res)) {
+        setHitlQueue(res);
+      } else if (res && Array.isArray(res.items)) {
+        setHitlQueue(res.items);
+      } else {
+        setHitlQueue([]);
+      }
+    } catch {
+      setHitlQueue([]);
+    } finally {
+      setHitlLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'LEDGER') {
+      fetchInventory();
+    } else {
+      fetchHitl();
+    }
+  }, [page, selectedCpse, selectedCategory, selectedStatus, activeTab]);
+
+  // Client-side text filter on current page items
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+    const q = searchQuery.toLowerCase();
+    return items.filter(
+      (item) =>
+        item.sku_code?.toLowerCase().includes(q) ||
+        item.description?.toLowerCase().includes(q) ||
+        item.oil_material_code?.toLowerCase().includes(q) ||
+        item.indian_standard?.toLowerCase().includes(q) ||
+        item.standard?.toLowerCase().includes(q) ||
+        item.heat_no?.toLowerCase().includes(q)
+    );
+  }, [items, searchQuery]);
+
+  // Status Change handler
+  const handleUpdateStatus = async (skuCode: string, newStatus: string) => {
+    setTransitioningSku(skuCode);
+    try {
+      await api.updateItemStatus(skuCode, {
+        status: newStatus,
+        reason: `Status updated via web console to ${newStatus}`,
+        officer: `OFFICER_${cpse}`,
+      });
+      setActionSuccess(`SKU ${skuCode} transitioned to ${newStatus}`);
+      setTimeout(() => setActionSuccess(null), 4000);
+      if (activeTab === 'LEDGER') {
+        fetchInventory();
+      } else {
+        fetchHitl();
+      }
+      if (selectedItem?.sku_code === skuCode) {
+        setSelectedItem((prev) => (prev ? { ...prev, status: newStatus } : null));
+      }
+    } catch (err: any) {
+      alert(`Status transition failed: ${err.message}`);
+    } finally {
+      setTransitioningSku(null);
+    }
+  };
+
+  // Export to CSV
+  const handleExportCSV = () => {
+    const dataToExport = activeTab === 'LEDGER' ? filteredItems : hitlQueue;
+    if (dataToExport.length === 0) {
+      alert('No data available to export.');
+      return;
+    }
+    const flat = dataToExport.map((item) => ({
+      SKU_Code: item.sku_code,
+      OIL_Material_Code: item.oil_material_code || '',
+      CPSE: item.cpse,
+      Depot: item.depot_id || item.depot_location || '',
+      Description: item.description,
+      Category: item.category,
+      Metallurgy: item.metallurgy || '',
+      Size_NB_mm: item.nominal_bore_mm || item.size_nb_mm || '',
+      Pressure_Rating: item.pressure_rating_bar || item.pressure_class || '',
+      Indian_Standard: item.indian_standard || '',
+      OIL_Std_Spec: item.oil_std_spec || '',
+      CPPP_Tender_Ref: item.cppp_tender_ref || '',
+      MII_Class: item.make_in_india_class || '',
+      Local_Content_Pct: item.local_content_percentage ?? '',
+      Quantity: item.quantity,
+      Unit: item.unit,
+      Status: item.status,
+      Days_Idle: item.days_idle,
+      Heat_Number: item.heat_no || '',
+    }));
+    exportToCSV(flat, `samanvay_inventory_${activeTab.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`);
+  };
+
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   return (
-    <div className="flex flex-col h-full space-y-5 max-w-[1600px] mx-auto">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 px-4 py-2.5 rounded-lg shadow-xl text-xs font-mono font-semibold flex items-center gap-2 border border-slate-700 animate-in fade-in slide-in-from-bottom-2">
-          <CheckCircle2 size={16} className="text-emerald-400" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+    <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
-              <Building2 size={12} /> {currentDepot.name}
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+              STOCK LEDGER
             </span>
-            <span className="text-xs font-mono text-slate-500">Node ID: {currentDepot.id}</span>
+            <span className="text-xs font-mono text-slate-500">
+              Live Database: {totalItems.toLocaleString('en-IN')} records
+            </span>
           </div>
-          <h1 className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-100 tracking-tight mt-1">
-            Plant Stock Ledger & Surplus Control
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+            Inter-CPSE Inventory & Surplus Ledger
           </h1>
-          <p className="text-xs font-mono text-slate-500 mt-0.5">
-            Real-time material status, broadcasted surplus controls, and human-in-the-loop verification
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+            Full technical catalog aligned with BIS, OISD, EIL, GeM, and CPPP standards.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-md border border-slate-300 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-800">
+            <button
+              onClick={() => {
+                setActiveTab('LEDGER');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-colors ${
+                activeTab === 'LEDGER'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              Master Catalog ({totalItems})
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('HITL');
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-colors flex items-center gap-1.5 ${
+                activeTab === 'HITL'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <AlertTriangle size={12} className="text-amber-500" />
+              <span>HITL Queue ({hitlQueue.length})</span>
+            </button>
+          </div>
+
           <button
-            onClick={handleExport}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-mono font-semibold flex items-center gap-2 transition-colors border border-slate-200 dark:border-slate-700"
+            onClick={activeTab === 'LEDGER' ? fetchInventory : fetchHitl}
+            disabled={loading || hitlLoading}
+            className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded transition-colors"
+            title="Refresh Data"
           >
-            <Download size={14} /> Export CSV / SAP MM
+            <RefreshCw size={14} className={loading || hitlLoading ? 'animate-spin' : ''} />
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="px-3 py-2 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded text-xs font-mono font-semibold flex items-center gap-1.5 transition-colors"
+          >
+            <Download size={13} />
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
 
-      {/* Metric Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          title="Total Cataloged Stock"
-          value="1,420"
-          unit="Line Items"
-          delta="+24 this month"
-          isPositive={true}
-          icon={Package}
-        />
-        <KpiCard
-          title="Broadcasted Surplus"
-          value={inventory.filter((i) => i.status === 'IDLE_SURPLUS').length}
-          unit="Active on Radar"
-          delta="Broadcasting to 5 PSUs"
-          isPositive={true}
-          icon={Radio}
-        />
-        <KpiCard
-          title="HITL Triage Queue"
-          value={hitlList.length}
-          unit="Pending Sign-off"
-          delta={hitlList.length > 0 ? "Requires review" : "Queue clear"}
-          isPositive={hitlList.length === 0}
-          icon={AlertTriangle}
-        />
-        <KpiCard
-          title="Idle Capital Unlocked"
-          value={`₹${currentDepot.unlockedValueCr} Cr`}
-          unit="Book Value"
-          delta="+8.4% recovered"
-          isPositive={true}
-          icon={Database}
-        />
-      </div>
+      {actionSuccess && (
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-mono rounded-lg flex items-center justify-between">
+          <span>{actionSuccess}</span>
+          <button onClick={() => setActionSuccess(null)} className="text-slate-500 hover:text-slate-700">&times;</button>
+        </div>
+      )}
 
-      {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2 rounded-xl shadow-xs">
-        <button
-          onClick={() => setActiveTab('ALL')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
-            activeTab === 'ALL'
-              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          All Inventory Stock ({inventory.length})
-        </button>
+      {error && (
+        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-mono rounded-lg flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={fetchInventory} className="underline font-semibold">Retry</button>
+        </div>
+      )}
 
-        <button
-          onClick={() => setActiveTab('SURPLUS')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeTab === 'SURPLUS'
-              ? 'bg-emerald-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Radio size={12} className={activeTab === 'SURPLUS' ? 'animate-pulse' : ''} />
-          Broadcasted Surplus ({inventory.filter((i) => i.status === 'IDLE_SURPLUS').length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('HITL')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeTab === 'HITL'
-              ? 'bg-amber-500 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <AlertTriangle size={12} />
-          HITL Triage Queue
-          {hitlList.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px]">
-              {hitlList.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('ARCHIVED')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${
-            activeTab === 'ARCHIVED'
-              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          Consumed / Archived
-        </button>
-      </div>
-
-      {/* Main Tab Views */}
-      {activeTab === 'HITL' ? (
-        /* HITL Diff Triage View */
-        <div className="space-y-4">
-          <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs font-mono text-amber-900 dark:text-amber-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle size={18} className="text-amber-600" />
-              <span>
-                <strong>Human-in-the-Loop Verification Queue:</strong> Borderline algorithmic predictions (80%–94%)
-                and superior metallurgical upgrades requiring materials engineer sign-off.
-              </span>
-            </div>
-            <span className="font-bold">{hitlList.length} Pending Review</span>
+      {/* Filter & Search Bar */}
+      <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[300px]">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search SKU, OIL material code, standard, heat no..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 text-xs"
+            />
           </div>
 
-          {hitlList.length === 0 ? (
-            <Card className="p-12 text-center text-slate-500 font-mono text-sm">
-              <CheckCircle2 size={32} className="mx-auto text-emerald-500 mb-2" />
-              <p className="font-bold text-slate-800 dark:text-slate-200">HITL Triage Queue is Clear</p>
-              <p className="text-xs text-slate-400 mt-1">All algorithmic predictions and MTC certifications have been validated.</p>
-            </Card>
-          ) : (
-            hitlList.map((caseItem) => (
-              <Card
-                key={caseItem.id}
-                className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4"
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">CPSE:</span>
+            <select
+              value={selectedCpse}
+              onChange={(e) => {
+                setSelectedCpse(e.target.value);
+                setPage(1);
+              }}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
+            >
+              {CPSE_LIST.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">Category:</span>
+            <select
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setPage(1);
+              }}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
+            >
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500">Status:</span>
+            <select
+              value={selectedStatus}
+              onChange={(e) => {
+                setSelectedStatus(e.target.value);
+                setPage(1);
+              }}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="text-slate-500 text-[11px]">
+          Showing {filteredItems.length} records · Page {page} of {totalPages}
+        </div>
+      </div>
+
+      {/* Main Table */}
+      <Card className="p-0 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs font-mono border-collapse">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
+                <th className="py-2.5 px-3 font-semibold">SKU / MESC CODE</th>
+                <th className="py-2.5 px-3 font-semibold">CPSE / DEPOT</th>
+                <th className="py-2.5 px-3 font-semibold">DESCRIPTION</th>
+                <th className="py-2.5 px-3 font-semibold">STANDARDS & MII</th>
+                <th className="py-2.5 px-3 font-semibold text-right">QTY</th>
+                <th className="py-2.5 px-3 font-semibold text-center">IDLE</th>
+                <th className="py-2.5 px-3 font-semibold text-center">STATUS</th>
+                <th className="py-2.5 px-3 font-semibold text-right">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              {loading && activeTab === 'LEDGER' ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-slate-500">
+                    <RefreshCw className="animate-spin h-5 w-5 mx-auto mb-2 text-emerald-500" />
+                    <span>Loading stock records from PostgreSQL...</span>
+                  </td>
+                </tr>
+              ) : filteredItems.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-slate-500">
+                    No matching inventory items found.
+                  </td>
+                </tr>
+              ) : (
+                filteredItems.map((item) => (
+                  <tr
+                    key={item.sku_code}
+                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    <td className="py-2.5 px-3">
+                      <div className="font-bold text-slate-900 dark:text-slate-100">{item.sku_code}</div>
+                      {item.oil_material_code && (
+                        <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                          MESC: {item.oil_material_code}
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="py-2.5 px-3">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">{item.cpse}</span>
+                      <div className="text-[11px] text-slate-500 truncate max-w-[140px]">
+                        {item.depot_location || item.depot_id || 'Main Yard'}
+                      </div>
+                    </td>
+
+                    <td className="py-2.5 px-3 max-w-[340px]">
+                      <div className="truncate text-slate-800 dark:text-slate-200 font-medium" title={item.description}>
+                        {item.description}
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {item.metallurgy} · {item.nominal_bore_mm || `${item.size_nb_mm || ''} mm`} · {item.pressure_rating_bar || item.pressure_class}
+                      </div>
+                    </td>
+
+                    <td className="py-2.5 px-3 max-w-[220px]">
+                      <div className="text-[11px] text-slate-700 dark:text-slate-300 truncate" title={item.indian_standard || item.standard}>
+                        {item.indian_standard || item.standard || 'IS / ASME'}
+                      </div>
+                      <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                        {item.make_in_india_class && (
+                          <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                            {item.make_in_india_class} ({item.local_content_percentage}%)
+                          </span>
+                        )}
+                        {item.cppp_tender_ref && (
+                          <span className="text-slate-400 truncate" title={item.cppp_tender_ref}>
+                            CPPP: {item.cppp_tender_ref}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="py-2.5 px-3 text-right font-semibold text-slate-900 dark:text-slate-100">
+                      {item.quantity} <span className="text-[10px] text-slate-500">{item.unit}</span>
+                    </td>
+
+                    <td className="py-2.5 px-3 text-center">
+                      <span
+                        className={`text-[11px] font-semibold ${
+                          item.days_idle >= 90
+                            ? 'text-amber-600 dark:text-amber-400 font-bold'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        {item.days_idle}d
+                      </span>
+                    </td>
+
+                    <td className="py-2.5 px-3 text-center">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          item.status === 'IDLE_SURPLUS'
+                            ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                            : item.status === 'TO_BE_CONSUMED'
+                            ? 'bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                    </td>
+
+                    <td className="py-2.5 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setSelectedItem(item)}
+                          className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px] transition-colors"
+                          title="View Full Technical Specifications"
+                        >
+                          Details
+                        </button>
+                        {item.status !== 'IDLE_SURPLUS' ? (
+                          <button
+                            onClick={() => handleUpdateStatus(item.sku_code, 'IDLE_SURPLUS')}
+                            disabled={transitioningSku === item.sku_code}
+                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold transition-colors disabled:opacity-50"
+                            title="Declare surplus to sister CPSEs"
+                          >
+                            Broadcast
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleUpdateStatus(item.sku_code, 'TO_BE_CONSUMED')}
+                            disabled={transitioningSku === item.sku_code}
+                            className="px-2 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded text-[11px] transition-colors disabled:opacity-50"
+                            title="Withdraw surplus declaration"
+                          >
+                            Retract
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Bar */}
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-mono bg-slate-50/50 dark:bg-slate-850">
+          <span className="text-slate-500">
+            Page {page} of {totalPages} ({totalItems.toLocaleString('en-IN')} total items)
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1 || loading}
+              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors flex items-center gap-1"
+            >
+              <ChevronLeft size={14} /> Previous
+            </button>
+            <span className="px-2 font-bold text-slate-900 dark:text-slate-100">{page}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || loading}
+              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors flex items-center gap-1"
+            >
+              Next <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Item Detail Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold font-mono text-slate-900 dark:text-white">
+                  Technical Specification: {selectedItem.sku_code}
+                </h3>
+                <p className="text-xs font-mono text-slate-500">
+                  {selectedItem.cpse} · {selectedItem.depot_location || selectedItem.depot_id}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-mono font-bold text-sm text-slate-900 dark:text-slate-100">
-                      Triage Item: {caseItem.sourceSku}
-                    </span>
-                    <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-mono font-bold rounded">
-                      Confidence: {caseItem.extractedMTC.confidence}%
-                    </span>
-                  </div>
-                  <span className="text-xs font-mono text-slate-400">
-                    Source Document: {caseItem.extractedMTC.filename}
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs font-mono flex-1">
+              <div>
+                <span className="text-slate-400 block mb-0.5">Description</span>
+                <p className="text-slate-900 dark:text-slate-100 font-medium bg-slate-50 dark:bg-slate-800 p-2.5 rounded border border-slate-200 dark:border-slate-700">
+                  {selectedItem.description}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">OIL Material Code</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.oil_material_code || '—'}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">Category</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.category}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">Metallurgy</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.metallurgy || '—'}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">Nominal Bore (NB)</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.nominal_bore_mm || `${selectedItem.size_nb_mm || ''} mm`}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">Pressure Class / Bar</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.pressure_rating_bar || selectedItem.pressure_class || '—'}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">Quantity</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.quantity} {selectedItem.unit}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">BIS Indian Standard</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.indian_standard || '—'}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">OIL / Industry Spec</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.oil_std_spec || selectedItem.standard || '—'}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">Make In India (MII) Class</span>
+                  <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                    {selectedItem.make_in_india_class || 'Class-I'} ({selectedItem.local_content_percentage ?? 80}%)
                   </span>
                 </div>
-
-                {/* Diff Visualizer Columns */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Left: Plant Catalog Master */}
-                  <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 space-y-2">
-                    <div className="flex items-center justify-between text-xs font-mono text-slate-500 font-bold">
-                      <span>PLANT MATERIAL MASTER (PHYSICAL PART)</span>
-                      <span className="text-[10px] bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded">ORIGINAL</span>
-                    </div>
-                    <p className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">
-                      {caseItem.physicalPart.description}
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-slate-200 dark:border-slate-700">
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">GRADE:</span>
-                        <span className="font-semibold">{caseItem.physicalPart.metallurgy}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">PRESSURE CLASS:</span>
-                        <span className="font-semibold">{caseItem.physicalPart.rating}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">FACING:</span>
-                        <span className="font-semibold">{caseItem.physicalPart.facing}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">SCHEDULE:</span>
-                        <span className="font-semibold">{caseItem.physicalPart.schedule}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right: Extracted MTC Certificate Candidate */}
-                  <div className="p-4 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-2">
-                    <div className="flex items-center justify-between text-xs font-mono text-emerald-800 dark:text-emerald-300 font-bold">
-                      <span>EXTRACTED MTC INTELLIGENCE (CANDIDATE)</span>
-                      <span className="text-[10px] bg-emerald-200 dark:bg-emerald-900 px-1.5 py-0.5 rounded font-mono">
-                        EN 10204 3.1
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">
-                      {caseItem.extractedMTC.description}
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-emerald-200 dark:border-emerald-800">
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">GRADE:</span>
-                        <span className="font-semibold text-emerald-700 dark:text-emerald-300">
-                          {caseItem.extractedMTC.metallurgy}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">PRESSURE CLASS:</span>
-                        <span className="font-semibold">{caseItem.extractedMTC.rating}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">FACING:</span>
-                        <span className="font-semibold">{caseItem.extractedMTC.facing}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">SCHEDULE:</span>
-                        <span className="font-semibold">{caseItem.extractedMTC.schedule}</span>
-                      </div>
-                    </div>
-                  </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">CPPP Tender Ref</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.cppp_tender_ref || '—'}</span>
                 </div>
+              </div>
 
-                {/* Algorithmic Variance Justification */}
-                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg text-xs font-mono text-slate-600 dark:text-slate-300 flex items-start gap-2">
-                  <CheckCircle2 size={16} className="text-emerald-500 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="font-bold">Automated Safety Rule Evaluation: </span>
-                    <span>{caseItem.extractedMTC.varianceReason}</span>
-                  </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">Heat Number</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.heat_no || '—'}</span>
                 </div>
-
-                {/* Actions */}
-                <div className="flex justify-end gap-3 pt-2">
-                  <button
-                    onClick={() => handleRejectHITL(caseItem.id)}
-                    className="px-4 py-2 border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-mono font-bold transition-colors flex items-center gap-1.5"
-                  >
-                    <XCircle size={14} /> Reject Prediction
-                  </button>
-
-                  <button
-                    onClick={() => handleApproveHITL(caseItem.id)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold transition-all shadow-xs flex items-center gap-1.5"
-                  >
-                    <Check size={14} /> Approve & Merge into Ledger
-                  </button>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">Days Idle</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.days_idle} days</span>
                 </div>
-              </Card>
-            ))
-          )}
-        </div>
-      ) : (
-        /* Standard Catalog Table View */
-        <div className="space-y-4">
-          {/* Table Filters & Search */}
-          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter by SKU, description, metallurgy..."
-                className="w-full pl-9 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-400 block">Current Status</span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">{selectedItem.status}</span>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-                <Filter size={12} /> Category:
-              </span>
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex gap-2">
+                {selectedItem.status !== 'IDLE_SURPLUS' ? (
+                  <button
+                    onClick={() => handleUpdateStatus(selectedItem.sku_code, 'IDLE_SURPLUS')}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-mono font-semibold"
+                  >
+                    Broadcast as Surplus
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleUpdateStatus(selectedItem.sku_code, 'TO_BE_CONSUMED')}
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs font-mono font-semibold"
+                  >
+                    Retract Surplus Status
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedItem(null)}
+                className="px-4 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-mono"
               >
-                <option value="ALL">All Categories</option>
-                <option value="FLANGE">Flanges</option>
-                <option value="VALVE">Valves</option>
-                <option value="PIPE">Piping</option>
-                <option value="FASTENER">Fasteners</option>
-                <option value="GASKET">Gaskets</option>
-                <option value="ROTATING">Rotating</option>
-              </select>
+                Close
+              </button>
             </div>
           </div>
-
-          {/* High-Density Ledger Table */}
-          <Card className="p-0 overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left compact-table border-collapse">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 font-mono text-[11px] uppercase tracking-wider">
-                  <tr>
-                    <th className="p-3">SKU Code</th>
-                    <th className="p-3">Material Description</th>
-                    <th className="p-3">Metallurgy & Grade</th>
-                    <th className="p-3">Rating & Size</th>
-                    <th className="p-3 text-right">Stock Qty</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Surplus Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs font-mono">
-                  {filteredItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-400">
-                        No inventory items matching filter criteria.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredItems.map((item) => (
-                      <tr
-                        key={item.id}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
-                      >
-                        <td className="p-3 font-bold text-slate-900 dark:text-slate-100">
-                          {item.sku_code}
-                          <span className="block text-[10px] text-slate-400 font-normal">
-                            Heat: {item.heat_no}
-                          </span>
-                        </td>
-                        <td className="p-3 text-slate-800 dark:text-slate-200 font-sans font-medium max-w-xs">
-                          {item.description}
-                          <span className="block font-mono text-[10px] text-slate-400">
-                            Idle duration: {item.days_idle} days
-                          </span>
-                        </td>
-                        <td className="p-3 text-slate-700 dark:text-slate-300 font-semibold">
-                          {item.metallurgy}
-                        </td>
-                        <td className="p-3 text-slate-600 dark:text-slate-400">
-                          {item.pressure_class} · {item.size}
-                        </td>
-                        <td className="p-3 text-right font-bold text-slate-900 dark:text-slate-100">
-                          {item.quantity} {item.unit}
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded-full border ${
-                              item.status === 'IDLE_SURPLUS'
-                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                : item.status === 'IN_STORAGE'
-                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
-                                : item.status === 'TO_BE_CONSUMED'
-                                ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
-                                : 'bg-gray-100 text-gray-700 border-gray-300'
-                            }`}
-                          >
-                            {item.status.replace('_', ' ')}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            onClick={() => handleToggleSurplus(item.id)}
-                            className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold transition-colors ${
-                              item.status === 'IDLE_SURPLUS'
-                                ? 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
-                                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                            }`}
-                          >
-                            {item.status === 'IDLE_SURPLUS' ? 'Un-broadcast' : 'Broadcast'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
         </div>
       )}
     </div>

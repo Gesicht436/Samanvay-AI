@@ -100,6 +100,7 @@ Samanvay-AI/
 | **Scripts & Workers** | [scripts/README.md](scripts/README.md) | Standalone CDC worker, database seeder, live API verification smoke test |
 | **Datasets Root** | [datasets/README.md](datasets/README.md) | Master inventory catalog (5,000 items), golden benchmarks, OCR payloads |
 | **Dataset Generators** | [datasets/generators/README.md](datasets/generators/README.md) | Procedural synthetic ERP generator with realistic dialect noise and 15% sparsity |
+| **Frontend Portal** | [frontend/README.md](frontend/README.md) | Next.js 16 App Router, React 19, zero-mock live API integration, light/dark mode |
 | **Test Suite Root** | [tests/README.md](tests/README.md) | Test architecture, test running instructions, coverage reporting |
 | **API Tests** | [tests/api/README.md](tests/api/README.md) | FastAPI TestClient integration tests for all 6 router controllers |
 | **Integration Tests** | [tests/integration/README.md](tests/integration/README.md) | Parameterized validation against 150 ground-truth Golden Benchmarks |

@@ -26,13 +26,22 @@ class GraphSeeder:
             session.run("MATCH (n) DETACH DELETE n")
 
     def seed_cpses(self):
-        cpses = ["IOCL", "ONGC", "BPCL", "HPCL", "GAIL"]
+        cpses = ["OIL", "NRL", "IOCL", "ONGC", "BPCL", "HPCL", "GAIL"]
         with self.driver.session() as session:
             for cpse in cpses:
                 session.run("MERGE (c:CPSE {name: $name})", name=cpse)
 
     def seed_depots(self):
         depots = [
+            {"cpse": "OIL", "name": "OIL Duliajan", "lat": 27.3575, "lon": 95.3188},
+            {"cpse": "OIL", "name": "OIL Moran", "lat": 27.1856, "lon": 94.9282},
+            {"cpse": "OIL", "name": "OIL Digboi", "lat": 27.3826, "lon": 95.6262},
+            {"cpse": "OIL", "name": "OIL Guwahati", "lat": 26.1855, "lon": 91.8214},
+            {"cpse": "OIL", "name": "OIL Jorhat", "lat": 26.7509, "lon": 94.2037},
+            {"cpse": "OIL", "name": "OIL Jodhpur", "lat": 26.2389, "lon": 73.0243},
+            {"cpse": "OIL", "name": "OIL Kakinada", "lat": 16.9891, "lon": 82.2475},
+            {"cpse": "NRL", "name": "NRL Numaligarh", "lat": 26.5982, "lon": 93.7543},
+            {"cpse": "ONGC", "name": "ONGC Nazira", "lat": 26.9183, "lon": 94.7342},
             {"cpse": "IOCL", "name": "Panipat", "lat": 29.3909, "lon": 76.9635},
             {"cpse": "IOCL", "name": "Mathura", "lat": 27.4924, "lon": 77.6737},
             {"cpse": "IOCL", "name": "Koyali", "lat": 22.3217, "lon": 73.1384},
