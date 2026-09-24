@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     golden_benchmarks_path: str = "datasets/golden_benchmarks.json"
     ocr_payloads_path: str = "datasets/ocr_payloads.json"
 
+    # ── JWT Authentication & RBAC ────────────────────────────────
+    jwt_secret_key: str = Field(
+        default="samanvay_ai_sovereign_mopng_oil_jwt_secret_key_2026_super_secure_sha256",
+        alias="JWT_SECRET_KEY",
+    )
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60 * 24  # 24 Hours
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

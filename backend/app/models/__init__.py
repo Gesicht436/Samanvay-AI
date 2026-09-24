@@ -10,6 +10,8 @@ from backend.app.models.tables import (
     SovereignAuditLedger,
     ActiveLearningFeedback,
     IdempotencyKey,
+    CdcOutbox,
+    User,
 )
 
 __all__ = [
@@ -26,4 +28,6 @@ __all__ = [
     "SovereignAuditLedger",
     "ActiveLearningFeedback",
     "IdempotencyKey",
+    "CdcOutbox",
+    "User",
 ]

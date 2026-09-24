@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { api } from '@/lib/api';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 interface SearchResultItem {
   id?: string;
@@ -183,7 +184,8 @@ export default function SurplusDiscoveryPage() {
   };
 
   return (
-    <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
+    <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
+      <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
       {/* Top Banner */}
       <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -513,6 +515,7 @@ export default function SurplusDiscoveryPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

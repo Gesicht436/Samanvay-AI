@@ -39,3 +39,43 @@ export interface AuditLogEntry {
   user_id: string;
   details: string;
 }
+
+export interface User {
+  id: number;
+  username: string;
+  full_name: string;
+  email?: string;
+  role: string;
+  cpse: string;
+  depot_id: string;
+  is_active: boolean;
+  is_approved: boolean;
+}
+
+export interface SeedUser {
+  username: string;
+  full_name: string;
+  role: string;
+  cpse: string;
+  depot_id: string;
+  email: string;
+  description: string;
+}
+
+export interface AuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+export interface UserSignupRequest {
+  username: string;
+  password: string;
+  full_name: string;
+  email: string;
+  role: string;
+  cpse: string;
+  depot_id: string;
+}
+
+

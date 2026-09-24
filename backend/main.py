@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.core.config import settings
 from backend.app.models.base import init_db
-from backend.app.api.routers import ingest, match, inventory, requisition, graph, audit
+from backend.app.api.routers import ingest, match, inventory, requisition, graph, audit, auth
 
 
 @asynccontextmanager
@@ -21,8 +21,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: initialize DB tables, auto-seed, and start CDC worker."""
     init_db()
     try:
-        from backend.app.services.seeder import seed_database_if_empty
+        from backend.app.services.seeder import seed_database_if_empty, seed_users_if_empty
         seed_database_if_empty()
+        seed_users_if_empty()
     except Exception as e:
         import logging
         logging.getLogger("samanvay.startup").warning(f"Auto-seed notification: {e}")
@@ -67,6 +68,7 @@ app.add_middleware(
 )
 
 # ── API Router Registration ───────────────────────────────────────────────
+app.include_router(auth.router, prefix=settings.api_v1_prefix, tags=["Authentication"])
 app.include_router(ingest.router, prefix=settings.api_v1_prefix, tags=["Ingestion"])
 app.include_router(match.router, prefix=settings.api_v1_prefix, tags=["Matching"])
 app.include_router(inventory.router, prefix=settings.api_v1_prefix, tags=["Inventory"])

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useTheme } from '@/components/ThemeProvider';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 export default function RequisitionDetailPage({
   params,
@@ -109,23 +110,27 @@ export default function RequisitionDetailPage({
 
   if (loading) {
     return (
-      <div className="py-24 text-center text-xs font-mono text-slate-500">
-        <RefreshCw className="animate-spin h-6 w-6 mx-auto mb-2 text-emerald-500" />
-        <span>Loading requisition {id} from database...</span>
-      </div>
+      <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'CISF_SECURITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
+        <div className="py-24 text-center text-xs font-mono text-slate-500">
+          <RefreshCw className="animate-spin h-6 w-6 mx-auto mb-2 text-emerald-500" />
+          <span>Loading requisition {id} from database...</span>
+        </div>
+      </ProtectedRoute>
     );
   }
 
   if (error || !req) {
     return (
-      <div className="max-w-2xl mx-auto py-12 text-center text-xs font-mono">
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-rose-800 dark:text-rose-300 mb-4">
-          {error || `Requisition ${id} not found.`}
+      <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'CISF_SECURITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
+        <div className="max-w-2xl mx-auto py-12 text-center text-xs font-mono">
+          <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl text-rose-800 dark:text-rose-300 mb-4">
+            {error || `Requisition ${id} not found.`}
+          </div>
+          <Link href="/requests" className="text-emerald-600 dark:text-emerald-400 hover:underline">
+            &larr; Back to Requisitions Hub
+          </Link>
         </div>
-        <Link href="/requests" className="text-emerald-600 dark:text-emerald-400 hover:underline">
-          &larr; Back to Requisitions Hub
-        </Link>
-      </div>
+      </ProtectedRoute>
     );
   }
 
@@ -144,7 +149,8 @@ export default function RequisitionDetailPage({
   });
 
   return (
-    <div className="flex flex-col space-y-5 max-w-[1400px] mx-auto pb-10">
+    <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'CISF_SECURITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
+      <div className="flex flex-col space-y-5 max-w-[1400px] mx-auto pb-10">
       {/* Top Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
         <div className="flex items-center gap-3">
@@ -371,6 +377,7 @@ export default function RequisitionDetailPage({
           </div>
         </Card>
       </div>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

@@ -1,3 +1,5 @@
+import { User, SeedUser, AuthTokenResponse, UserSignupRequest } from './types';
+
 const rawUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const API_BASE_URL = rawUrl.endsWith('/api/v1') ? rawUrl : `${rawUrl.replace(/\/+$/, '')}/api/v1`;
 
@@ -6,6 +8,13 @@ async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise
   const headers: Record<string, string> = {};
   if (!isFormData) {
     headers['Content-Type'] = 'application/json';
+  }
+
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('samanvay_auth_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -133,4 +142,23 @@ export const api = {
   listDocuments: (skip: number = 0, limit: number = 20) =>
     fetchAPI<any>(`/ingest/documents?skip=${skip}&limit=${limit}`),
   getDocumentById: (docId: number) => fetchAPI<any>(`/ingest/documents/${docId}`),
+
+  // Sovereign Authentication & Access Control
+  login: (payload: { username: string; password: string }) =>
+    fetchAPI<AuthTokenResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  signup: (payload: UserSignupRequest) =>
+    fetchAPI<AuthTokenResponse>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getMe: () => fetchAPI<User>('/auth/me'),
+  getSeedUsers: () => fetchAPI<{ default_password: string; users: SeedUser[] }>('/auth/seed-users'),
+  seedUsers: () => fetchAPI<{ status: string; total_users: number }>('/auth/seed', { method: 'POST' }),
+
+  getUsers: () => fetchAPI<User[]>('/auth/users'),
+  approveUser: (userId: number) => fetchAPI<User>(`/auth/users/${userId}/approve`, { method: 'POST' }),
+  rejectUser: (userId: number) => fetchAPI<{ status: string }>(`/auth/users/${userId}/reject`, { method: 'POST' }),
 };

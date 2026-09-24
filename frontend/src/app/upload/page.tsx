@@ -15,6 +15,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 export default function DocumentIntakePage() {
   const router = useRouter();
@@ -82,7 +83,8 @@ export default function DocumentIntakePage() {
   };
 
   return (
-    <div className="flex flex-col space-y-5 max-w-[1400px] mx-auto pb-10">
+    <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'SUPER_ADMIN']}>
+      <div className="flex flex-col space-y-5 max-w-[1400px] mx-auto pb-10">
       {/* Top Banner */}
       <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
         <div className="flex items-center gap-2 mb-1">
@@ -244,6 +246,7 @@ export default function DocumentIntakePage() {
           )}
         </div>
       </Card>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

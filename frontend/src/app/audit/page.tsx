@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { exportToCSV } from '@/lib/exportUtils';
 import { api } from '@/lib/api';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 interface AuditLogEntry {
   id?: number | string;
@@ -158,7 +159,8 @@ export default function AuditTrailPage() {
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
   return (
-    <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
+    <ProtectedRoute allowedRoles={['VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
+      <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
         <div>
@@ -435,6 +437,7 @@ export default function AuditTrailPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

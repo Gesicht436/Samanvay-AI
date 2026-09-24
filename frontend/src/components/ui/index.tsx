@@ -9,14 +9,33 @@ export function cn(...inputs: ClassValue[]) {
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   className?: string;
+  title?: string;
+  icon?: React.ComponentType<{ size?: number; className?: string }> | React.ReactNode;
 }
 
-export function Card({ children, className, ...props }: CardProps) {
+export function Card({ children, className, title, icon, ...props }: CardProps) {
+  const renderIcon = () => {
+    if (!icon) return null;
+    if (React.isValidElement(icon)) {
+      return icon;
+    }
+    const IconComponent = icon as React.ComponentType<{ size?: number; className?: string }>;
+    return <IconComponent size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />;
+  };
+
   return (
     <div
       className={cn("bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4", className)}
       {...props}
     >
+      {title && (
+        <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-100 dark:border-slate-700/60">
+          {renderIcon()}
+          <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+            {title}
+          </h3>
+        </div>
+      )}
       {children}
     </div>
   );
@@ -97,6 +116,7 @@ export interface KpiCardProps {
   deltaType?: 'positive' | 'negative' | 'warning' | 'neutral';
   isPositive?: boolean;
   icon?: React.ComponentType<{ size?: number; className?: string }> | React.ReactNode;
+  variant?: 'emerald' | 'amber' | 'rose' | 'blue' | 'slate' | string;
 }
 
 export function KpiCard({
@@ -109,10 +129,18 @@ export function KpiCard({
   deltaType,
   isPositive,
   icon,
+  variant,
 }: KpiCardProps) {
   const displayTitle = label || title;
   const isGood = deltaType ? deltaType === 'positive' : isPositive;
   const isWarn = deltaType === 'warning';
+
+  const variantStyles: Record<string, string> = {
+    emerald: 'border-l-4 border-l-emerald-500',
+    amber: 'border-l-4 border-l-amber-500',
+    rose: 'border-l-4 border-l-rose-500',
+    blue: 'border-l-4 border-l-blue-500',
+  };
 
   const renderIcon = () => {
     if (!icon) return null;
@@ -124,7 +152,10 @@ export function KpiCard({
   };
 
   return (
-    <Card className="flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-150">
+    <Card className={cn(
+      "flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-150",
+      variant ? variantStyles[variant] || '' : ''
+    )}>
       <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-2">
         <span className="text-xs font-mono font-semibold uppercase tracking-wider">{displayTitle}</span>
         {renderIcon()}

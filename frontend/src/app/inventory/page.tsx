@@ -23,6 +23,7 @@ import {
 import { exportToCSV } from '@/lib/exportUtils';
 import { useTheme } from '@/components/ThemeProvider';
 import { api } from '@/lib/api';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 interface InventoryItem {
   id?: number | string;
@@ -221,7 +222,8 @@ export default function InventoryLedgerPage() {
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   return (
-    <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
+    <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
+      <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
         <div>
@@ -666,6 +668,7 @@ export default function InventoryLedgerPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

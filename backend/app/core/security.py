@@ -9,8 +9,13 @@ Provides cryptographic hash computation for:
 
 import hashlib
 import json
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime, timezone, timedelta
+from typing import Any, Optional
+
+import bcrypt
+import jwt
+
+from backend.app.core.config import settings
 
 
 # Genesis root hash constant for the first audit ledger entry
@@ -116,3 +121,51 @@ def verify_audit_chain(entries: list[dict[str, Any]]) -> tuple[bool, int | None]
 def generate_timestamp_iso() -> str:
     """Generate an ISO 8601 timestamp in UTC for audit entries."""
     return datetime.now(timezone.utc).isoformat()
+
+
+# ── Password Hashing & Authentication ─────────────────────────
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plain password against a bcrypt-hashed password."""
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"),
+            hashed_password.encode("utf-8"),
+        )
+    except Exception:
+        return False
+
+
+def get_password_hash(password: str) -> str:
+    """Generate a secure bcrypt hash of a plain password."""
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+
+
+def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    """Create a signed JWT access token embedding tenant and role claims."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
+    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
+    encoded_jwt = jwt.encode(
+        to_encode,
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+    return encoded_jwt
+
+
+def decode_access_token(token: str) -> Optional[dict[str, Any]]:
+    """Decode and validate a JWT access token."""
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+        return payload
+    except jwt.PyJWTError:
+        return None

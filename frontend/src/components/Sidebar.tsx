@@ -1,10 +1,23 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeProvider';
-import { LayoutDashboard, Upload, Package, Search, Truck, ShieldCheck, Building2 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import {
+  LayoutDashboard,
+  Upload,
+  Package,
+  Search,
+  Truck,
+  ShieldCheck,
+  Building2,
+  KeyRound,
+  LogOut,
+  User as UserIcon,
+  UserCheck,
+} from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 const CPSE_OPTIONS = [
@@ -20,15 +33,66 @@ const CPSE_OPTIONS = [
 export function Sidebar() {
   const pathname = usePathname();
   const { cpse, setCpse } = useTheme();
+  const { user, isAuthenticated, logout } = useAuth();
 
-  const links = [
-    { name: 'Command Center', href: '/', icon: LayoutDashboard, exact: true },
-    { name: 'Document Intake', href: '/upload', icon: Upload },
-    { name: 'Stock Ledger', href: '/inventory', icon: Package },
-    { name: 'Surplus Discovery', href: '/discover', icon: Search },
-    { name: 'Consignments', href: '/requests', icon: Truck },
-    { name: 'Audit Trail', href: '/audit', icon: ShieldCheck },
+  // Sync active CPSE context with logged-in user tenant
+  useEffect(() => {
+    if (user?.cpse && CPSE_OPTIONS.some((c) => c.id === user.cpse)) {
+      setCpse(user.cpse);
+    }
+  }, [user, setCpse]);
+
+  const role = user?.role || 'SITE_ENGINEER';
+
+  const allLinks = [
+    {
+      name: 'Command Center',
+      href: '/dashboard',
+      icon: LayoutDashboard,
+      exact: true,
+      roles: ['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'CISF_SECURITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN'],
+    },
+    {
+      name: 'Surplus Discovery',
+      href: '/discover',
+      icon: Search,
+      roles: ['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN'],
+    },
+    {
+      name: 'Stock Ledger',
+      href: '/inventory',
+      icon: Package,
+      roles: ['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN'],
+    },
+    {
+      name: 'Document Intake',
+      href: '/upload',
+      icon: Upload,
+      roles: ['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'SUPER_ADMIN'],
+    },
+    {
+      name: 'Consignments',
+      href: '/requests',
+      icon: Truck,
+      roles: ['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'CISF_SECURITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN'],
+    },
+    {
+      name: 'Audit Trail',
+      href: '/audit',
+      icon: ShieldCheck,
+      roles: ['VIGILANCE_AUDITOR', 'SUPER_ADMIN'],
+    },
+    {
+      name: 'User Approvals',
+      href: '/admin/users',
+      icon: UserCheck,
+      roles: ['SUPER_ADMIN'],
+    },
   ];
+
+  const visibleLinks = allLinks.filter(
+    (link) => !user || link.roles.includes(role) || role === 'SUPER_ADMIN'
+  );
 
   return (
     <aside className="w-64 h-full bg-slate-100 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 flex flex-col no-print shrink-0 select-none">
@@ -61,7 +125,7 @@ export function Sidebar() {
       </div>
       
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {links.map((link) => {
+        {visibleLinks.map((link) => {
           const Icon = link.icon;
           const isActive = link.exact ? pathname === link.href : pathname.startsWith(link.href);
           return (
@@ -82,7 +146,51 @@ export function Sidebar() {
           );
         })}
       </nav>
-      
+
+      {/* User Persona / Session Panel */}
+      <div className="px-3 pb-2">
+        {isAuthenticated && user ? (
+          <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 shadow-2xs">
+            <div className="flex items-start justify-between gap-1.5 mb-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  {user.cpse} IDENTITY
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-0.5 rounded cursor-pointer"
+                title="Sign Out"
+              >
+                <LogOut size={13} />
+              </button>
+            </div>
+            <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+              {user.full_name}
+            </p>
+            <div className="flex items-center justify-between mt-1 text-[10px] font-mono text-slate-500 dark:text-slate-400">
+              <span className="truncate">{user.role.replace('_', ' ')}</span>
+            </div>
+          </div>
+        ) : (
+          <Link
+            href="/login"
+            className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 text-xs text-slate-600 dark:text-slate-300 transition-colors shadow-2xs"
+          >
+            <div className="flex items-center gap-2">
+              <UserIcon size={14} className="text-slate-400" />
+              <span>Sign In</span>
+            </div>
+            <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+              Go →
+            </span>
+          </Link>
+        )}
+      </div>
+
+      {/* Footer with ThemeToggle strictly at bottom-left */}
       <div className="p-3 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-2">
         <ThemeToggle />
         <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 px-1 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { api } from '@/lib/api';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 interface RequisitionItem {
   id?: string;
@@ -131,7 +132,8 @@ export default function RequisitionsListPage() {
   }, [requests, statusFilter]);
 
   return (
-    <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
+    <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'CISF_SECURITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
+      <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
         <div>
@@ -374,6 +376,7 @@ export default function RequisitionsListPage() {
           </table>
         </div>
       </Card>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

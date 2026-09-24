@@ -150,8 +150,58 @@ def seed_database_if_empty():
             )
             logger.info("Genesis SHA-256 Sovereign Audit Trail entry sealed.")
 
+        # Seed Default Persona Users
+        seed_users_if_empty(db)
+
     except Exception as e:
         db.rollback()
         logger.error(f"Error during auto-seed: {e}")
     finally:
         db.close()
+
+
+def seed_users_if_empty(db=None):
+    """
+    Ensures all 8 default seed persona accounts exist in the PostgreSQL users table.
+    """
+    from backend.app.models.tables import User
+    from backend.app.core.security import get_password_hash
+    from backend.app.schemas.auth import SEED_USERS, DEFAULT_SEED_PASSWORD
+
+    close_db = False
+    if db is None:
+        init_db()
+        db = SessionLocal()
+        close_db = True
+
+    try:
+        hashed = get_password_hash(DEFAULT_SEED_PASSWORD)
+        created_count = 0
+        for seed_info in SEED_USERS:
+            if seed_info.role != "SUPER_ADMIN":
+                continue
+            existing = db.query(User).filter(User.username == seed_info.username).first()
+            if not existing:
+                user = User(
+                    username=seed_info.username,
+                    email=seed_info.email,
+                    hashed_password=hashed,
+                    full_name=seed_info.full_name,
+                    role=seed_info.role,
+                    cpse=seed_info.cpse,
+                    depot_id=seed_info.depot_id,
+                    is_active=True,
+                    is_approved=True,
+                )
+                db.add(user)
+                created_count += 1
+        if created_count > 0:
+            db.commit()
+            logger.info(f"Successfully seeded {created_count} default persona accounts into users table.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error seeding default users: {e}")
+    finally:
+        if close_db:
+            db.close()
+

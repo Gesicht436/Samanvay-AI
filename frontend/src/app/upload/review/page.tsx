@@ -16,6 +16,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 export default function MTCReviewPage() {
   const router = useRouter();
@@ -39,23 +40,25 @@ export default function MTCReviewPage() {
 
   if (!docData) {
     return (
-      <div className="max-w-xl mx-auto py-20 text-center text-xs font-mono">
-        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-          <FileText size={32} className="mx-auto text-slate-400 mb-3" />
-          <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1">
-            No Certificate In Review
-          </h2>
-          <p className="text-slate-500 mb-4">
-            Upload a Material Test Certificate or procurement invoice to inspect extracted specifications.
-          </p>
-          <Link
-            href="/upload"
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold inline-block transition-colors"
-          >
-            Upload Certificate &rarr;
-          </Link>
+      <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'SUPER_ADMIN']}>
+        <div className="max-w-xl mx-auto py-20 text-center text-xs font-mono">
+          <div className="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
+            <FileText size={32} className="mx-auto text-slate-400 mb-3" />
+            <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1">
+              No Active Document In Review
+            </h2>
+            <p className="text-slate-500 mb-4">
+              Please upload a Mill Test Certificate (MTC) PDF to view bounding boxes and ladle assays.
+            </p>
+            <Link
+              href="/upload"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold text-xs"
+            >
+              Go to Document Intake &rarr;
+            </Link>
+          </div>
         </div>
-      </div>
+      </ProtectedRoute>
     );
   }
 
@@ -84,7 +87,8 @@ export default function MTCReviewPage() {
   };
 
   return (
-    <div className="flex flex-col space-y-4 max-w-[1400px] mx-auto pb-10">
+    <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'SUPER_ADMIN']}>
+      <div className="flex flex-col space-y-4 max-w-[1400px] mx-auto pb-10">
       {/* Top Action Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
         <div className="flex items-center gap-3">
@@ -283,6 +287,7 @@ export default function MTCReviewPage() {
           </pre>
         </Card>
       )}
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }
