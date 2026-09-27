@@ -224,10 +224,13 @@ def get_current_user_profile(
     "/seed-users",
     summary="List default seed persona accounts for evaluation and testing",
 )
-def get_seed_users():
+def get_seed_users(
+    db: Session = Depends(get_db_session),
+):
     """
     Returns all pre-configured demo user accounts across OIL, IOCL, CISF, and MoPNG.
     """
+    seed_users_if_empty(db)
     return {
         "default_password": DEFAULT_SEED_PASSWORD,
         "users": [user.model_dump() for user in SEED_USERS],

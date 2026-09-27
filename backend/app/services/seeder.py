@@ -162,7 +162,7 @@ def seed_database_if_empty():
 
 def seed_users_if_empty(db=None):
     """
-    Ensures all 8 default seed persona accounts exist in the PostgreSQL users table.
+    Ensures all 23 default seed persona accounts across 7 CPSEs exist in the PostgreSQL users table.
     """
     from backend.app.models.tables import User
     from backend.app.core.security import get_password_hash
@@ -177,10 +177,11 @@ def seed_users_if_empty(db=None):
     try:
         hashed = get_password_hash(DEFAULT_SEED_PASSWORD)
         created_count = 0
+        updated_count = 0
         for seed_info in SEED_USERS:
-            if seed_info.role != "SUPER_ADMIN":
-                continue
-            existing = db.query(User).filter(User.username == seed_info.username).first()
+            existing = db.query(User).filter(
+                (User.username == seed_info.username) | (User.email == seed_info.email)
+            ).first()
             if not existing:
                 user = User(
                     username=seed_info.username,
@@ -194,10 +195,28 @@ def seed_users_if_empty(db=None):
                     is_approved=True,
                 )
                 db.add(user)
-                created_count += 1
-        if created_count > 0:
-            db.commit()
-            logger.info(f"Successfully seeded {created_count} default persona accounts into users table.")
+                try:
+                    db.commit()
+                    created_count += 1
+                except Exception as inner_e:
+                    db.rollback()
+                    logger.warning(f"Skipping seed user {seed_info.username}: {inner_e}")
+            else:
+                needs_update = False
+                if not existing.is_approved or not existing.is_active:
+                    existing.is_approved = True
+                    existing.is_active = True
+                    needs_update = True
+                if existing.role != seed_info.role:
+                    existing.role = seed_info.role
+                    needs_update = True
+                if needs_update:
+                    try:
+                        db.commit()
+                        updated_count += 1
+                    except Exception:
+                        db.rollback()
+        logger.info(f"Seed users status: {created_count} created, {updated_count} updated.")
     except Exception as e:
         db.rollback()
         logger.error(f"Error seeding default users: {e}")

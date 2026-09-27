@@ -8,6 +8,8 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { useTheme } from '@/components/ThemeProvider';
 import { Search, ChevronRight, Building2, Menu } from 'lucide-react';
 
+import { useAuth } from '@/context/AuthContext';
+
 interface AppShellProps {
   children: ReactNode;
 }
@@ -21,6 +23,16 @@ const CPSE_OPTIONS = [
   { id: 'GAIL', name: 'GAIL (Pata)' },
   { id: 'NRL', name: 'NRL (Numaligarh)' },
 ];
+
+const CPSE_DEPOTS: Record<string, string[]> = {
+  OIL: ['Duliajan Central Stores', 'Digboi Warehouse', 'Moran Depot'],
+  IOCL: ['Panipat Refinery Stores', 'Mathura Refinery Depot', 'Vadodara Stockyard'],
+  ONGC: ['Mumbai Uran Plant', 'Hazira Plant Stores', 'Ankleshwar Base Depot'],
+  BPCL: ['Kochi Refinery Depot', 'Mumbai Mahul Terminal', 'Bina Depot'],
+  HPCL: ['Visakh Refinery Stores', 'Mumbai Refinery Depot', 'Bathinda Terminal'],
+  GAIL: ['Pata Petrochemical Complex', 'Vijaipur Gas Plant', 'Hazira Terminal'],
+  NRL: ['Numaligarh Refinery Depot', 'Siliguri Terminal'],
+};
 
 const ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'Command Center',
@@ -36,8 +48,19 @@ const ROUTE_TITLES: Record<string, string> = {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const { cpse, setCpse } = useTheme();
+  const { user } = useAuth();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [adminDepot, setAdminDepot] = useState<string>('ALL');
+
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+
+  // Automatically lock CPSE context to the logged-in user's assigned CPSE if not SUPER_ADMIN
+  React.useEffect(() => {
+    if (user && !isSuperAdmin && user.cpse && user.cpse !== cpse) {
+      setCpse(user.cpse);
+    }
+  }, [user, isSuperAdmin, cpse, setCpse]);
 
   // Auto-close mobile drawer on route change
   React.useEffect(() => {
@@ -164,23 +187,57 @@ export function AppShell({ children }: AppShellProps) {
               </kbd>
             </button>
 
-            {/* CPSE Tenant Switcher Dropdown */}
-            <div className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/60 text-xs font-mono min-h-[34px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Backend Gateway: Live" />
-              <Building2 size={12} className="text-zinc-400 shrink-0 hidden sm:inline" />
-              <select
-                value={cpse}
-                onChange={(e) => setCpse(e.target.value)}
-                className="bg-transparent text-xs font-mono font-medium text-zinc-800 dark:text-zinc-200 outline-hidden cursor-pointer"
-                title="Select active CPSE tenant context"
+            {/* CPSE & Depot Indicator / Switcher */}
+            {isSuperAdmin ? (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/60 text-xs font-mono min-h-[34px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="Super Admin Mode: Tenant Switching Enabled" />
+                <Building2 size={12} className="text-zinc-400 shrink-0 hidden sm:inline" />
+                <select
+                  value={cpse}
+                  onChange={(e) => {
+                    setCpse(e.target.value);
+                    setAdminDepot('ALL');
+                  }}
+                  className="bg-transparent text-xs font-mono font-medium text-zinc-800 dark:text-zinc-200 outline-hidden cursor-pointer"
+                  title="Switch active CPSE tenant context"
+                >
+                  {CPSE_OPTIONS.map((c) => (
+                    <option key={c.id} value={c.id} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100">
+                      {c.id}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Depot Dual Selector for Super Admin */}
+                <select
+                  value={adminDepot}
+                  onChange={(e) => setAdminDepot(e.target.value)}
+                  className="bg-transparent text-xs font-mono text-zinc-600 dark:text-zinc-400 outline-hidden cursor-pointer border-l border-zinc-300 dark:border-zinc-700 pl-1.5 hidden lg:inline max-w-[150px] truncate"
+                  title="Filter active Depot/Unit"
+                >
+                  <option value="ALL" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100">All Units</option>
+                  {(CPSE_DEPOTS[cpse] || []).map((d) => (
+                    <option key={d} value={d} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100">
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/60 text-xs font-mono min-h-[34px]"
+                title={`Assigned Organization: ${user?.cpse || cpse} | Unit: ${user?.depot_id || 'Primary Depot'}`}
               >
-                {CPSE_OPTIONS.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100">
-                    {c.id}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Assigned Unit Active" />
+                <Building2 size={12} className="text-zinc-400 shrink-0 hidden sm:inline" />
+                <span className="font-semibold text-zinc-800 dark:text-zinc-200">{user?.cpse || cpse}</span>
+                {user?.depot_id && (
+                  <span className="text-zinc-500 dark:text-zinc-400 border-l border-zinc-300 dark:border-zinc-700 pl-1.5 hidden md:inline truncate max-w-[160px]">
+                    {user.depot_id}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </header>
 

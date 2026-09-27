@@ -14,10 +14,43 @@ from backend.app.core.security import compute_gate_pass_seal, compute_sha256
 from graph.logistics import road_distance, estimate_transit_hours, compute_co2_saved, DEPOT_COORDINATES
 
 
-def list_requisitions(db: Session, cpse: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_requisitions(db: Session, cpse: Optional[str] = None, depot: Optional[str] = None) -> List[Dict[str, Any]]:
     query = db.query(Requisition)
     if cpse and cpse != "ALL":
         query = query.filter((Requisition.source_cpse == cpse) | (Requisition.target_cpse == cpse))
+    if depot and depot != "ALL":
+        query = query.filter(
+            (Requisition.source_depot.ilike(f"%{depot}%")) |
+            (Requisition.target_depot.ilike(f"%{depot}%"))
+        )
+    reqs = query.order_by(Requisition.created_at.desc()).all()
+    return [
+        {c.name: getattr(r, c.name) for c in r.__table__.columns}
+        for r in reqs
+    ]
+
+
+def list_requisitions_for_user(db: Session, user: Any) -> List[Dict[str, Any]]:
+    """
+    Multi-tenant scoped consignment list:
+    Returns only:
+    1. Outgoing requests created by the user (requested_by == username)
+    2. Incoming requests targeting the user's depot or CPSE (source_depot == depot or source_cpse == cpse)
+    Completely shields unrelated cross-tenant consignments.
+    """
+    username = getattr(user, "username", str(user))
+    user_cpse = getattr(user, "cpse", None)
+    user_depot = getattr(user, "depot_id", None)
+
+    conditions = [Requisition.requested_by == username]
+    if user_depot:
+        conditions.append(Requisition.source_depot == user_depot)
+        conditions.append(Requisition.source_depot.ilike(f"%{user_depot}%"))
+    if user_cpse:
+        conditions.append(Requisition.source_cpse == user_cpse)
+
+    from sqlalchemy import or_
+    query = db.query(Requisition).filter(or_(*conditions))
     reqs = query.order_by(Requisition.created_at.desc()).all()
     return [
         {c.name: getattr(r, c.name) for c in r.__table__.columns}

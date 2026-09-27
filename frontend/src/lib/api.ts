@@ -81,8 +81,16 @@ export const api = {
     }),
 
   // Requisitions & Consignments
-  getRequests: (cpse?: string) =>
-    fetchAPI<any[]>(`/requisition${cpse && cpse !== 'ALL' ? `?cpse=${cpse}` : ''}`),
+  getRequests: (params?: string | { cpse?: string; depot?: string }) => {
+    if (typeof params === 'string') {
+      return fetchAPI<any[]>(`/requisition${params && params !== 'ALL' ? `?cpse=${params}` : ''}`);
+    }
+    const query = new URLSearchParams();
+    if (params?.cpse && params.cpse !== 'ALL') query.append('cpse', params.cpse);
+    if (params?.depot && params.depot !== 'ALL') query.append('depot', params.depot);
+    const qs = query.toString();
+    return fetchAPI<any[]>(`/requisition${qs ? `?${qs}` : ''}`);
+  },
   getRequestById: (reqId: string) => fetchAPI<any>(`/requisition/${reqId}`),
   postRequisition: (data: any, idempotencyKey?: string) =>
     fetchAPI<any>('/requisition', {

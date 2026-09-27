@@ -2,13 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import Dict, Any, Optional
-from backend.app.api.dependencies import get_db_session, validate_idempotency_key
+from backend.app.api.dependencies import get_db_session, validate_idempotency_key, get_optional_user
+from backend.app.models.tables import Requisition, User
 from backend.app.services.requisition_service import (
     create_requisition,
     approve_requisition,
     reject_requisition,
     generate_gate_pass,
     list_requisitions,
+    list_requisitions_for_user,
     get_requisition,
     dispatch_requisition,
     deliver_requisition,
@@ -23,11 +25,21 @@ router = APIRouter(prefix="/requisition", tags=["Requisition"])
 def create_req(
     payload: Dict[str, Any],
     idempotency_key: str = Depends(validate_idempotency_key),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: Session = Depends(get_db_session),
 ):
     if isinstance(idempotency_key, dict) and idempotency_key.get("status") == "CACHED":
         return idempotency_key["data"]
     try:
+        # Bind authenticated requester identity
+        if current_user:
+            payload["requested_by"] = current_user.username
+            if current_user.role != "SUPER_ADMIN":
+                if current_user.cpse:
+                    payload["target_cpse"] = current_user.cpse
+                if current_user.depot_id:
+                    payload["target_depot"] = current_user.depot_id
+
         req = create_requisition(db, payload, str(idempotency_key))
         return {
             "status": "SUCCESS",
@@ -50,9 +62,15 @@ def create_req(
 @router.get("/")
 def list_reqs(
     cpse: Optional[str] = None,
+    depot: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_optional_user),
     db: Session = Depends(get_db_session),
 ):
-    return list_requisitions(db, cpse)
+    if current_user:
+        if current_user.role in ("SUPER_ADMIN", "AUDITOR"):
+            return list_requisitions(db, cpse, depot)
+        return list_requisitions_for_user(db, current_user)
+    return list_requisitions(db, cpse, depot)
 
 
 @router.get("/{req_id}")
@@ -70,10 +88,31 @@ def get_req(
 def approve_req(
     req_id: str,
     payload: Dict[str, Any],
+    current_user: Optional[User] = Depends(get_optional_user),
     db: Session = Depends(get_db_session),
 ):
     try:
-        req = approve_requisition(db, req_id, payload.get("approved_by", "SYSTEM_OFFICER"))
+        approver = payload.get("approved_by")
+        if current_user:
+            approver = current_user.username
+            req_record = db.query(Requisition).filter(Requisition.requisition_id == req_id).first()
+            if not req_record:
+                raise ResourceNotFoundError(f"Requisition {req_id} not found")
+            if current_user.role != "SUPER_ADMIN":
+                # Segregation of duties: Requester cannot approve their own requisition
+                if req_record.requested_by == current_user.username:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Segregation of duties violation: Requester cannot approve their own requisition.",
+                    )
+                # Only supplying CPSE can approve releasing their surplus material
+                if current_user.cpse and req_record.source_cpse and current_user.cpse != req_record.source_cpse:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Access forbidden: Only materials managers from supplying CPSE ({req_record.source_cpse}) can approve.",
+                    )
+
+        req = approve_requisition(db, req_id, approver or "SYSTEM_OFFICER")
         return {
             "status": "SUCCESS",
             "requisition_id": req.requisition_id,
@@ -88,9 +127,21 @@ def approve_req(
 def reject_req(
     req_id: str,
     payload: Dict[str, Any],
+    current_user: Optional[User] = Depends(get_optional_user),
     db: Session = Depends(get_db_session),
 ):
     try:
+        if current_user and current_user.role != "SUPER_ADMIN":
+            req_record = db.query(Requisition).filter(Requisition.requisition_id == req_id).first()
+            if not req_record:
+                raise ResourceNotFoundError(f"Requisition {req_id} not found")
+            # Can reject if requester canceling or supplying CPSE declining
+            if req_record.requested_by != current_user.username and (current_user.cpse and req_record.source_cpse and current_user.cpse != req_record.source_cpse):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Access forbidden: Not authorized to reject requisition {req_id}.",
+                )
+
         req = reject_requisition(db, req_id, payload.get("reason", "Requisition declined by depot"))
         return {
             "status": "SUCCESS",
@@ -107,11 +158,25 @@ def generate_gp(
     req_id: str,
     payload: Dict[str, Any],
     idempotency_key: str = Depends(validate_idempotency_key),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: Session = Depends(get_db_session),
 ):
     if isinstance(idempotency_key, dict) and idempotency_key.get("status") == "CACHED":
         return idempotency_key["data"]
     try:
+        if current_user:
+            req_record = db.query(Requisition).filter(Requisition.requisition_id == req_id).first()
+            if not req_record:
+                raise ResourceNotFoundError(f"Requisition {req_id} not found")
+            if current_user.role != "SUPER_ADMIN":
+                if current_user.cpse and req_record.source_cpse and current_user.cpse != req_record.source_cpse:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Gate pass can only be issued by supplying CPSE ({req_record.source_cpse}) personnel.",
+                    )
+            if not payload.get("issuing_officer"):
+                payload["issuing_officer"] = f"{current_user.username} ({current_user.role})"
+
         gp = generate_gate_pass(db, req_id, payload)
         return {
             "status": "SUCCESS",

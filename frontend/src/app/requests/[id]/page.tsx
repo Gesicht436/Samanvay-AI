@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useTheme } from '@/components/ThemeProvider';
+import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 export default function RequisitionDetailPage({
@@ -28,6 +29,7 @@ export default function RequisitionDetailPage({
 }) {
   const { id } = use(params);
   const { cpse } = useTheme();
+  const { user } = useAuth();
 
   const [req, setReq] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -54,8 +56,9 @@ export default function RequisitionDetailPage({
 
   const handleApprove = async () => {
     setActionLoading(true);
+    setActionMessage(null);
     try {
-      await api.approveRequisition(id, { approved_by: `OFFICER_${cpse}` });
+      await api.approveRequisition(id, { approved_by: user?.username || 'SYSTEM_OFFICER' });
       setActionMessage('Requisition approved successfully.');
       fetchDetail();
     } catch (err: any) {
@@ -67,11 +70,15 @@ export default function RequisitionDetailPage({
 
   const handleIssueGatePass = async () => {
     setActionLoading(true);
+    setActionMessage(null);
     try {
       await api.generateGatePass(id, {
         pass_type: 'NON-RETURNABLE-MUTUAL-AID',
-        officer: `CISF_OFFICER_${cpse}`,
-        vehicle_reg: 'AS-01-EA-4102',
+        issuing_officer: `${user?.username || 'CISF_OFFICER'} (${user?.role || 'CISF_SECURITY'})`,
+        vehicle_no: 'AS-01-EA-4102',
+        driver_name: 'B. K. Sharma',
+        driver_id: 'DL-04201988102',
+        transporter_name: 'CONCOR Heavy Logistics',
       });
       setActionMessage('CISF Gate Pass generated with cryptographic seal.');
       fetchDetail();
