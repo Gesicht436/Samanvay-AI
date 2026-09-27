@@ -178,8 +178,17 @@ def search_matches(
             "days_idle": item.days_idle,
             "compatibility_score": round(combined_score * 100, 1),
             "tier": dynamic_tier,
+            "tier_level": 1 if dynamic_tier == "Tier 1" else (2 if dynamic_tier == "Tier 2" else 3),
             "is_compatible": rule_eval.is_compatible,
             "violation_code": rule_eval.rule_violations[0].module_name if rule_eval.rule_violations else None,
+            "rule_violations": [
+                {
+                    "module_name": getattr(v, "module_name", "SAFETY_GATE"),
+                    "standard_code": getattr(v, "standard_code", "ASME/API"),
+                    "failure_mode": getattr(v, "failure_mode_prevented", "Engineering safety violation"),
+                    "explanation": getattr(v, "explanation", str(v)),
+                } for v in rule_eval.rule_violations
+            ] if getattr(rule_eval, "rule_violations", None) else [],
             "distance_km": round(dist, 1),
             "transit_hours": round(transit_hrs, 1),
             "explanation": explanation_note,

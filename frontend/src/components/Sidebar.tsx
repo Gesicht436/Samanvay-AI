@@ -17,15 +17,23 @@ import {
   PanelLeftOpen,
   LogOut,
   User as UserIcon,
+  X,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 interface SidebarProps {
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  isMobile?: boolean;
+  onCloseMobile?: () => void;
 }
 
-export function Sidebar({ collapsed: propCollapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({
+  collapsed: propCollapsed,
+  onToggleCollapse,
+  isMobile = false,
+  onCloseMobile,
+}: SidebarProps) {
   const pathname = usePathname();
   const { cpse } = useTheme();
   const { user, logout } = useAuth();
@@ -39,9 +47,10 @@ export function Sidebar({ collapsed: propCollapsed, onToggleCollapse }: SidebarP
     }
   }, []);
 
-  const isCollapsed = propCollapsed !== undefined ? propCollapsed : internalCollapsed;
+  const isCollapsed = isMobile ? false : (propCollapsed !== undefined ? propCollapsed : internalCollapsed);
 
   const toggleCollapse = () => {
+    if (isMobile) return;
     const next = !isCollapsed;
     setInternalCollapsed(next);
     localStorage.setItem('samanvay_sidebar_collapsed', String(next));
@@ -86,19 +95,27 @@ export function Sidebar({ collapsed: propCollapsed, onToggleCollapse }: SidebarP
 
   return (
     <aside
-      className={`relative h-screen bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 flex flex-col justify-between transition-all duration-200 ease-in-out shrink-0 select-none ${
-        isCollapsed ? 'w-14' : 'w-60'
+      className={`relative bg-white dark:bg-zinc-950 flex flex-col justify-between transition-all duration-200 ease-in-out shrink-0 select-none ${
+        isMobile
+          ? 'w-full h-full border-r-0'
+          : `h-screen border-r border-zinc-200 dark:border-zinc-800 ${isCollapsed ? 'w-14' : 'w-60'}`
       }`}
     >
       {/* Header / Brand */}
       <div>
         <div className="h-12 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-3.5">
-          <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
+          <Link
+            href="/dashboard"
+            onClick={() => {
+              if (isMobile && onCloseMobile) onCloseMobile();
+            }}
+            className="flex items-center gap-2.5 min-w-0"
+          >
             {/* Hexagonal Sovereign Emblem */}
             <div className="w-6 h-6 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 flex items-center justify-center font-mono font-bold text-xs shrink-0 tracking-tighter shadow-xs">
               SV
             </div>
-            {!isCollapsed && (
+            {(!isCollapsed || isMobile) && (
               <div className="flex flex-col min-w-0">
                 <span className="font-semibold text-xs tracking-tight text-zinc-900 dark:text-zinc-100 truncate">
                   SAMANVAY-AI
@@ -110,19 +127,30 @@ export function Sidebar({ collapsed: propCollapsed, onToggleCollapse }: SidebarP
             )}
           </Link>
 
-          {!isCollapsed && (
+          {isMobile ? (
             <button
-              onClick={toggleCollapse}
-              className="p-1 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-850 transition-colors"
-              title="Collapse sidebar ([)"
+              onClick={onCloseMobile}
+              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"
+              title="Close menu"
+              aria-label="Close menu"
             >
-              <PanelLeftClose size={15} />
+              <X size={16} />
             </button>
+          ) : (
+            !isCollapsed && (
+              <button
+                onClick={toggleCollapse}
+                className="p-1 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-850 transition-colors"
+                title="Collapse sidebar ([)"
+              >
+                <PanelLeftClose size={15} />
+              </button>
+            )
           )}
         </div>
 
-        {/* Collapsed expand button */}
-        {isCollapsed && (
+        {/* Collapsed expand button (desktop only) */}
+        {isCollapsed && !isMobile && (
           <div className="flex justify-center py-2 border-b border-zinc-100 dark:border-zinc-800/80">
             <button
               onClick={toggleCollapse}
@@ -146,12 +174,17 @@ export function Sidebar({ collapsed: propCollapsed, onToggleCollapse }: SidebarP
               <Link
                 key={item.href}
                 href={item.href}
-                title={isCollapsed ? item.name : undefined}
-                className={`group flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-colors ${
+                onClick={() => {
+                  if (isMobile && onCloseMobile) onCloseMobile();
+                }}
+                title={isCollapsed && !isMobile ? item.name : undefined}
+                className={`group flex items-center gap-2.5 rounded-md transition-colors ${
+                  isMobile ? 'px-3 py-2.5 min-h-[40px] text-sm' : 'px-2.5 py-1.5 text-xs'
+                } ${
                   isActive
                     ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 font-medium'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-850'
-                } ${isCollapsed ? 'justify-center px-0' : ''}`}
+                } ${isCollapsed && !isMobile ? 'justify-center px-0' : ''}`}
               >
                 <Icon
                   size={15}
@@ -161,7 +194,7 @@ export function Sidebar({ collapsed: propCollapsed, onToggleCollapse }: SidebarP
                       : 'text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-700 dark:group-hover:text-zinc-300'
                   }`}
                 />
-                {!isCollapsed && <span className="truncate">{item.name}</span>}
+                {(!isCollapsed || isMobile) && <span className="truncate">{item.name}</span>}
               </Link>
             );
           })}

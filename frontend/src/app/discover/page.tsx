@@ -32,9 +32,19 @@ interface SearchResultItem {
   description?: string;
   title?: string;
   item_type?: string;
-  tier?: number;
+  tier?: number | string;
+  tier_level?: number;
   score?: number;
   compatibility_score?: number;
+  is_compatible?: boolean;
+  explanation?: string;
+  violation_code?: string;
+  rule_violations?: Array<{
+    module_name?: string;
+    standard_code?: string;
+    failure_mode?: string;
+    explanation?: string;
+  }>;
   cpse: string;
   depot_id?: string;
   depot_location?: string;
@@ -43,8 +53,8 @@ interface SearchResultItem {
   transit_hours?: number;
   co2_saved_kg?: number;
   metallurgy?: string;
-  pressure_class?: string;
-  pressure_rating_bar?: string;
+  pressure_class?: string | number;
+  pressure_rating_bar?: string | number;
   size_nb_mm?: number | string;
   nominal_bore_mm?: string;
   standard?: string;
@@ -88,6 +98,7 @@ export default function SurplusDiscoveryPage() {
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSearched, setIsSearched] = useState<boolean>(false);
 
   // Inspector Side Drawer State
   const [inspectedItem, setInspectedItem] = useState<SearchResultItem | null>(null);
@@ -103,6 +114,7 @@ export default function SurplusDiscoveryPage() {
   const loadInitialSurplus = async () => {
     setLoading(true);
     setError(null);
+    setIsSearched(false);
     try {
       const res = await api.discoverSurplus(selectedType !== 'ALL' ? selectedType : undefined, maxDistance);
       if (res && Array.isArray(res.items)) {
@@ -136,7 +148,11 @@ export default function SurplusDiscoveryPage() {
         item_type: selectedType !== 'ALL' ? selectedType : undefined,
       });
 
-      if (res && Array.isArray(res.matches)) {
+      setIsSearched(true);
+
+      if (res && Array.isArray(res.candidates)) {
+        setResults(res.candidates);
+      } else if (res && Array.isArray(res.matches)) {
         setResults(res.matches);
       } else if (res && Array.isArray(res.items)) {
         setResults(res.items);
@@ -289,7 +305,7 @@ export default function SurplusDiscoveryPage() {
                   <th>Node</th>
                   <th>Depot</th>
                   <th className="text-right">Available Qty</th>
-                  <th>Compatibility</th>
+                  <th>{isSearched ? 'Compatibility & Tier' : 'Catalog Status'}</th>
                   <th>Logistics</th>
                   <th className="text-right">Action</th>
                 </tr>
@@ -317,7 +333,18 @@ export default function SurplusDiscoveryPage() {
                 ) : (
                   results.map((item) => {
                     const rawScore = item.score ?? item.compatibility_score;
-                    const tier = item.tier || (rawScore !== undefined ? (rawScore >= 90 ? 1 : rawScore >= 75 ? 2 : 3) : 1);
+                    let numericTier: number | undefined = undefined;
+                    if (item.tier_level) {
+                      numericTier = item.tier_level;
+                    } else if (typeof item.tier === 'number') {
+                      numericTier = item.tier;
+                    } else if (typeof item.tier === 'string') {
+                      const match = item.tier.match(/\d+/);
+                      if (match) numericTier = parseInt(match[0], 10);
+                    } else if (isSearched && rawScore !== undefined) {
+                      numericTier = rawScore >= 95 ? 1 : rawScore >= 80 ? 2 : 3;
+                    }
+
                     const qty = item.available_quantity ?? item.quantity ?? 1;
 
                     return (
@@ -350,14 +377,20 @@ export default function SurplusDiscoveryPage() {
                         </td>
 
                         <td>
-                          <div className="flex items-center gap-1.5">
-                            <StatusBadge tier={tier} />
-                            {rawScore !== undefined && (
-                              <span className="text-[10px] tabular-nums text-zinc-500">
-                                {rawScore.toFixed(0)}%
-                              </span>
-                            )}
-                          </div>
+                          {isSearched && numericTier ? (
+                            <div className="flex items-center gap-1.5">
+                              <StatusBadge tier={numericTier} />
+                              {rawScore !== undefined && (
+                                <span className="text-[10px] tabular-nums text-zinc-500 font-semibold">
+                                  {rawScore.toFixed(0)}%
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/60">
+                              BROADCASTED SURPLUS
+                            </span>
+                          )}
                         </td>
 
                         <td className="text-zinc-500 text-[11px] tabular-nums">
@@ -448,105 +481,132 @@ export default function SurplusDiscoveryPage() {
             )
           }
         >
-          {inspectedItem && (
-            <div className="space-y-5">
-              {/* Top Overview Strip */}
-              <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-zinc-400 uppercase">Item Description</span>
-                  <StatusBadge
-                    tier={
-                      inspectedItem.tier ||
-                      (inspectedItem.score !== undefined
-                        ? inspectedItem.score >= 90
-                          ? 1
-                          : inspectedItem.score >= 75
-                          ? 2
-                          : 3
-                        : 1)
-                    }
-                  />
-                </div>
-                <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 font-sans">
-                  {inspectedItem.description || inspectedItem.title || 'Technical Spare Specification'}
-                </p>
-                {inspectedItem.oil_material_code && (
-                  <p className="text-[11px] font-mono text-zinc-500">
-                    MESC / OIL Material Code: <strong className="text-zinc-700 dark:text-zinc-300">{inspectedItem.oil_material_code}</strong>
-                  </p>
-                )}
-              </div>
+          {inspectedItem && (() => {
+            const rawInspectedScore = inspectedItem.score ?? inspectedItem.compatibility_score;
+            let inspectedTier: number | undefined = undefined;
+            if (inspectedItem.tier_level) {
+              inspectedTier = inspectedItem.tier_level;
+            } else if (typeof inspectedItem.tier === 'number') {
+              inspectedTier = inspectedItem.tier;
+            } else if (typeof inspectedItem.tier === 'string') {
+              const match = inspectedItem.tier.match(/\d+/);
+              if (match) inspectedTier = parseInt(match[0], 10);
+            } else if (isSearched && rawInspectedScore !== undefined) {
+              inspectedTier = rawInspectedScore >= 95 ? 1 : rawInspectedScore >= 80 ? 2 : 3;
+            }
 
-              {/* Technical Specifications Grid */}
-              <div>
-                <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-zinc-400 mb-2">
-                  Technical Specifications
-                </h4>
-                <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                  <div>
-                    <span className="text-zinc-400 text-[10px] block">Standard</span>
-                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.standard || inspectedItem.indian_standard || 'IS / ASME'}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-400 text-[10px] block">Metallurgy</span>
-                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.metallurgy || 'Carbon Steel (A105)'}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-400 text-[10px] block">Pressure Class</span>
-                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.pressure_class || inspectedItem.pressure_rating_bar || '300#'}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-400 text-[10px] block">Nominal Bore (NB)</span>
-                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.size_nb_mm || inspectedItem.nominal_bore_mm || 'DN 150'} mm</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-400 text-[10px] block">Make in India (DPIIT)</span>
-                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.make_in_india_class || 'Class-I'} ({inspectedItem.local_content_percentage ?? 80}%)</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-400 text-[10px] block">Storage Duration</span>
-                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.days_idle ?? 120} days idle</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 21 Safety Gates Deterministic Checklist */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-zinc-400">
-                    21 Safety Gates Veto Checklist
-                  </h4>
-                  <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
-                    ASME / API / NACE Compliant
-                  </span>
-                </div>
-                <div className="space-y-1.5 text-xs font-mono">
-                  {[
-                    { gate: 'Gate 01: Nominal Bore (NB mm)', desc: 'Dimensional envelope identical to ASME B16.5', passed: true },
-                    { gate: 'Gate 02: Pressure Class & Rating', desc: 'Working pressure rating matches flange class', passed: true },
-                    { gate: 'Gate 03: Metallurgy Grade DAG', desc: 'ASTM A105 / IS 2062 carbon steel compatibility', passed: true },
-                    { gate: 'Gate 04: Weldability (CE <= 0.43%)', desc: 'IIW Carbon Equivalent weldability standard verified', passed: true },
-                    { gate: 'Gate 05: Sour Service (NACE MR0175)', desc: 'Hardness <= 22 HRC verified for H2S environment', passed: true },
-                    { gate: 'Gate 06: Facing & Finish', desc: 'Raised Face (RF) 125-250 AARH serrations', passed: true },
-                  ].map((rule, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2 bg-zinc-50 dark:bg-zinc-800/40 rounded border border-zinc-200 dark:border-zinc-800 flex items-start justify-between gap-2"
-                    >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                          <span className="font-semibold text-zinc-800 dark:text-zinc-200">{rule.gate}</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-500 mt-0.5 pl-3">{rule.desc}</p>
-                      </div>
-                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
-                        PASS
+            return (
+              <div className="space-y-5">
+                {/* Top Overview Strip */}
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono text-zinc-400 uppercase">Item Description</span>
+                    {isSearched && inspectedTier ? (
+                      <StatusBadge tier={inspectedTier} />
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/60">
+                        SURPLUS CATALOG ITEM
                       </span>
-                    </div>
-                  ))}
+                    )}
+                  </div>
+                  <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 font-sans">
+                    {inspectedItem.description || inspectedItem.title || 'Technical Spare Specification'}
+                  </p>
+                  {inspectedItem.oil_material_code && (
+                    <p className="text-[11px] font-mono text-zinc-500">
+                      MESC / OIL Material Code: <strong className="text-zinc-700 dark:text-zinc-300">{inspectedItem.oil_material_code}</strong>
+                    </p>
+                  )}
                 </div>
-              </div>
+
+                {/* Technical Specifications Grid */}
+                <div>
+                  <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+                    Technical Specifications
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                    <div>
+                      <span className="text-zinc-400 text-[10px] block">Standard</span>
+                      <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.standard || inspectedItem.indian_standard || 'IS / ASME'}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400 text-[10px] block">Metallurgy</span>
+                      <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.metallurgy || 'Carbon Steel (A105)'}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400 text-[10px] block">Pressure Class</span>
+                      <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.pressure_class || inspectedItem.pressure_rating_bar || '300#'}</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400 text-[10px] block">Nominal Bore (NB)</span>
+                      <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.size_nb_mm || inspectedItem.nominal_bore_mm || 'DN 150'} mm</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400 text-[10px] block">Make in India (DPIIT)</span>
+                      <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.make_in_india_class || 'Class-I'} ({inspectedItem.local_content_percentage ?? 80}%)</span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400 text-[10px] block">Storage Duration</span>
+                      <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.days_idle ?? 120} days idle</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 21 Safety Gates Deterministic Checklist */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-zinc-400">
+                      21 Safety Gates Veto Checklist
+                    </h4>
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      ASME / API / NACE Standard
+                    </span>
+                  </div>
+                  {isSearched ? (
+                    <div className="space-y-2 text-xs font-mono">
+                      <div
+                        className={`p-2.5 rounded-lg border ${
+                          inspectedItem.is_compatible !== false
+                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
+                            : 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-semibold text-xs mb-1">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              inspectedItem.is_compatible !== false ? 'bg-emerald-500' : 'bg-rose-500'
+                            }`}
+                          />
+                          <span>
+                            {inspectedItem.is_compatible !== false
+                              ? 'Deterministic Safety Verification: PASSED'
+                              : 'Deterministic Safety Gate: VETOED'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 pl-3.5">
+                          {inspectedItem.explanation ||
+                            (inspectedItem.is_compatible !== false
+                              ? 'All 21 codified deterministic safety rules satisfied (Pressure ratings, Metallurgy DAG, CE weldability, Sour Service).'
+                              : 'Physical or metallurgical incompatibility detected by deterministic safety gate.')}
+                        </p>
+                        {inspectedItem.violation_code && (
+                          <p className="text-[10px] text-rose-600 dark:text-rose-400 font-mono mt-1.5 pl-3.5">
+                            Safety Invariant Violated: <strong>{inspectedItem.violation_code}</strong>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-700/80 text-xs font-mono text-zinc-500 space-y-1">
+                      <p className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300">
+                        No Reference Query Active
+                      </p>
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
+                        Enter a spare part specification or query in the search bar above to execute the 21 ASME, ASTM, and OISD deterministic safety gates against this candidate.
+                      </p>
+                    </div>
+                  )}
+                </div>
 
               {/* Road Logistics & Tortuosity Factor */}
               <div>
@@ -573,7 +633,8 @@ export default function SurplusDiscoveryPage() {
                 </div>
               </div>
             </div>
-          )}
+          );
+        })()}
         </SideDrawer>
       </div>
     </ProtectedRoute>
