@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Geist, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/context/AuthContext";
 import { AppShell } from "@/components/AppShell";
 
-const inter = Inter({
+const geist = Geist({
   subsets: ["latin"],
   variable: "--font-sans",
   display: "swap",
@@ -28,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${geist.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className="antialiased min-h-screen font-sans">
         <ThemeProvider>
           <AuthProvider>

@@ -75,9 +75,11 @@ class MTCParser:
             material_grade = material_grade.split("\n")[0].split("|")[0].strip()
 
         # Specification
-        spec = "EN 10204 3.1"
-        if "3.2" in text:
+        spec = None
+        if "EN 10204 3.2" in text or "3.2" in text:
             spec = "EN 10204 3.2"
+        elif "EN 10204 3.1" in text or "3.1" in text:
+            spec = "EN 10204 3.1"
 
         # Manufacturer
         manufacturer = self._find_known_entity(text, KNOWN_MANUFACTURERS)
@@ -99,8 +101,8 @@ class MTCParser:
             "po_no": po_no,
             "material_grade": material_grade,
             "specification": spec,
-            "manufacturer": manufacturer or "UNKNOWN_MANUFACTURER",
-            "tpi_agency": tpi_agency or "INTERNAL_MILL_INSPECTION",
+            "manufacturer": manufacturer,
+            "tpi_agency": tpi_agency,
         }
 
     def parse_chemical_composition(self, text: str) -> Dict[str, float]:
@@ -204,8 +206,9 @@ class MTCParser:
         chem_valid, chem_violations = validate_composition(chemistry, grade)
         mech_valid, mech_violations = validate_mechanical_properties(mechanical, grade)
 
-        is_conforming = chem_valid and mech_valid
-        all_violations = chem_violations + mech_violations
+        has_data = bool(chemistry or mechanical)
+        is_conforming = (chem_valid and mech_valid) if has_data else False
+        all_violations = (chem_violations + mech_violations) if has_data else ["No chemical or mechanical data extracted from document."]
 
         # Detect item type / dimensions from description in text
         size_nb_mm = self._extract_dimension_size(raw_text)
@@ -225,7 +228,7 @@ class MTCParser:
         if not header.get("material_grade"):
             missing_attrs.append("material_grade")
 
-        is_incomplete = len(missing_attrs) > 0 or confidence_score < 0.70
+        is_incomplete = len(missing_attrs) > 0 or confidence_score < 0.70 or not has_data
         requires_hitl = is_incomplete or not is_conforming
 
         return {
@@ -264,7 +267,7 @@ class MTCParser:
             "pren": parsed_mtc.get("pren"),
             "chemistry": parsed_mtc.get("chemical_composition", {}),
             "mechanical": parsed_mtc.get("mechanical_properties", {}),
-            "astm_conformance": parsed_mtc.get("conforms_to_astm", True),
+            "astm_conformance": parsed_mtc.get("conforms_to_astm", False),
             "non_conformance_warnings": parsed_mtc.get("non_conformance_warnings", []),
         }
 
@@ -275,7 +278,7 @@ class MTCParser:
             schedule=parsed_mtc.get("schedule"),
             metallurgy=header.get("material_grade"),
             facing_end=parsed_mtc.get("facing_end"),
-            standard=header.get("specification", "EN 10204 3.1"),
+            standard=header.get("specification"),
             properties=props,
             is_incomplete=parsed_mtc.get("is_incomplete", False),
             missing_attributes=parsed_mtc.get("missing_attributes", []),
@@ -373,4 +376,4 @@ class MTCParser:
             return "GASKET"
         if "PUMP" in t:
             return "PUMP"
-        return "UNKNOWN_EQUIPMENT"
+        return None

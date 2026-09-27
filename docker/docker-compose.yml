@@ -259,7 +259,8 @@ services:
       backend:
         condition: service_healthy
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - INTERNAL_BACKEND_URL=http://samanvay-ai-backend:8000
+      - NEXT_PUBLIC_API_URL=/api/v1
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=192
     healthcheck:
@@ -279,6 +280,26 @@ services:
       project: "Samanvay-AI"
       service: "frontend"
       tier: "user-interface"
+
+  # ── Cloudflare Public Tunnel (Run: docker compose --profile tunnel up tunnel) ───
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: samanvay-ai-tunnel
+    restart: unless-stopped
+    profiles:
+      - tunnel
+    command: ["tunnel", "--url", "http://samanvay-ai-frontend:3000"]
+    depends_on:
+      frontend:
+        condition: service_healthy
+    networks:
+      samanvay-ai-network:
+        aliases:
+          - samanvay-ai-tunnel
+    labels:
+      project: "Samanvay-AI"
+      service: "tunnel"
+      tier: "public-ingress"
 
 volumes:
   samanvay-ai-postgres-data:

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Card } from '@/components/ui';
+import { Card, Skeleton } from '@/components/ui';
 import {
   Upload,
   FileText,
@@ -84,168 +84,174 @@ export default function DocumentIntakePage() {
 
   return (
     <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'SUPER_ADMIN']}>
-      <div className="flex flex-col space-y-5 max-w-[1400px] mx-auto pb-10">
-      {/* Top Banner */}
-      <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-            DOCUMENT INTAKE
-          </span>
-          <span className="text-xs font-mono text-slate-500">
-            PyMuPDF Vector Stream & PaddleOCR Multi-Modal Pipeline
-          </span>
-        </div>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-          Material Test Certificate (MTC) & Procurement Document Intake
-        </h1>
-        <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-          Automatic digital attribute extraction, chemical composition analysis (IIW CE / PREN), and ASTM boundary validation.
-        </p>
-      </div>
-
-      {errorMsg && (
-        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-mono rounded-lg flex items-center justify-between">
-          <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="text-slate-500 hover:text-slate-700">&times;</button>
-        </div>
-      )}
-
-      {/* Upload Drop Zone */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        onClick={() => !isProcessing && fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors cursor-pointer select-none bg-white dark:bg-slate-900 ${
-          isDragging
-            ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20'
-            : 'border-slate-300 dark:border-slate-700 hover:border-emerald-500 hover:bg-slate-50/50 dark:hover:bg-slate-800/40'
-        }`}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif"
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              handleFileUpload(e.target.files[0]);
-            }
-          }}
-        />
-
-        {isProcessing ? (
-          <div className="py-6 flex flex-col items-center justify-center space-y-3">
-            <Loader2 className="h-9 w-9 text-emerald-600 dark:text-emerald-400 animate-spin" />
-            <p className="font-mono text-sm font-semibold text-slate-800 dark:text-slate-200">
-              {statusMessage || 'Processing certificate...'}
-            </p>
-            <p className="text-xs text-slate-400 font-mono">
-              Running OCR and validating chemical tolerances against ASTM specifications
-            </p>
+      <div className="space-y-4 max-w-7xl mx-auto pb-10">
+        {/* Header */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 transition-colors">
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 font-sans">
+              Material Test Certificate (MTC) Intake
+            </h1>
+            <span className="px-1.5 py-0.2 text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-750">
+              PyMuPDF & PaddleOCR
+            </span>
           </div>
-        ) : (
-          <div className="py-4">
-            <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-3 border border-slate-200 dark:border-slate-700">
-              <Upload size={22} />
-            </div>
-            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              Select or Drag & Drop Material Test Certificate (MTC)
-            </h3>
-            <p className="text-xs text-slate-500 mt-1 font-mono">
-              Supports EN 10204 3.1 PDF certificates, scanned delivery challans, and inspection reports (.pdf, .png, .jpg)
-            </p>
-            <div className="mt-4">
-              <span className="px-4 py-2 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white text-xs font-mono font-semibold rounded transition-colors inline-block">
-                Browse Files
-              </span>
-            </div>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-0.5">
+            OCR attribute extraction, IIW carbon equivalent weldability ($CE \le 0.43\%$), and ASTM specification boundary checks.
+          </p>
+        </div>
+
+        {errorMsg && (
+          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">
+            <span>{errorMsg}</span>
+            <button onClick={() => setErrorMsg(null)} className="text-zinc-400 hover:text-zinc-600">&times;</button>
           </div>
         )}
-      </div>
 
-      {/* Recently Ingested Documents from Backend */}
-      <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-3">
-          <div className="flex items-center gap-2">
-            <FileText size={16} className="text-emerald-600 dark:text-emerald-400" />
-            <h2 className="text-sm font-mono font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-              Recently Ingested Documents
-            </h2>
-          </div>
+        {/* Upload Drop Zone */}
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => !isProcessing && fileInputRef.current?.click()}
+          className={`border border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer select-none bg-white dark:bg-zinc-900 ${
+            isDragging
+              ? 'border-zinc-500 bg-zinc-50 dark:bg-zinc-850'
+              : 'border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600'
+          }`}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                handleFileUpload(e.target.files[0]);
+              }
+            }}
+          />
 
-          <button
-            onClick={fetchRecentDocs}
-            disabled={loadingDocs}
-            className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-xs transition-colors"
-            title="Refresh documents list"
-          >
-            <RefreshCw size={13} className={loadingDocs ? 'animate-spin' : ''} />
-          </button>
-        </div>
-
-        <div className="overflow-x-auto">
-          {loadingDocs ? (
-            <div className="py-8 text-center text-xs font-mono text-slate-500">
-              Loading ingested documents from database...
-            </div>
-          ) : recentDocs.length === 0 ? (
-            <div className="py-8 text-center text-xs font-mono text-slate-500">
-              No documents ingested yet. Upload an MTC above to begin digital extraction.
+          {isProcessing ? (
+            <div className="py-4 flex flex-col items-center justify-center space-y-2.5">
+              <Loader2 className="h-6 w-6 text-zinc-700 dark:text-zinc-300 animate-spin" />
+              <p className="font-mono text-xs font-medium text-zinc-800 dark:text-zinc-200">
+                {statusMessage || 'Processing certificate...'}
+              </p>
+              <p className="text-[11px] text-zinc-400 font-mono">
+                Extracting textual tokens and checking chemistry tolerances against ASTM standards
+              </p>
             </div>
           ) : (
-            <table className="w-full text-left text-xs font-mono border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                  <th className="py-2 pr-3 font-semibold">DOC ID</th>
-                  <th className="py-2 px-3 font-semibold">FILENAME</th>
-                  <th className="py-2 px-3 font-semibold">TYPE</th>
-                  <th className="py-2 px-3 font-semibold">CONFIDENCE</th>
-                  <th className="py-2 px-3 font-semibold">UPLOADED</th>
-                  <th className="py-2 pl-3 font-semibold text-right">INSPECT</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {recentDocs.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-2.5 pr-3 font-bold text-slate-900 dark:text-slate-100">
-                      #{doc.id}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200 truncate max-w-[280px]">
-                      {doc.filename}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
-                      {doc.doc_type || 'MTC_CERTIFICATE'}
-                    </td>
-                    <td className="py-2.5 px-3 text-emerald-700 dark:text-emerald-400 font-semibold">
-                      {((doc.confidence || 0.95) * 100).toFixed(1)}%
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-500 text-[11px]">
-                      {doc.created_at ? new Date(doc.created_at).toLocaleString('en-IN') : 'Recently'}
-                    </td>
-                    <td className="py-2.5 pl-3 text-right">
-                      <button
-                        onClick={() => {
-                          if (typeof window !== 'undefined') {
-                            sessionStorage.setItem('current_mtc', JSON.stringify(doc));
-                          }
-                          router.push('/upload/review');
-                        }}
-                        className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
-                      >
-                        Review &rarr;
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="py-2">
+              <div className="w-10 h-10 mx-auto rounded-md bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 mb-2 border border-zinc-200 dark:border-zinc-700">
+                <Upload size={18} />
+              </div>
+              <h3 className="text-xs font-medium text-zinc-900 dark:text-zinc-100 font-sans">
+                Drag and drop Material Test Certificate (MTC)
+              </h3>
+              <p className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                EN 10204 3.1 PDF certificates, scanned delivery challans, or inspection reports (.pdf, .png, .jpg)
+              </p>
+              <div className="mt-3">
+                <span className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 text-xs font-medium rounded-md transition-colors inline-block">
+                  Browse Files
+                </span>
+              </div>
+            </div>
           )}
         </div>
-      </Card>
+
+        {/* Recently Ingested Documents */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden shadow-2xs">
+          <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText size={14} className="text-zinc-500" />
+              <h2 className="text-xs font-mono font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                Ingested Documents
+              </h2>
+            </div>
+
+            <button
+              onClick={fetchRecentDocs}
+              disabled={loadingDocs}
+              className="p-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded text-xs transition-colors"
+              title="Refresh list"
+            >
+              <RefreshCw size={12} className={loadingDocs ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left compact-table border-collapse">
+              <thead>
+                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80">
+                  <th className="w-16">Doc ID</th>
+                  <th>Filename</th>
+                  <th>Type</th>
+                  <th>OCR Confidence</th>
+                  <th>Uploaded</th>
+                  <th className="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs font-mono">
+                {loadingDocs ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <tr key={i} className="h-[38px]">
+                      <td><Skeleton className="h-4 w-10" /></td>
+                      <td><Skeleton className="h-4 w-40" /></td>
+                      <td><Skeleton className="h-4 w-24" /></td>
+                      <td><Skeleton className="h-4 w-16" /></td>
+                      <td><Skeleton className="h-4 w-28" /></td>
+                      <td className="text-right"><Skeleton className="h-4 w-14 ml-auto" /></td>
+                    </tr>
+                  ))
+                ) : recentDocs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-10 text-center text-zinc-400 font-mono text-xs">
+                      No documents ingested yet. Upload an MTC above to begin digital parsing.
+                    </td>
+                  </tr>
+                ) : (
+                  recentDocs.map((doc) => (
+                    <tr key={doc.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                      <td className="font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
+                        #{doc.id}
+                      </td>
+                      <td className="text-zinc-800 dark:text-zinc-200 truncate max-w-[280px]">
+                        {doc.filename}
+                      </td>
+                      <td className="text-zinc-500">
+                        {doc.doc_type || 'MTC_CERTIFICATE'}
+                      </td>
+                      <td className="tabular-nums font-medium text-zinc-700 dark:text-zinc-300">
+                        {doc.confidence !== undefined && doc.confidence !== null ? `${(doc.confidence * 100).toFixed(1)}%` : '—'}
+                      </td>
+                      <td className="text-zinc-500 text-[11px]">
+                        {doc.created_at ? new Date(doc.created_at).toLocaleString('en-IN') : 'Recently'}
+                      </td>
+                      <td className="text-right">
+                        <button
+                          onClick={() => {
+                            if (typeof window !== 'undefined') {
+                              sessionStorage.setItem('current_mtc', JSON.stringify(doc));
+                            }
+                            router.push('/upload/review');
+                          }}
+                          className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-[11px] font-medium transition-colors"
+                        >
+                          Review &rarr;
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </ProtectedRoute>
   );

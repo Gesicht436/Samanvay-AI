@@ -1,7 +1,24 @@
 import { User, SeedUser, AuthTokenResponse, UserSignupRequest } from './types';
 
-const rawUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const API_BASE_URL = rawUrl.endsWith('/api/v1') ? rawUrl : `${rawUrl.replace(/\/+$/, '')}/api/v1`;
+function resolveApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    // In browser: use relative /api/v1 so Next.js proxies it seamlessly across any domain or tunnel
+    const configured = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL;
+    if (!configured || configured.includes('localhost:8000') || configured.includes('127.0.0.1:8000')) {
+      return '/api/v1';
+    }
+    return configured.endsWith('/api/v1') ? configured : `${configured.replace(/\/+$/, '')}/api/v1`;
+  }
+  // Server-side (SSR / Server Actions / Docker container)
+  const serverBackend =
+    process.env.INTERNAL_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://samanvay-ai-backend:8000';
+  return serverBackend.endsWith('/api/v1') ? serverBackend : `${serverBackend.replace(/\/+$/, '')}/api/v1`;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Card } from '@/components/ui';
+import { Card, Skeleton } from '@/components/ui';
 import {
   Truck,
   Inbox,
@@ -19,6 +19,7 @@ import {
   Plus,
   Send,
   Building2,
+  QrCode,
 } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { api } from '@/lib/api';
@@ -133,249 +134,245 @@ export default function RequisitionsListPage() {
 
   return (
     <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'CISF_SECURITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
-      <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-              CONSIGNMENT HUB
-            </span>
-            <span className="text-xs font-mono text-slate-500">
-              Active CPSE Node: {cpse}
+      <div className="space-y-4 max-w-7xl mx-auto pb-10">
+        {/* Header & Controls */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 transition-colors">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 font-sans">
+                  Consignments & Inter-CPSE Requisitions
+                </h1>
+                <span className="px-1.5 py-0.2 text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-750">
+                  Node: {cpse}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-0.5">
+                Audit-sealed mutual-aid consignment workflows, CISF gate passes, and road transit tracking.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchRequisitions}
+                disabled={loading}
+                className="p-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-750 text-zinc-700 dark:text-zinc-300 rounded-md transition-colors"
+                title="Refresh Table"
+              >
+                <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              </button>
+              <Link
+                href="/discover"
+                className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <Plus size={13} />
+                <span>New Requisition</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Status Filters Bar */}
+          <div className="mt-3 flex items-center justify-between gap-2 text-xs font-mono">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-zinc-400 text-[11px]">Filter:</span>
+              {['ALL', 'REQUESTED', 'APPROVED', 'GATE_PASS_ISSUED', 'DISPATCHED', 'DELIVERED'].map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setStatusFilter(st)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    statusFilter === st
+                      ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  {st.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+
+            <span className="text-[11px] text-zinc-400">
+              {filteredRequests.length} records
             </span>
           </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Inter-CPSE Consignments & Material Requisitions
-          </h1>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-            Audit-sealed transfer workflows, CISF gate passes, and mutual-aid dispatch tracking across CPSEs.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={fetchRequisitions}
-            disabled={loading}
-            className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded transition-colors"
-            title="Refresh Requisitions"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <Link
-            href="/discover"
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-mono font-semibold flex items-center gap-1.5 transition-colors"
-          >
-            <Plus size={14} />
-            <span>New Requisition</span>
-          </Link>
-        </div>
-      </div>
+        {actionSuccess && (
+          <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-mono rounded-lg flex items-center justify-between">
+            <span>{actionSuccess}</span>
+            <button onClick={() => setActionSuccess(null)} className="text-zinc-400 hover:text-zinc-600">&times;</button>
+          </div>
+        )}
 
-      {actionSuccess && (
-        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-mono rounded-lg flex items-center justify-between">
-          <span className="font-semibold">{actionSuccess}</span>
-          <button onClick={() => setActionSuccess(null)} className="text-slate-500 hover:text-slate-700">&times;</button>
-        </div>
-      )}
+        {error && (
+          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={fetchRequisitions} className="underline font-semibold ml-2">Retry</button>
+          </div>
+        )}
 
-      {error && (
-        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-mono rounded-lg flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={fetchRequisitions} className="underline font-semibold">Retry</button>
-        </div>
-      )}
-
-      {/* Filter Strip */}
-      <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between text-xs font-mono">
-        <div className="flex items-center gap-2">
-          <span className="text-slate-500">Filter Status:</span>
-          {['ALL', 'PENDING', 'APPROVED', 'GATE_PASS_ISSUED', 'DISPATCHED', 'DELIVERED'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
-                statusFilter === st
-                  ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
-        </div>
-
-        <span className="text-slate-500 text-[11px]">
-          {filteredRequests.length} requisitions found
-        </span>
-      </div>
-
-      {/* Requisitions Table */}
-      <Card className="p-0 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
-                <th className="py-2.5 px-3 font-semibold">REQUISITION ID</th>
-                <th className="py-2.5 px-3 font-semibold">TARGET SKU</th>
-                <th className="py-2.5 px-3 font-semibold">TRANSFER ROUTE</th>
-                <th className="py-2.5 px-3 font-semibold text-center">QTY</th>
-                <th className="py-2.5 px-3 font-semibold">URGENCY</th>
-                <th className="py-2.5 px-3 font-semibold text-center">STATUS</th>
-                <th className="py-2.5 px-3 font-semibold text-right">WORKFLOW ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="py-16 text-center text-slate-500">
-                    <RefreshCw className="animate-spin h-5 w-5 mx-auto mb-2 text-emerald-500" />
-                    <span>Loading requisitions from PostgreSQL ledger...</span>
-                  </td>
+        {/* Consignments Table (38px Compact Rows) */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left compact-table border-collapse">
+              <thead>
+                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80">
+                  <th>Requisition ID</th>
+                  <th>Part SKU</th>
+                  <th>Route</th>
+                  <th className="text-right">Qty</th>
+                  <th>Urgency</th>
+                  <th>Status</th>
+                  <th className="text-right">Actions</th>
                 </tr>
-              ) : filteredRequests.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-16 text-center text-slate-500">
-                    <p>No requisitions found in database.</p>
-                    <Link
-                      href="/discover"
-                      className="mt-2 inline-block px-3 py-1.5 bg-emerald-600 text-white rounded text-xs font-semibold"
-                    >
-                      Search Surplus & Initiate First Requisition &rarr;
-                    </Link>
-                  </td>
-                </tr>
-              ) : (
-                filteredRequests.map((req) => {
-                  const reqId = req.requisition_id || req.id || '';
-                  const isProcessing = actionLoadingId === reqId;
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs font-mono">
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <tr key={i} className="h-[38px]">
+                      <td><Skeleton className="h-4 w-24" /></td>
+                      <td><Skeleton className="h-4 w-32" /></td>
+                      <td><Skeleton className="h-4 w-28" /></td>
+                      <td className="text-right"><Skeleton className="h-4 w-8 ml-auto" /></td>
+                      <td><Skeleton className="h-4 w-16" /></td>
+                      <td><Skeleton className="h-4 w-20" /></td>
+                      <td className="text-right"><Skeleton className="h-4 w-28 ml-auto" /></td>
+                    </tr>
+                  ))
+                ) : filteredRequests.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-zinc-400 font-mono text-xs">
+                      No requisitions found matching current filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRequests.map((req) => {
+                    const reqId = req.requisition_id || req.id || '';
+                    const isProcessing = actionLoadingId === reqId;
 
-                  return (
-                    <tr key={reqId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3 px-3">
-                        <Link
-                          href={`/requests/${reqId}`}
-                          className="font-bold text-emerald-700 dark:text-emerald-400 hover:underline"
-                        >
-                          {reqId}
-                        </Link>
-                        {req.created_at && (
-                          <div className="text-[10px] text-slate-400">
-                            {new Date(req.created_at).toLocaleDateString('en-IN')}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-3">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">{req.sku_code}</span>
-                        {req.justification && (
-                          <div className="text-[11px] text-slate-500 truncate max-w-[220px]" title={req.justification}>
-                            {req.justification}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-3">
-                        <div className="font-semibold text-slate-700 dark:text-slate-300">
-                          {req.source_cpse} &rarr; {req.requesting_cpse}
-                        </div>
-                        <div className="text-[10px] text-slate-400">
-                          Target: {req.target_depot || 'Central Stores'}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-3 text-center font-bold text-slate-900 dark:text-slate-100">
-                        {req.required_qty}
-                      </td>
-
-                      <td className="py-3 px-3">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            req.urgency?.includes('EMERGENCY')
-                              ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                          }`}
-                        >
-                          {req.urgency || 'STANDARD'}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-3 text-center">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            req.status === 'DELIVERED'
-                              ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300'
-                              : req.status === 'DISPATCHED'
-                              ? 'bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300'
-                              : req.status === 'GATE_PASS_ISSUED'
-                              ? 'bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300'
-                              : req.status === 'APPROVED'
-                              ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                          }`}
-                        >
-                          {req.status}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {req.status === 'PENDING' && (
-                            <button
-                              onClick={() => handleApprove(reqId)}
-                              disabled={isProcessing}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold transition-colors disabled:opacity-50"
-                            >
-                              Approve
-                            </button>
-                          )}
-
-                          {req.status === 'APPROVED' && (
-                            <button
-                              onClick={() => handleGenerateGatePass(reqId)}
-                              disabled={isProcessing}
-                              className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-[11px] font-semibold transition-colors disabled:opacity-50"
-                            >
-                              Issue Gate Pass
-                            </button>
-                          )}
-
-                          {req.status === 'GATE_PASS_ISSUED' && (
-                            <button
-                              onClick={() => handleDispatch(reqId)}
-                              disabled={isProcessing}
-                              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-semibold transition-colors disabled:opacity-50"
-                            >
-                              Dispatch
-                            </button>
-                          )}
-
-                          {req.status === 'DISPATCHED' && (
-                            <button
-                              onClick={() => handleDeliver(reqId)}
-                              disabled={isProcessing}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold transition-colors disabled:opacity-50"
-                            >
-                              Confirm Receipt
-                            </button>
-                          )}
-
+                    return (
+                      <tr key={reqId} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                        <td className="py-2">
                           <Link
                             href={`/requests/${reqId}`}
-                            className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px] transition-colors"
+                            className="font-semibold text-zinc-900 dark:text-zinc-100 hover:underline"
                           >
-                            Details
+                            {reqId}
                           </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                          {req.created_at && (
+                            <div className="text-[10px] text-zinc-400">
+                              {new Date(req.created_at).toLocaleDateString('en-IN')}
+                            </div>
+                          )}
+                        </td>
+
+                        <td>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200">{req.sku_code}</span>
+                          {req.justification && (
+                            <div className="text-[11px] text-zinc-500 truncate max-w-[180px] font-sans" title={req.justification}>
+                              {req.justification}
+                            </div>
+                          )}
+                        </td>
+
+                        <td>
+                          <span className="text-zinc-700 dark:text-zinc-300 font-medium">
+                            {req.source_cpse} &rarr; {req.requesting_cpse}
+                          </span>
+                        </td>
+
+                        <td className="text-right tabular-nums text-zinc-900 dark:text-zinc-100 font-semibold">
+                          {req.required_qty}
+                        </td>
+
+                        <td>
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
+                              req.urgency?.includes('EMERGENCY')
+                                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                            }`}
+                          >
+                            {req.urgency || 'STANDARD'}
+                          </span>
+                        </td>
+
+                        <td>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono rounded-full border ${
+                              req.status === 'DELIVERED'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                : req.status === 'DISPATCHED'
+                                ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                                : req.status === 'GATE_PASS_ISSUED'
+                                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+                                : req.status === 'APPROVED'
+                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20'
+                            }`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                            <span>{req.status}</span>
+                          </span>
+                        </td>
+
+                        <td className="text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {req.status === 'REQUESTED' && (
+                              <button
+                                onClick={() => handleApprove(reqId)}
+                                disabled={isProcessing}
+                                className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded text-[11px] font-medium transition-colors disabled:opacity-50"
+                              >
+                                Approve
+                              </button>
+                            )}
+
+                            {req.status === 'APPROVED' && (
+                              <button
+                                onClick={() => handleGenerateGatePass(reqId)}
+                                disabled={isProcessing}
+                                className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded text-[11px] font-medium transition-colors disabled:opacity-50"
+                              >
+                                Issue Pass
+                              </button>
+                            )}
+
+                            {req.status === 'GATE_PASS_ISSUED' && (
+                              <button
+                                onClick={() => handleDispatch(reqId)}
+                                disabled={isProcessing}
+                                className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded text-[11px] font-medium transition-colors disabled:opacity-50"
+                              >
+                                Dispatch
+                              </button>
+                            )}
+
+                            {req.status === 'DISPATCHED' && (
+                              <button
+                                onClick={() => handleDeliver(reqId)}
+                                disabled={isProcessing}
+                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-medium transition-colors disabled:opacity-50"
+                              >
+                                Confirm
+                              </button>
+                            )}
+
+                            <Link
+                              href={`/requests/${reqId}`}
+                              className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-[11px] transition-colors"
+                            >
+                              Gate Pass
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </Card>
       </div>
     </ProtectedRoute>
   );

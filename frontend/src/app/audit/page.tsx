@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card } from '@/components/ui';
+import { Card, SideDrawer, Skeleton } from '@/components/ui';
 import {
   ShieldCheck,
   Download,
@@ -9,13 +9,13 @@ import {
   Filter,
   CheckCircle2,
   Lock,
-  KeyRound,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
   X,
   Layers,
+  FileCode,
 } from 'lucide-react';
 import { exportToCSV } from '@/lib/exportUtils';
 import { api } from '@/lib/api';
@@ -69,7 +69,7 @@ export default function AuditTrailPage() {
   const pageSize = 25;
   const [totalCount, setTotalCount] = useState<number>(0);
 
-  // Detail Modal
+  // Detail Inspector Drawer
   const [inspectEntry, setInspectEntry] = useState<AuditLogEntry | null>(null);
 
   // Fetch real audit entries
@@ -160,283 +160,278 @@ export default function AuditTrailPage() {
 
   return (
     <ProtectedRoute allowedRoles={['VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
-      <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-              <ShieldCheck size={13} />
-              IMMUTABLE AUDIT LEDGER
-            </span>
-            <span className="text-xs font-mono text-slate-500">
-              SHA-256 Merkle Chain Integrity
-            </span>
-          </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Sovereign Inter-CPSE Cryptographic Audit Trail
-          </h1>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-            Cryptographically sealed operational ledger recording all status changes, requisitions, gate passes, and MTC ingestions.
-          </p>
-        </div>
+      <div className="space-y-4 max-w-7xl mx-auto pb-10">
+        {/* Header & Verification Bar */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 transition-colors">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 font-sans">
+                  Sovereign Cryptographic Audit Ledger
+                </h1>
+                <span className="px-1.5 py-0.2 text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-750">
+                  SHA-256 Merkle Chain
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-0.5">
+                RFC-4180 audit records with linked block hashes. Validated against CAG oversight requirements.
+              </p>
+            </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={runChainVerification}
-            disabled={verifying}
-            className={`px-3 py-1.5 rounded text-xs font-mono font-semibold flex items-center gap-1.5 border transition-colors ${
-              chainValid
-                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
-            }`}
-          >
-            <RefreshCw size={13} className={verifying ? 'animate-spin' : ''} />
-            <span>{chainValid ? 'Chain Validated (SHA-256)' : 'Verify Chain'}</span>
-          </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={runChainVerification}
+                disabled={verifying}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-mono font-medium flex items-center gap-1.5 border transition-colors ${
+                  chainValid
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700'
+                }`}
+              >
+                <RefreshCw size={12} className={verifying ? 'animate-spin' : ''} />
+                <span>{chainValid ? 'Merkle Chain Valid' : 'Verify Chain'}</span>
+              </button>
 
-          <button
-            onClick={handleExportCSV}
-            className="px-3.5 py-1.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded text-xs font-mono font-semibold flex items-center gap-1.5 transition-colors"
-          >
-            <Download size={13} />
-            <span>Export CSV</span>
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-mono rounded-lg flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={fetchAuditLogs} className="underline font-semibold">Retry</button>
-        </div>
-      )}
-
-      {/* Filter & Search Bar */}
-      <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[300px]">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search action, actor, reference SKU, or hash..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 text-xs"
-            />
+              <button
+                onClick={handleExportCSV}
+                className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <Download size={12} />
+                <span>Export CSV</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">Category:</span>
+          {/* Filters Bar */}
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-mono">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search size={13} className="absolute left-2.5 top-2 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search action, actor, SKU, or block hash..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-7 pr-3 py-1 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-hidden font-sans"
+              />
+            </div>
+
             <select
               value={selectedCategory}
               onChange={(e) => {
                 setSelectedCategory(e.target.value);
                 setPage(1);
               }}
-              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
+              className="bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2 py-1 text-xs text-zinc-800 dark:text-zinc-200 outline-hidden"
             >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
-          </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">CPSE:</span>
             <select
               value={selectedCpse}
               onChange={(e) => {
                 setSelectedCpse(e.target.value);
                 setPage(1);
               }}
-              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
+              className="bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2 py-1 text-xs text-zinc-800 dark:text-zinc-200 outline-hidden"
             >
               {CPSE_LIST.map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>{c === 'ALL' ? 'All CPSEs' : c}</option>
               ))}
             </select>
           </div>
         </div>
 
-        <div className="text-slate-500 text-[11px]">
-          Showing {filteredLogs.length} blocks · Page {page} of {totalPages}
-        </div>
-      </div>
+        {error && (
+          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={fetchAuditLogs} className="underline font-semibold ml-2">Retry</button>
+          </div>
+        )}
 
-      {/* Main Ledger Table */}
-      <Card className="p-0 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
-                <th className="py-2.5 px-3 font-semibold">BLOCK #</th>
-                <th className="py-2.5 px-3 font-semibold">TIMESTAMP</th>
-                <th className="py-2.5 px-3 font-semibold">CATEGORY</th>
-                <th className="py-2.5 px-3 font-semibold">ACTION</th>
-                <th className="py-2.5 px-3 font-semibold">ACTOR & CPSE</th>
-                <th className="py-2.5 px-3 font-semibold">REFERENCE ID</th>
-                <th className="py-2.5 px-3 font-semibold">SHA-256 DIGITAL SEAL</th>
-                <th className="py-2.5 px-3 font-semibold text-right">DETAILS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="py-16 text-center text-slate-500">
-                    <RefreshCw className="animate-spin h-5 w-5 mx-auto mb-2 text-emerald-500" />
-                    <span>Loading cryptographic blocks from PostgreSQL ledger...</span>
-                  </td>
+        {/* Cryptographic Ledger Table (38px Compact Rows) */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left compact-table border-collapse">
+              <thead>
+                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80">
+                  <th className="w-16">Block</th>
+                  <th>Timestamp</th>
+                  <th>Category</th>
+                  <th>Action</th>
+                  <th>Actor</th>
+                  <th>CPSE</th>
+                  <th>SHA-256 Hash</th>
+                  <th className="text-right">Action</th>
                 </tr>
-              ) : filteredLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-16 text-center text-slate-500">
-                    No matching audit trail blocks found.
-                  </td>
-                </tr>
-              ) : (
-                filteredLogs.map((l) => (
-                  <tr key={l.id || l.block_number} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-slate-100">
-                      #{l.block_number || l.id}
-                    </td>
-
-                    <td className="py-2.5 px-3 text-slate-500 text-[11px]">
-                      {new Date(l.timestamp).toLocaleString('en-IN')}
-                    </td>
-
-                    <td className="py-2.5 px-3">
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                        {l.action_category || l.category || 'SYSTEM'}
-                      </span>
-                    </td>
-
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
-                      {l.action}
-                    </td>
-
-                    <td className="py-2.5 px-3">
-                      <div className="font-medium text-slate-800 dark:text-slate-200">{l.actor || 'SYSTEM'}</div>
-                      <div className="text-[10px] text-slate-500">{l.cpse} {l.depot ? `(${l.depot})` : ''}</div>
-                    </td>
-
-                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-mono">
-                      {l.reference_id || '—'}
-                    </td>
-
-                    <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px] truncate max-w-[200px]" title={l.hash || l.current_hash}>
-                      {l.hash || l.current_hash || 'SHA256_VERIFIED'}
-                    </td>
-
-                    <td className="py-2.5 px-3 text-right">
-                      <button
-                        onClick={() => setInspectEntry(l)}
-                        className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px] transition-colors"
-                      >
-                        Inspect
-                      </button>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs font-mono">
+                {loading ? (
+                  Array.from({ length: 10 }).map((_, i) => (
+                    <tr key={i} className="h-[38px]">
+                      <td><Skeleton className="h-4 w-10" /></td>
+                      <td><Skeleton className="h-4 w-28" /></td>
+                      <td><Skeleton className="h-4 w-20" /></td>
+                      <td><Skeleton className="h-4 w-32" /></td>
+                      <td><Skeleton className="h-4 w-20" /></td>
+                      <td><Skeleton className="h-4 w-12" /></td>
+                      <td><Skeleton className="h-4 w-36" /></td>
+                      <td className="text-right"><Skeleton className="h-4 w-14 ml-auto" /></td>
+                    </tr>
+                  ))
+                ) : filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-zinc-400 font-mono text-xs">
+                      No cryptographic audit records found matching current query.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  filteredLogs.map((log) => {
+                    const blockNum = log.block_number || log.id || 1;
+                    const cat = log.action_category || log.category || 'SYSTEM';
+                    const hash = log.hash || log.current_hash || '0x...';
 
-        {/* Pagination Bar */}
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-mono bg-slate-50/50 dark:bg-slate-850">
-          <span className="text-slate-500">
-            Page {page} of {totalPages} ({totalCount.toLocaleString('en-IN')} total records)
-          </span>
+                    return (
+                      <tr
+                        key={log.id || `${blockNum}-${log.timestamp}`}
+                        onClick={() => setInspectEntry(log)}
+                        className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                      >
+                        <td className="tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">
+                          #{blockNum}
+                        </td>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1 || loading}
-              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors flex items-center gap-1"
-            >
-              <ChevronLeft size={14} /> Previous
-            </button>
-            <span className="px-2 font-bold text-slate-900 dark:text-slate-100">{page}</span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || loading}
-              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors flex items-center gap-1"
-            >
-              Next <ChevronRight size={14} />
-            </button>
+                        <td className="text-zinc-500 whitespace-nowrap text-[11px]">
+                          {log.timestamp ? new Date(log.timestamp).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'medium' }) : '—'}
+                        </td>
+
+                        <td>
+                          <span className="px-1.5 py-0.2 text-[10px] font-mono rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                            {cat}
+                          </span>
+                        </td>
+
+                        <td className="text-zinc-800 dark:text-zinc-200 font-medium">
+                          {log.action}
+                        </td>
+
+                        <td className="text-zinc-600 dark:text-zinc-400">
+                          @{log.actor}
+                        </td>
+
+                        <td>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                            {log.cpse}
+                          </span>
+                        </td>
+
+                        <td className="text-zinc-400 font-mono text-[11px] truncate max-w-[160px]">
+                          {hash}
+                        </td>
+
+                        <td className="text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setInspectEntry(log);
+                            }}
+                            className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-[11px] font-medium transition-colors"
+                          >
+                            Inspect
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs font-mono bg-zinc-50/50 dark:bg-zinc-900/50">
+            <span className="text-zinc-500">
+              Page {page} of {totalPages} ({totalCount.toLocaleString('en-IN')} total entries)
+            </span>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+                className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-40 transition-colors flex items-center gap-1"
+              >
+                <ChevronLeft size={13} /> Prev
+              </button>
+              <span className="px-2 font-semibold text-zinc-900 dark:text-zinc-100">{page}</span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || loading}
+                className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-40 transition-colors flex items-center gap-1"
+              >
+                Next <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
         </div>
-      </Card>
 
-      {/* Block Inspection Modal */}
-      {inspectEntry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold font-mono text-slate-900 dark:text-white">
-                  Block #{inspectEntry.block_number || inspectEntry.id}: {inspectEntry.action}
-                </h3>
-                <p className="text-xs font-mono text-slate-500">
-                  Sealed at {new Date(inspectEntry.timestamp).toLocaleString('en-IN')}
+        {/* ── SLIDING SIDE INSPECTOR DRAWER ────────────────────────────────── */}
+        <SideDrawer
+          isOpen={!!inspectEntry}
+          onClose={() => setInspectEntry(null)}
+          title={`Block #${inspectEntry?.block_number || inspectEntry?.id || '1'}`}
+          subtitle={`${inspectEntry?.action_category || inspectEntry?.category || 'SYSTEM'} · ${inspectEntry?.cpse}`}
+        >
+          {inspectEntry && (
+            <div className="space-y-4 font-mono text-xs">
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                <span className="text-[10px] text-zinc-400 uppercase">Operational Action</span>
+                <p className="font-semibold text-zinc-900 dark:text-zinc-100 font-sans text-sm">
+                  {inspectEntry.action}
+                </p>
+                <p className="text-zinc-500">
+                  Executed by: <strong className="text-zinc-700 dark:text-zinc-300">@{inspectEntry.actor}</strong> ({inspectEntry.cpse})
+                </p>
+                <p className="text-zinc-400 text-[11px]">
+                  Timestamp: {new Date(inspectEntry.timestamp).toISOString()}
                 </p>
               </div>
-              <button
-                onClick={() => setInspectEntry(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            <div className="p-5 space-y-3 text-xs font-mono">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block text-[11px]">Actor & Role</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{inspectEntry.actor}</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block text-[11px]">CPSE & Node</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{inspectEntry.cpse}</span>
-                </div>
-              </div>
-
+              {/* Cryptographic Hashes */}
               <div>
-                <span className="text-slate-400 block text-[11px] mb-1">Previous Block Hash (Merkle Parent)</span>
-                <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded text-slate-600 dark:text-slate-300 break-all text-[11px]">
-                  {inspectEntry.prev_hash || inspectEntry.previous_hash || 'GENESIS_BLOCK_ROOT_00000000000000000000000000000000'}
+                <h4 className="text-[11px] font-semibold uppercase text-zinc-400 mb-2">
+                  Cryptographic Hashes
+                </h4>
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2">
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block">Current Block Hash (SHA-256)</span>
+                    <span className="text-[11px] text-zinc-800 dark:text-zinc-200 break-all select-all font-mono">
+                      {inspectEntry.hash || inspectEntry.current_hash || '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 block">Previous Block Hash (Chain Link)</span>
+                    <span className="text-[11px] text-zinc-500 break-all select-all font-mono">
+                      {inspectEntry.prev_hash || inspectEntry.previous_hash || 'GENESIS_BLOCK_0000000000000000000000000000000000000000'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <span className="text-slate-400 block text-[11px] mb-1">Current Block Digital Seal (SHA-256)</span>
-                <div className="p-2 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded text-emerald-800 dark:text-emerald-300 break-all text-[11px] font-bold">
-                  {inspectEntry.hash || inspectEntry.current_hash || 'SHA-256_SEALED'}
+              {/* Payload Data */}
+              {inspectEntry.payload && (
+                <div>
+                  <h4 className="text-[11px] font-semibold uppercase text-zinc-400 mb-2">
+                    Block Payload JSON
+                  </h4>
+                  <pre className="p-3 bg-zinc-950 text-zinc-300 text-[11px] rounded-lg overflow-x-auto max-h-60 border border-zinc-800">
+                    {JSON.stringify(inspectEntry.payload, null, 2)}
+                  </pre>
                 </div>
-              </div>
-
-              <div>
-                <span className="text-slate-400 block text-[11px] mb-1">Block Transaction Payload</span>
-                <pre className="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-[11px] overflow-x-auto max-h-48">
-                  {typeof inspectEntry.payload === 'object'
-                    ? JSON.stringify(inspectEntry.payload, null, 2)
-                    : inspectEntry.payload || JSON.stringify({ reference_id: inspectEntry.reference_id, action: inspectEntry.action }, null, 2)}
-                </pre>
-              </div>
+              )}
             </div>
-
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-end">
-              <button
-                onClick={() => setInspectEntry(null)}
-                className="px-4 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-mono"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+        </SideDrawer>
       </div>
     </ProtectedRoute>
   );

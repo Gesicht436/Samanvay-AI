@@ -20,35 +20,37 @@
 }
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #fafafa;
+  --foreground: #09090b;
   --card: #ffffff;
-  --card-foreground: #0f172a;
-  --border: #e2e8f0;
-  --muted: #64748b;
-  --ring: #10b981;
+  --card-foreground: #09090b;
+  --border: #e4e4e7;
+  --muted: #71717a;
+  --ring: #18181b;
 }
 
 [data-theme='dark'] {
-  --background: #090e1a;
-  --foreground: #f8fafc;
-  --card: #0f172a;
-  --card-foreground: #f8fafc;
-  --border: #1e293b;
-  --muted: #94a3b8;
-  --ring: #10b981;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #121215;
+  --card-foreground: #fafafa;
+  --border: #27272a;
+  --muted: #a1a1aa;
+  --ring: #fafafa;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  letter-spacing: -0.011em;
 }
 
-/* Minimal scrollbar */
+/* Hairline scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -56,12 +58,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  background: #d4d4d8;
+  border-radius: 3px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: #3f3f46;
 }
 
 /* Print optimizations for CISF */
@@ -80,12 +82,58 @@ body {
   }
 }
 
-/* Compact Table Layouts */
-.compact-table th, .compact-table td {
-  padding: 0.375rem 0.625rem; /* py-1.5 px-2.5 */
-  font-size: 0.875rem; /* text-sm */
+/* Balanced Compact Table Layout (Linear / Stripe Standard 38px) */
+.compact-table th {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #71717a;
+}
+.dark .compact-table th {
+  color: #a1a1aa;
 }
 
-.numeric-cell {
-  font-family: monospace;
+.compact-table td {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  height: 38px;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
+/* Hairline shimmer animation for skeleton placeholders */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(228, 228, 231, 0.4) 0%,
+    rgba(228, 228, 231, 0.9) 50%,
+    rgba(228, 228, 231, 0.4) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.dark .animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(39, 39, 42, 0.4) 0%,
+    rgba(63, 63, 70, 0.8) 50%,
+    rgba(39, 39, 42, 0.4) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }

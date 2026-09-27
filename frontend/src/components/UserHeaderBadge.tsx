@@ -12,24 +12,24 @@ export function UserHeaderBadge() {
     return (
       <Link
         href="/login"
-        className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium transition-colors shadow-2xs"
+        className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium transition-colors shadow-2xs"
       >
-        <LogIn size={13} />
+        <LogIn size={12} />
         <span>Sign In</span>
       </Link>
     );
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <Link
         href="/login"
-        className="flex items-center gap-2 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs font-mono text-slate-700 dark:text-slate-200 transition-colors border border-slate-200 dark:border-slate-700"
-        title="Click to switch persona"
+        className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-750 rounded-md text-xs font-mono text-zinc-700 dark:text-zinc-300 transition-colors border border-zinc-200 dark:border-zinc-700/80"
+        title="Switch persona"
       >
-        <Shield size={12} className="text-emerald-600 dark:text-emerald-400" />
-        <span className="font-semibold">{user.username}</span>
-        <span className="text-[10px] px-1 py-0.2 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded font-sans">
+        <Shield size={12} className="text-zinc-500" />
+        <span className="font-medium">{user.username}</span>
+        <span className="text-[9px] px-1 py-0.2 bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded font-sans">
           {user.cpse}
         </span>
       </Link>
@@ -37,10 +37,10 @@ export function UserHeaderBadge() {
       <button
         type="button"
         onClick={() => logout()}
-        className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+        className="p-1 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
         title="Sign Out"
       >
-        <LogOut size={14} />
+        <LogOut size={13} />
       </button>
     </div>
   );

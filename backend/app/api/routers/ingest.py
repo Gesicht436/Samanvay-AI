@@ -57,14 +57,20 @@ async def upload_document(
 
     # 1. Dual-Path Text Extraction
     ocr_result = ocr_engine.extract_document(file_bytes, file.filename)
-    raw_text = ocr_result.get("raw_text", "")
-    confidence = float(ocr_result.get("confidence_score", 1.0))
-    doc_type = ocr_result.get("doc_type", "MTC_CERTIFICATE")
+    raw_text = (ocr_result.get("raw_text") or "").strip()
+    confidence = float(ocr_result.get("confidence_score", 0.0))
+    doc_type = ocr_result.get("doc_type", "UNKNOWN")
     is_scanned = bool(ocr_result.get("is_scanned", False))
+    is_unreadable = bool(not raw_text or len(raw_text) < 5 or confidence == 0.0)
 
     # 2. MTC Certificate Extraction & ASTM Validation
     parsed_mtc = mtc_parser.parse_full_mtc(raw_text, confidence_score=confidence)
     material_attrs = mtc_parser.to_material_attributes(parsed_mtc)
+
+    # If document is unreadable, force requires_hitl and mark incomplete
+    if is_unreadable:
+        material_attrs.requires_hitl = True
+        material_attrs.is_incomplete = True
 
     # 3. Persist into Relational Ledger
     doc_record = IngestedDocument(
@@ -80,10 +86,11 @@ async def upload_document(
             "weldability": parsed_mtc.get("weldability"),
             "pren": parsed_mtc.get("pren"),
             "mechanical": parsed_mtc.get("mechanical_properties", {}),
-            "conforms_to_astm": parsed_mtc.get("conforms_to_astm", True),
+            "conforms_to_astm": parsed_mtc.get("conforms_to_astm", False),
             "warnings": parsed_mtc.get("non_conformance_warnings", []),
             "missing_attributes": material_attrs.missing_attributes,
             "requires_hitl": material_attrs.requires_hitl,
+            "is_unreadable": is_unreadable,
         },
     )
 
@@ -101,6 +108,12 @@ async def upload_document(
         "filename": file.filename,
         "doc_type": doc_type,
         "is_scanned": is_scanned,
+        "is_unreadable": is_unreadable,
+        "status_message": (
+            "⚠️ Image is not readable. No extractable text found. Please enter properties manually."
+            if is_unreadable
+            else "Document text successfully parsed."
+        ),
         "confidence_score": confidence,
         "requires_hitl": material_attrs.requires_hitl,
         "is_incomplete": material_attrs.is_incomplete,
@@ -111,7 +124,7 @@ async def upload_document(
         "weldability": parsed_mtc.get("weldability"),
         "pren": parsed_mtc.get("pren"),
         "mechanical": parsed_mtc.get("mechanical_properties", {}),
-        "astm_conformance": parsed_mtc.get("conforms_to_astm", True),
+        "astm_conformance": parsed_mtc.get("conforms_to_astm", False),
         "warnings": parsed_mtc.get("non_conformance_warnings", []),
         "bounding_boxes": ocr_result.get("bounding_boxes", [])[:50],
     }

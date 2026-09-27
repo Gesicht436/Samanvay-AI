@@ -105,11 +105,15 @@ ASTM_MECHANICAL_LIMITS: Dict[str, Dict[str, float]] = {
 }
 
 
-def compute_carbon_equivalent(composition: Dict[str, float]) -> float:
+def compute_carbon_equivalent(composition: Dict[str, float]) -> Optional[float]:
     """
     International Institute of Welding (IIW) Carbon Equivalent Formula:
     CE = C + Mn/6 + (Cr + Mo + V)/5 + (Ni + Cu)/15
+    Returns None if no composition or Carbon is provided.
     """
+    if not composition or "C" not in composition:
+        return None
+
     c = composition.get("C", 0.0)
     mn = composition.get("Mn", 0.0)
     cr = composition.get("Cr", 0.0)
@@ -122,22 +126,28 @@ def compute_carbon_equivalent(composition: Dict[str, float]) -> float:
     return round(float(ce), 4)
 
 
-def classify_weldability(ce: float) -> str:
+def classify_weldability(ce: Optional[float]) -> Optional[str]:
     """
     Classifies weldability according to refinery piping standards.
     - CE <= 0.43%: STANDARD_WELDABLE
     - CE > 0.43%: PREHEAT_REQUIRED_HIGH_CE
     """
+    if ce is None:
+        return None
     if ce <= 0.43:
         return "STANDARD_WELDABLE"
     return "PREHEAT_REQUIRED_HIGH_CE"
 
 
-def compute_pren(composition: Dict[str, float]) -> float:
+def compute_pren(composition: Dict[str, float]) -> Optional[float]:
     """
     Pitting Resistance Equivalent Number (PREN) for stainless and duplex alloys:
     PREN = Cr + 3.3 * Mo + 16 * N
+    Returns None if Cr is missing or composition is empty.
     """
+    if not composition or "Cr" not in composition:
+        return None
+
     cr = composition.get("Cr", 0.0)
     mo = composition.get("Mo", 0.0)
     n = composition.get("N", 0.0)
@@ -148,6 +158,11 @@ def validate_composition(composition: Dict[str, float], grade: str) -> Tuple[boo
     """
     Validates chemical composition against ASTM standard limits.
     """
+    if not composition:
+        return False, ["No chemical elemental data extracted for validation."]
+    if not grade:
+        return False, ["Material grade is missing; cannot validate composition."]
+
     violations: List[str] = []
     norm_grade = grade.strip().upper()
 
@@ -176,6 +191,11 @@ def validate_mechanical_properties(properties: Dict[str, Any], grade: str) -> Tu
     """
     Validates mechanical tensile, yield, elongation, and impact values against ASTM limits.
     """
+    if not properties:
+        return False, ["No mechanical test properties extracted for validation."]
+    if not grade:
+        return False, ["Material grade is missing; cannot validate mechanical properties."]
+
     violations: List[str] = []
     norm_grade = grade.strip().upper()
 

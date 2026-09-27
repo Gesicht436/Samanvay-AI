@@ -31,8 +31,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY frontend/ ./
 RUN mkdir -p /app/public
 
+ARG NEXT_PUBLIC_API_URL=/api/v1
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    NODE_ENV=production
+    NODE_ENV=production \
+    INTERNAL_BACKEND_URL=http://samanvay-ai-backend:8000 \
+    NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 RUN npm run build
 
@@ -51,6 +54,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
+    INTERNAL_BACKEND_URL=http://samanvay-ai-backend:8000 \
     PORT=3000 \
     HOSTNAME="0.0.0.0"
 

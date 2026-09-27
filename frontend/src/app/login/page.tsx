@@ -82,16 +82,16 @@ export default function LoginPage() {
       case 'VIGILANCE_AUDITOR':
         return 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-800';
       case 'SUPER_ADMIN':
-        return 'bg-slate-900 text-white border-slate-700 dark:bg-slate-100 dark:text-slate-900';
+        return 'bg-zinc-900 text-white border-zinc-700 dark:bg-zinc-100 dark:text-zinc-900';
       default:
-        return 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:text-slate-200';
+        return 'bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200';
     }
   };
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-8">
       {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-xs">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <div className="w-12 h-12 rounded-xl bg-emerald-600 flex items-center justify-center font-bold text-white shadow-sm">
@@ -99,14 +99,14 @@ export default function LoginPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+                <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
                   Samanvay-AI Sovereign Access Gateway
                 </h1>
                 <span className="px-2 py-0.5 text-[10px] font-mono font-semibold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 rounded border border-emerald-300 dark:border-emerald-700">
                   RBAC Active
                 </span>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
                 Ministry of Petroleum & Natural Gas (MoPNG) Sovereign Cross-CPSE Identity Mesh
               </p>
             </div>
@@ -131,10 +131,10 @@ export default function LoginPage() {
       <div className="max-w-md mx-auto mt-8">
         {/* Standard Form Login */}
         <div className="space-y-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-xs">
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-xs">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
               <KeyRound className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
                 Standard Credentials Login
               </h2>
             </div>
@@ -155,7 +155,7 @@ export default function LoginPage() {
 
             <form onSubmit={(e) => handleLogin(e)} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   CPSE Username or Email
                 </label>
                 <input
@@ -163,7 +163,7 @@ export default function LoginPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="e.g. engineer_oil or stores_iocl"
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-zinc-900 dark:text-white"
                   disabled={isSubmitting}
                   required
                 />
@@ -171,10 +171,10 @@ export default function LoginPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                     Password
                   </label>
-                  <span className="text-[11px] text-slate-400 font-mono">
+                  <span className="text-[11px] text-zinc-400 font-mono">
                     Default: {defaultSeedPassword}
                   </span>
                 </div>
@@ -183,7 +183,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter account password"
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-300 dark:border-zinc-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-zinc-900 dark:text-white"
                   disabled={isSubmitting}
                   required
                 />
@@ -205,7 +205,7 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-600 dark:text-slate-400 flex items-center justify-between">
+            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-center text-xs text-zinc-600 dark:text-zinc-400 flex items-center justify-between">
               <span>New CPSE Officer?</span>
               <Link
                 href="/signup"
@@ -216,8 +216,8 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-[11px] text-slate-500 dark:text-slate-400">
-              <p className="font-semibold text-slate-700 dark:text-slate-300">
+            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+              <p className="font-semibold text-zinc-700 dark:text-zinc-300">
                 Security & Verification Notice:
               </p>
               <p className="leading-relaxed">

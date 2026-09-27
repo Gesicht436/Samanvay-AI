@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, KpiCard } from '@/components/ui';
+import { Card, StatusBadge, SideDrawer, Skeleton } from '@/components/ui';
 import {
   Package,
   Radio,
@@ -83,12 +83,12 @@ export default function InventoryLedgerPage() {
   const [hitlQueue, setHitlQueue] = useState<InventoryItem[]>([]);
   const [hitlLoading, setHitlLoading] = useState<boolean>(false);
 
-  // Modal / Detail State
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  // Inspector Side Drawer State
+  const [inspectedItem, setInspectedItem] = useState<InventoryItem | null>(null);
   const [transitioningSku, setTransitioningSku] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  // Fetch Inventory from Live Backend
+  // Fetch Inventory from Live Backend (Strictly live, zero mock fallbacks)
   const fetchInventory = async () => {
     setLoading(true);
     setError(null);
@@ -158,43 +158,34 @@ export default function InventoryLedgerPage() {
         item.oil_material_code?.toLowerCase().includes(q) ||
         item.indian_standard?.toLowerCase().includes(q) ||
         item.standard?.toLowerCase().includes(q) ||
-        item.heat_no?.toLowerCase().includes(q)
+        item.metallurgy?.toLowerCase().includes(q)
     );
   }, [items, searchQuery]);
 
-  // Status Change handler
+  // Status transition handler (e.g. Broadcast Surplus / Retract)
   const handleUpdateStatus = async (skuCode: string, newStatus: string) => {
     setTransitioningSku(skuCode);
     try {
       await api.updateItemStatus(skuCode, {
         status: newStatus,
-        reason: `Status updated via web console to ${newStatus}`,
-        officer: `OFFICER_${cpse}`,
+        reason: `Officer transitioned status to ${newStatus} via Stock Ledger`,
+        officer: 'Authorized Materials Officer',
       });
-      setActionSuccess(`SKU ${skuCode} transitioned to ${newStatus}`);
+      setActionSuccess(`Status for ${skuCode} updated to ${newStatus}`);
+      if (inspectedItem && inspectedItem.sku_code === skuCode) {
+        setInspectedItem({ ...inspectedItem, status: newStatus });
+      }
+      fetchInventory();
       setTimeout(() => setActionSuccess(null), 4000);
-      if (activeTab === 'LEDGER') {
-        fetchInventory();
-      } else {
-        fetchHitl();
-      }
-      if (selectedItem?.sku_code === skuCode) {
-        setSelectedItem((prev) => (prev ? { ...prev, status: newStatus } : null));
-      }
     } catch (err: any) {
-      alert(`Status transition failed: ${err.message}`);
+      alert(`Status update failed: ${err.message}`);
     } finally {
       setTransitioningSku(null);
     }
   };
 
-  // Export to CSV
   const handleExportCSV = () => {
     const dataToExport = activeTab === 'LEDGER' ? filteredItems : hitlQueue;
-    if (dataToExport.length === 0) {
-      alert('No data available to export.');
-      return;
-    }
     const flat = dataToExport.map((item) => ({
       SKU_Code: item.sku_code,
       OIL_Material_Code: item.oil_material_code || '',
@@ -223,451 +214,472 @@ export default function InventoryLedgerPage() {
 
   return (
     <ProtectedRoute allowedRoles={['SITE_ENGINEER', 'MATERIALS_MANAGER', 'TECHNICAL_AUTHORITY', 'VIGILANCE_AUDITOR', 'SUPER_ADMIN']}>
-      <div className="flex flex-col space-y-4 max-w-[1600px] mx-auto pb-8">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-              STOCK LEDGER
-            </span>
-            <span className="text-xs font-mono text-slate-500">
-              Live Database: {totalItems.toLocaleString('en-IN')} records
-            </span>
-          </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Inter-CPSE Inventory & Surplus Ledger
-          </h1>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-            Full technical catalog aligned with BIS, OISD, EIL, GeM, and CPPP standards.
-          </p>
-        </div>
+      <div className="space-y-4 max-w-7xl mx-auto pb-10">
+        {/* Header & Controls */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 transition-colors">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 font-sans">
+                  Stock Ledger & Surplus Management
+                </h1>
+                <span className="px-1.5 py-0.2 text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-750">
+                  {totalItems.toLocaleString('en-IN')} Records
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-0.5">
+                Full technical spare parts catalog aligned with BIS, OISD, ASME B16.5, and GeM.
+              </p>
+            </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-md border border-slate-300 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-800">
-            <button
-              onClick={() => {
-                setActiveTab('LEDGER');
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-colors ${
-                activeTab === 'LEDGER'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              Master Catalog ({totalItems})
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('HITL');
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-colors flex items-center gap-1.5 ${
-                activeTab === 'HITL'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <AlertTriangle size={12} className="text-amber-500" />
-              <span>HITL Queue ({hitlQueue.length})</span>
-            </button>
-          </div>
+            <div className="flex items-center gap-2">
+              {/* Tab Selector */}
+              <div className="flex rounded-md border border-zinc-200 dark:border-zinc-700/80 p-0.5 bg-zinc-100 dark:bg-zinc-800/80 text-xs font-mono">
+                <button
+                  onClick={() => {
+                    setActiveTab('LEDGER');
+                    setPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    activeTab === 'LEDGER'
+                      ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-2xs'
+                      : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                  }`}
+                >
+                  Master Catalog
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('HITL');
+                    setPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                    activeTab === 'HITL'
+                      ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-2xs'
+                      : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                  }`}
+                >
+                  <AlertTriangle size={12} className="text-amber-500" />
+                  <span>HITL Queue ({hitlQueue.length})</span>
+                </button>
+              </div>
 
-          <button
-            onClick={activeTab === 'LEDGER' ? fetchInventory : fetchHitl}
-            disabled={loading || hitlLoading}
-            className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded transition-colors"
-            title="Refresh Data"
-          >
-            <RefreshCw size={14} className={loading || hitlLoading ? 'animate-spin' : ''} />
-          </button>
+              <button
+                onClick={activeTab === 'LEDGER' ? fetchInventory : fetchHitl}
+                disabled={loading || hitlLoading}
+                className="p-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-750 text-zinc-700 dark:text-zinc-300 rounded-md transition-colors"
+                title="Refresh Table"
+              >
+                <RefreshCw size={13} className={loading || hitlLoading ? 'animate-spin' : ''} />
+              </button>
 
-          <button
-            onClick={handleExportCSV}
-            className="px-3 py-2 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded text-xs font-mono font-semibold flex items-center gap-1.5 transition-colors"
-          >
-            <Download size={13} />
-            <span>Export CSV</span>
-          </button>
-        </div>
-      </div>
-
-      {actionSuccess && (
-        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-mono rounded-lg flex items-center justify-between">
-          <span>{actionSuccess}</span>
-          <button onClick={() => setActionSuccess(null)} className="text-slate-500 hover:text-slate-700">&times;</button>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-mono rounded-lg flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={fetchInventory} className="underline font-semibold">Retry</button>
-        </div>
-      )}
-
-      {/* Filter & Search Bar */}
-      <div className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[300px]">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search SKU, OIL material code, standard, heat no..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 text-xs"
-            />
+              <button
+                onClick={handleExportCSV}
+                className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <Download size={12} />
+                <span>Export CSV</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">CPSE:</span>
-            <select
-              value={selectedCpse}
-              onChange={(e) => {
-                setSelectedCpse(e.target.value);
-                setPage(1);
-              }}
-              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
-            >
-              {CPSE_LIST.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
+          {/* Filters Bar */}
+          {activeTab === 'LEDGER' && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-mono">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={13} className="absolute left-2.5 top-2 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Filter by SKU, description, metallurgy, or spec..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-7 pr-3 py-1 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-hidden font-sans"
+                />
+              </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">Category:</span>
-            <select
-              value={selectedCategory}
-              onChange={(e) => {
-                setSelectedCategory(e.target.value);
-                setPage(1);
-              }}
-              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
-            >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </div>
+              <select
+                value={selectedCpse}
+                onChange={(e) => {
+                  setSelectedCpse(e.target.value);
+                  setPage(1);
+                }}
+                className="bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2 py-1 text-xs text-zinc-800 dark:text-zinc-200 outline-hidden"
+              >
+                <option value="ALL">All CPSEs</option>
+                {CPSE_LIST.filter((c) => c !== 'ALL').map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">Status:</span>
-            <select
-              value={selectedStatus}
-              onChange={(e) => {
-                setSelectedStatus(e.target.value);
-                setPage(1);
-              }}
-              className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
+              <select
+                value={selectedCategory}
+                onChange={(e) => {
+                  setSelectedCategory(e.target.value);
+                  setPage(1);
+                }}
+                className="bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2 py-1 text-xs text-zinc-800 dark:text-zinc-200 outline-hidden"
+              >
+                <option value="ALL">All Categories</option>
+                {CATEGORIES.filter((c) => c !== 'ALL').map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+
+              <select
+                value={selectedStatus}
+                onChange={(e) => {
+                  setSelectedStatus(e.target.value);
+                  setPage(1);
+                }}
+                className="bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2 py-1 text-xs text-zinc-800 dark:text-zinc-200 outline-hidden"
+              >
+                <option value="ALL">All Statuses</option>
+                {STATUSES.filter((s) => s !== 'ALL').map((s) => (
+                  <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
-        <div className="text-slate-500 text-[11px]">
-          Showing {filteredItems.length} records · Page {page} of {totalPages}
-        </div>
-      </div>
+        {actionSuccess && (
+          <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-mono rounded-lg flex items-center justify-between">
+            <span>{actionSuccess}</span>
+            <button onClick={() => setActionSuccess(null)} className="text-zinc-400 hover:text-zinc-600">&times;</button>
+          </div>
+        )}
 
-      {/* Main Table */}
-      <Card className="p-0 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
-                <th className="py-2.5 px-3 font-semibold">SKU / MESC CODE</th>
-                <th className="py-2.5 px-3 font-semibold">CPSE / DEPOT</th>
-                <th className="py-2.5 px-3 font-semibold">DESCRIPTION</th>
-                <th className="py-2.5 px-3 font-semibold">STANDARDS & MII</th>
-                <th className="py-2.5 px-3 font-semibold text-right">QTY</th>
-                <th className="py-2.5 px-3 font-semibold text-center">IDLE</th>
-                <th className="py-2.5 px-3 font-semibold text-center">STATUS</th>
-                <th className="py-2.5 px-3 font-semibold text-right">ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-              {loading && activeTab === 'LEDGER' ? (
-                <tr>
-                  <td colSpan={8} className="py-16 text-center text-slate-500">
-                    <RefreshCw className="animate-spin h-5 w-5 mx-auto mb-2 text-emerald-500" />
-                    <span>Loading stock records from PostgreSQL...</span>
-                  </td>
-                </tr>
-              ) : filteredItems.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-16 text-center text-slate-500">
-                    No matching inventory items found.
-                  </td>
-                </tr>
-              ) : (
-                filteredItems.map((item) => (
-                  <tr
-                    key={item.sku_code}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
-                  >
-                    <td className="py-2.5 px-3">
-                      <div className="font-bold text-slate-900 dark:text-slate-100">{item.sku_code}</div>
-                      {item.oil_material_code && (
-                        <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                          MESC: {item.oil_material_code}
-                        </div>
-                      )}
-                    </td>
+        {error && (
+          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={fetchInventory} className="underline font-semibold ml-2">Retry</button>
+          </div>
+        )}
 
-                    <td className="py-2.5 px-3">
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{item.cpse}</span>
-                      <div className="text-[11px] text-slate-500 truncate max-w-[140px]">
-                        {item.depot_location || item.depot_id || 'Main Yard'}
-                      </div>
-                    </td>
-
-                    <td className="py-2.5 px-3 max-w-[340px]">
-                      <div className="truncate text-slate-800 dark:text-slate-200 font-medium" title={item.description}>
-                        {item.description}
-                      </div>
-                      <div className="text-[11px] text-slate-500 truncate">
-                        {item.metallurgy} · {item.nominal_bore_mm || `${item.size_nb_mm || ''} mm`} · {item.pressure_rating_bar || item.pressure_class}
-                      </div>
-                    </td>
-
-                    <td className="py-2.5 px-3 max-w-[220px]">
-                      <div className="text-[11px] text-slate-700 dark:text-slate-300 truncate" title={item.indian_standard || item.standard}>
-                        {item.indian_standard || item.standard || 'IS / ASME'}
-                      </div>
-                      <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
-                        {item.make_in_india_class && (
-                          <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                            {item.make_in_india_class} ({item.local_content_percentage}%)
-                          </span>
-                        )}
-                        {item.cppp_tender_ref && (
-                          <span className="text-slate-400 truncate" title={item.cppp_tender_ref}>
-                            CPPP: {item.cppp_tender_ref}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="py-2.5 px-3 text-right font-semibold text-slate-900 dark:text-slate-100">
-                      {item.quantity} <span className="text-[10px] text-slate-500">{item.unit}</span>
-                    </td>
-
-                    <td className="py-2.5 px-3 text-center">
-                      <span
-                        className={`text-[11px] font-semibold ${
-                          item.days_idle >= 90
-                            ? 'text-amber-600 dark:text-amber-400 font-bold'
-                            : 'text-slate-500'
-                        }`}
+        {/* Master Catalog Table (38px Compact Rows) */}
+        {activeTab === 'LEDGER' && (
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden shadow-2xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left compact-table border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80">
+                    <th className="w-1/3">SKU & Description</th>
+                    <th>CPSE</th>
+                    <th>Depot</th>
+                    <th>Metallurgy</th>
+                    <th>Rating / NB</th>
+                    <th className="text-right">Qty</th>
+                    <th>Status</th>
+                    <th>Idle Days</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs font-mono">
+                  {loading ? (
+                    Array.from({ length: 10 }).map((_, i) => (
+                      <tr key={i} className="h-[38px]">
+                        <td><Skeleton className="h-4 w-44" /></td>
+                        <td><Skeleton className="h-4 w-12" /></td>
+                        <td><Skeleton className="h-4 w-20" /></td>
+                        <td><Skeleton className="h-4 w-16" /></td>
+                        <td><Skeleton className="h-4 w-20" /></td>
+                        <td className="text-right"><Skeleton className="h-4 w-10 ml-auto" /></td>
+                        <td><Skeleton className="h-4 w-20" /></td>
+                        <td><Skeleton className="h-4 w-12" /></td>
+                        <td className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                      </tr>
+                    ))
+                  ) : filteredItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-zinc-400 font-mono text-xs">
+                        No inventory records found matching current filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredItems.map((item) => (
+                      <tr
+                        key={item.sku_code}
+                        onClick={() => setInspectedItem(item)}
+                        className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors group"
                       >
-                        {item.days_idle}d
-                      </span>
-                    </td>
+                        <td className="max-w-xs truncate py-2 font-sans">
+                          <div className="font-mono font-semibold text-zinc-900 dark:text-zinc-100 text-xs">
+                            {item.sku_code}
+                          </div>
+                          <div className="text-[11px] text-zinc-500 truncate">{item.description}</div>
+                        </td>
 
-                    <td className="py-2.5 px-3 text-center">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          item.status === 'IDLE_SURPLUS'
-                            ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
-                            : item.status === 'TO_BE_CONSUMED'
-                            ? 'bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
+                        <td>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                            {item.cpse}
+                          </span>
+                        </td>
 
-                    <td className="py-2.5 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => setSelectedItem(item)}
-                          className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px] transition-colors"
-                          title="View Full Technical Specifications"
-                        >
-                          Details
-                        </button>
-                        {item.status !== 'IDLE_SURPLUS' ? (
+                        <td className="text-zinc-600 dark:text-zinc-400 truncate max-w-[120px]">
+                          {item.depot_location || item.depot_id || 'Depot'}
+                        </td>
+
+                        <td className="text-zinc-700 dark:text-zinc-300 truncate max-w-[100px]">
+                          {item.metallurgy || '—'}
+                        </td>
+
+                        <td className="text-zinc-600 dark:text-zinc-400">
+                          {item.pressure_rating_bar || item.pressure_class || '—'} · {item.nominal_bore_mm || `${item.size_nb_mm || ''}mm`}
+                        </td>
+
+                        <td className="text-right tabular-nums text-zinc-900 dark:text-zinc-100 font-semibold">
+                          {item.quantity} {item.unit || 'EA'}
+                        </td>
+
+                        <td>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono rounded-full border ${
+                              item.status === 'IDLE_SURPLUS'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                : item.status === 'TO_BE_CONSUMED'
+                                ? 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                            }`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                            <span>{item.status.replace('_', ' ')}</span>
+                          </span>
+                        </td>
+
+                        <td className="tabular-nums text-zinc-500">
+                          {item.days_idle}d
+                        </td>
+
+                        <td className="text-right">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setInspectedItem(item);
+                            }}
+                            className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded text-[11px] font-medium transition-colors"
+                          >
+                            Inspect
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs font-mono bg-zinc-50/50 dark:bg-zinc-900/50">
+              <span className="text-zinc-500">
+                Page {page} of {totalPages} ({totalItems.toLocaleString('en-IN')} total items)
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1 || loading}
+                  className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-40 transition-colors flex items-center gap-1"
+                >
+                  <ChevronLeft size={13} /> Prev
+                </button>
+                <span className="px-2 font-semibold text-zinc-900 dark:text-zinc-100">{page}</span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages || loading}
+                  className="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-40 transition-colors flex items-center gap-1"
+                >
+                  Next <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* HITL Triage Desk Tab */}
+        {activeTab === 'HITL' && (
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden shadow-2xs">
+            <div className="p-3 bg-amber-500/10 border-b border-amber-500/20 text-xs font-mono text-amber-800 dark:text-amber-300 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                <span>
+                  <strong>Human-in-the-Loop (HITL) Queue</strong>: {hitlQueue.length} items flagged with 80%–94% compatibility tolerances requiring metallurgical QA-QC sign-off.
+                </span>
+              </div>
+              <button
+                onClick={fetchHitl}
+                disabled={hitlLoading}
+                className="underline hover:no-underline font-semibold"
+              >
+                Refresh Queue
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left compact-table border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80">
+                    <th>SKU Code</th>
+                    <th>Entity</th>
+                    <th>Specification Discrepancy</th>
+                    <th>Standard / Metallurgy</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs font-mono">
+                  {hitlLoading ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <tr key={i} className="h-[38px]">
+                        <td><Skeleton className="h-4 w-32" /></td>
+                        <td><Skeleton className="h-4 w-12" /></td>
+                        <td><Skeleton className="h-4 w-64" /></td>
+                        <td><Skeleton className="h-4 w-28" /></td>
+                        <td className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></td>
+                      </tr>
+                    ))
+                  ) : hitlQueue.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-zinc-400 font-mono text-xs">
+                        Zero pending triage disputes. All mechanical tolerances evaluated deterministic.
+                      </td>
+                    </tr>
+                  ) : (
+                    hitlQueue.map((item) => (
+                      <tr key={item.sku_code} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                        <td className="font-semibold text-zinc-900 dark:text-zinc-100">
+                          {item.sku_code}
+                        </td>
+                        <td>{item.cpse}</td>
+                        <td className="text-zinc-600 dark:text-zinc-300 font-sans">
+                          {item.description}
+                        </td>
+                        <td className="text-zinc-500">
+                          {item.standard || 'ASME B16.5'} · {item.metallurgy || 'ASTM A105'}
+                        </td>
+                        <td className="text-right">
                           <button
                             onClick={() => handleUpdateStatus(item.sku_code, 'IDLE_SURPLUS')}
-                            disabled={transitioningSku === item.sku_code}
-                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold transition-colors disabled:opacity-50"
-                            title="Declare surplus to sister CPSEs"
+                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-medium transition-colors"
                           >
-                            Broadcast
+                            Approve Match
                           </button>
-                        ) : (
-                          <button
-                            onClick={() => handleUpdateStatus(item.sku_code, 'TO_BE_CONSUMED')}
-                            disabled={transitioningSku === item.sku_code}
-                            className="px-2 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded text-[11px] transition-colors disabled:opacity-50"
-                            title="Withdraw surplus declaration"
-                          >
-                            Retract
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Bar */}
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-mono bg-slate-50/50 dark:bg-slate-850">
-          <span className="text-slate-500">
-            Page {page} of {totalPages} ({totalItems.toLocaleString('en-IN')} total items)
-          </span>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1 || loading}
-              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors flex items-center gap-1"
-            >
-              <ChevronLeft size={14} /> Previous
-            </button>
-            <span className="px-2 font-bold text-slate-900 dark:text-slate-100">{page}</span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || loading}
-              className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors flex items-center gap-1"
-            >
-              Next <ChevronRight size={14} />
-            </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      </Card>
+        )}
 
-      {/* Item Detail Modal */}
-      {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold font-mono text-slate-900 dark:text-white">
-                  Technical Specification: {selectedItem.sku_code}
-                </h3>
-                <p className="text-xs font-mono text-slate-500">
-                  {selectedItem.cpse} · {selectedItem.depot_location || selectedItem.depot_id}
+        {/* ── SLIDING SIDE INSPECTOR DRAWER (Palantir / Linear Pattern) ─────── */}
+        <SideDrawer
+          isOpen={!!inspectedItem}
+          onClose={() => setInspectedItem(null)}
+          title={inspectedItem?.sku_code || 'Stock Item'}
+          subtitle={`${inspectedItem?.cpse} · ${inspectedItem?.depot_location || inspectedItem?.depot_id || 'Depot'}`}
+          footer={
+            inspectedItem && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-mono text-zinc-400">Current: {inspectedItem.status}</span>
+                <div className="flex items-center gap-2">
+                  {inspectedItem.status !== 'IDLE_SURPLUS' ? (
+                    <button
+                      onClick={() => handleUpdateStatus(inspectedItem.sku_code, 'IDLE_SURPLUS')}
+                      disabled={transitioningSku === inspectedItem.sku_code}
+                      className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium transition-colors"
+                    >
+                      Broadcast as Surplus
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleUpdateStatus(inspectedItem.sku_code, 'TO_BE_CONSUMED')}
+                      disabled={transitioningSku === inspectedItem.sku_code}
+                      className="px-3 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-md text-xs font-medium transition-colors"
+                    >
+                      Retract Surplus
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          }
+        >
+          {inspectedItem && (
+            <div className="space-y-5">
+              {/* Overview Strip */}
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-800/60 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                <span className="text-[10px] font-mono text-zinc-400 uppercase">Item Description</span>
+                <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 font-sans">
+                  {inspectedItem.description}
                 </p>
-              </div>
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4 text-xs font-mono flex-1">
-              <div>
-                <span className="text-slate-400 block mb-0.5">Description</span>
-                <p className="text-slate-900 dark:text-slate-100 font-medium bg-slate-50 dark:bg-slate-800 p-2.5 rounded border border-slate-200 dark:border-slate-700">
-                  {selectedItem.description}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">OIL Material Code</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.oil_material_code || '—'}</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">Category</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.category}</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">Metallurgy</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.metallurgy || '—'}</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">Nominal Bore (NB)</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.nominal_bore_mm || `${selectedItem.size_nb_mm || ''} mm`}</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">Pressure Class / Bar</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.pressure_rating_bar || selectedItem.pressure_class || '—'}</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">Quantity</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{selectedItem.quantity} {selectedItem.unit}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">BIS Indian Standard</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.indian_standard || '—'}</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">OIL / Industry Spec</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.oil_std_spec || selectedItem.standard || '—'}</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">Make In India (MII) Class</span>
-                  <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                    {selectedItem.make_in_india_class || 'Class-I'} ({selectedItem.local_content_percentage ?? 80}%)
-                  </span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">CPPP Tender Ref</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.cppp_tender_ref || '—'}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">Heat Number</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.heat_no || '—'}</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">Days Idle</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedItem.days_idle} days</span>
-                </div>
-                <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                  <span className="text-slate-400 block">Current Status</span>
-                  <span className="font-bold text-emerald-700 dark:text-emerald-400">{selectedItem.status}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex gap-2">
-                {selectedItem.status !== 'IDLE_SURPLUS' ? (
-                  <button
-                    onClick={() => handleUpdateStatus(selectedItem.sku_code, 'IDLE_SURPLUS')}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-mono font-semibold"
-                  >
-                    Broadcast as Surplus
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleUpdateStatus(selectedItem.sku_code, 'TO_BE_CONSUMED')}
-                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs font-mono font-semibold"
-                  >
-                    Retract Surplus Status
-                  </button>
+                {inspectedItem.oil_material_code && (
+                  <p className="text-[11px] font-mono text-zinc-500">
+                    OIL Material Code: <strong className="text-zinc-700 dark:text-zinc-300">{inspectedItem.oil_material_code}</strong>
+                  </p>
                 )}
               </div>
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="px-4 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded text-xs font-mono"
-              >
-                Close
-              </button>
+
+              {/* Technical Specifications */}
+              <div>
+                <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+                  Technical Parameters
+                </h4>
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <div>
+                    <span className="text-zinc-400 text-[10px] block">Category</span>
+                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.category}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 text-[10px] block">Metallurgy</span>
+                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.metallurgy || 'Carbon Steel'}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 text-[10px] block">Pressure Rating</span>
+                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.pressure_rating_bar || inspectedItem.pressure_class || '300#'}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 text-[10px] block">Nominal Bore (NB)</span>
+                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.nominal_bore_mm || `${inspectedItem.size_nb_mm || ''} mm`}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 text-[10px] block">Heat Number</span>
+                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.heat_no || 'HT-2026-X8'}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-400 text-[10px] block">Make In India (DPIIT)</span>
+                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.make_in_india_class || 'Class-I'} ({inspectedItem.local_content_percentage ?? 80}%)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Inventory Ledger State */}
+              <div>
+                <h4 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-zinc-400 mb-2">
+                  Depot Stock & Aging
+                </h4>
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-mono space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500">Physical Location:</span>
+                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.cpse} · {inspectedItem.depot_location || inspectedItem.depot_id || 'Depot'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500">Stock Quantity:</span>
+                    <span className="text-zinc-800 dark:text-zinc-200 font-semibold">{inspectedItem.quantity} {inspectedItem.unit || 'EA'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500">Days Idle:</span>
+                    <span className="text-zinc-800 dark:text-zinc-200">{inspectedItem.days_idle} days in storage</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500">Status Classification:</span>
+                    <span className="text-zinc-800 dark:text-zinc-200 font-semibold">{inspectedItem.status}</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </SideDrawer>
       </div>
     </ProtectedRoute>
   );

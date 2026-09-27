@@ -3,9 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { User } from '@/lib/types';
-import { Check, X, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Check, X, ShieldAlert, ShieldCheck, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { Skeleton } from '@/components/ui';
 
 export default function AdminUsersPage() {
   const { user } = useAuth();
@@ -45,79 +46,128 @@ export default function AdminUsersPage() {
     }
   };
 
-  if (loading) return <div className="p-8 font-mono text-sm">Loading users...</div>;
-
   return (
     <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
-      <div className="p-8 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <ShieldCheck className="w-8 h-8 text-emerald-600" />
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Sovereign Identity Management
-        </h1>
-      </div>
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-            <tr>
-              <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">User</th>
-              <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Role / CPSE</th>
-              <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Status</th>
-              <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-            {users.map((u) => (
-              <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="font-medium text-slate-900 dark:text-white">{u.full_name}</div>
-                  <div className="text-xs text-slate-500 font-mono">@{u.username}</div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="font-semibold text-slate-700 dark:text-slate-300 text-xs">
-                    {u.role.replace('_', ' ')}
-                  </div>
-                  <div className="text-xs text-slate-500">{u.cpse} · {u.depot_id}</div>
-                </td>
-                <td className="px-6 py-4">
-                  {u.is_approved ? (
-                    <span className="px-2.5 py-1 text-[10px] uppercase font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 rounded border border-emerald-300 dark:border-emerald-700">
-                      Approved
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-1 text-[10px] uppercase font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
-                      Pending
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-4 text-right">
-                  {!u.is_approved && (
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleApprove(u.id)}
-                        className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded transition-colors"
-                        title="Approve User"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleReject(u.id)}
-                        className="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded transition-colors"
-                        title="Reject & Delete"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {users.length === 0 && (
-          <div className="p-8 text-center text-slate-500">No users found.</div>
-        )}
-      </div>
+      <div className="space-y-4 max-w-7xl mx-auto pb-10">
+        {/* Header */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 transition-colors">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 font-sans">
+                  Sovereign Identity & User Authorizations
+                </h1>
+                <span className="px-1.5 py-0.2 text-[10px] font-mono text-zinc-500 bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-750">
+                  Admin Authority
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-0.5">
+                Review officer registrations and grant node-level permissions across CPSEs.
+              </p>
+            </div>
+
+            <button
+              onClick={fetchUsers}
+              disabled={loading}
+              className="p-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-750 text-zinc-700 dark:text-zinc-300 rounded-md transition-colors"
+              title="Refresh users"
+            >
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        </div>
+
+        {/* Users Table */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left compact-table border-collapse">
+              <thead>
+                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/80">
+                  <th>Officer Name</th>
+                  <th>Role</th>
+                  <th>CPSE & Depot</th>
+                  <th>Status</th>
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 text-xs font-mono">
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <tr key={i} className="h-[38px]">
+                      <td><Skeleton className="h-4 w-32" /></td>
+                      <td><Skeleton className="h-4 w-28" /></td>
+                      <td><Skeleton className="h-4 w-24" /></td>
+                      <td><Skeleton className="h-4 w-16" /></td>
+                      <td className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                    </tr>
+                  ))
+                ) : users.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center text-zinc-400 font-mono text-xs">
+                      No user registrations found.
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((u) => (
+                    <tr key={u.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                      <td className="py-2">
+                        <div className="font-semibold text-zinc-900 dark:text-zinc-100 font-sans text-xs">
+                          {u.full_name}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 font-mono">@{u.username}</div>
+                      </td>
+
+                      <td className="text-zinc-700 dark:text-zinc-300">
+                        {u.role.replace('_', ' ')}
+                      </td>
+
+                      <td className="text-zinc-600 dark:text-zinc-400">
+                        {u.cpse} · {u.depot_id}
+                      </td>
+
+                      <td>
+                        {u.is_approved ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span>Approved</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <span>Pending</span>
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="text-right">
+                        {!u.is_approved ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleApprove(u.id)}
+                              className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded text-[11px] font-medium transition-colors"
+                              title="Approve User"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleReject(u.id)}
+                              className="px-2 py-1 border border-zinc-200 dark:border-zinc-700 hover:bg-rose-500/10 hover:text-rose-600 rounded text-[11px] font-medium transition-colors"
+                              title="Reject User"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-zinc-400">Active</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </ProtectedRoute>
   );

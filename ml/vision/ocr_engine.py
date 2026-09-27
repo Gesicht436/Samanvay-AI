@@ -241,9 +241,9 @@ class OCREngine:
             except Exception:
                 pass
 
-        # If no external OCR models initialized, graceful fallback to mock/embedded payload lookup
+        # If no text was recognized or OCR produced empty lines
         if not lines_text:
-            return "DEGRADED_SCAN: OCR recognition model unavailable in offline environment.", 0.50, []
+            return "", 0.0, []
 
         avg_conf = round(conf_sum / count, 4) if count > 0 else 0.0
         return "\n".join(lines_text), avg_conf, blocks_data

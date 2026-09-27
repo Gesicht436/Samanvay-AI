@@ -166,17 +166,17 @@ export default function SignupPage() {
 
   return (
     <div className="max-w-2xl mx-auto py-10 px-4">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 sm:p-8 shadow-xs">
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 sm:p-8 shadow-xs">
         {/* Header */}
-        <div className="flex items-center gap-3.5 pb-6 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center gap-3.5 pb-6 border-b border-zinc-100 dark:border-zinc-800">
           <div className="w-12 h-12 rounded-xl bg-emerald-600 flex items-center justify-center font-bold text-white shadow-xs">
             <UserPlus className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-slate-900 dark:text-white">
+            <h1 className="text-lg font-bold text-zinc-900 dark:text-white">
               CPSE Personnel Registration
             </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               Enroll into the Ministry of Petroleum & Natural Gas Sovereign Mutual Aid Mesh
             </p>
           </div>
@@ -200,14 +200,14 @@ export default function SignupPage() {
           {/* Organization & Depot */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 CPSE Organization
               </label>
               <div className="relative">
                 <select
                   value={cpse}
                   onChange={(e) => handleCpseChange(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
                 >
                   {Object.keys(CPSE_DEPOTS).map((code) => (
                     <option key={code} value={code}>
@@ -219,13 +219,13 @@ export default function SignupPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 Assigned Depot / Refinery
               </label>
               <select
                 value={depotId}
                 onChange={(e) => setDepotId(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
               >
                 {CPSE_DEPOTS[cpse]?.depots.map((dep) => (
                   <option key={dep.id} value={dep.id}>
@@ -238,13 +238,13 @@ export default function SignupPage() {
 
           {/* Functional Role */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
               Designated Functional Role
             </label>
             <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
             >
               {ROLES.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -252,7 +252,7 @@ export default function SignupPage() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-mono">
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 font-mono">
               {ROLES.find((r) => r.id === role)?.desc}
             </p>
           </div>
@@ -260,7 +260,7 @@ export default function SignupPage() {
           {/* Personal Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 Full Name & Rank
               </label>
               <input
@@ -269,12 +269,12 @@ export default function SignupPage() {
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="e.g. Er. Pranjal Saikia"
                 required
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 Official CPSE Email
               </label>
               <input
@@ -283,7 +283,7 @@ export default function SignupPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="e.g. pranjal.saikia@nrl.co.in"
                 required
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
               />
             </div>
           </div>
@@ -291,7 +291,7 @@ export default function SignupPage() {
           {/* Credentials */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 Unique Username
               </label>
               <input
@@ -300,12 +300,12 @@ export default function SignupPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="e.g. engineer_nrl"
                 required
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 Password
               </label>
               <input
@@ -314,12 +314,12 @@ export default function SignupPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Min 6 characters"
                 required
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 Confirm Password
               </label>
               <input
@@ -328,7 +328,7 @@ export default function SignupPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Repeat password"
                 required
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
               />
             </div>
           </div>
@@ -351,7 +351,7 @@ export default function SignupPage() {
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
           <span>Already registered?</span>
           <Link
             href="/login"
