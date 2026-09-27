@@ -138,7 +138,31 @@ export const api = {
     fetchAPI<any>(`/graph/logistics/${encodeURIComponent(sourceDepot)}/${encodeURIComponent(targetDepot)}`),
 
   // Matching & Compatibility Core
-  searchMatches: (payload: { query_text: string; item_type?: string; properties?: any }) =>
+  searchMatches: (payload: {
+    query_text?: string;
+    item_type?: string;
+    size_nb_mm?: number;
+    pressure_class?: number;
+    pressure_rating_bar?: number;
+    pressure_rating_psi?: number;
+    schedule?: string;
+    metallurgy?: string;
+    weldability_class?: string;
+    sour_service?: boolean;
+    facing_end?: string;
+    attachment?: string;
+    mfg_method?: string;
+    standard?: string;
+    indian_standard?: string;
+    oil_std_spec?: string;
+    severe_cyclic?: boolean;
+    trim_no?: number;
+    port_bore?: string;
+    piggable?: boolean;
+    fire_safe_required?: boolean;
+    min_local_content_pct?: number;
+    properties?: Record<string, any>;
+  }) =>
     fetchAPI<any>('/match/search', {
       method: 'POST',
       body: JSON.stringify(payload),

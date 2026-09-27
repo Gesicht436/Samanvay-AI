@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, StatusBadge, SideDrawer, Skeleton } from '@/components/ui';
 import {
   Search,
@@ -20,6 +20,10 @@ import {
   X,
   Eye,
   Route,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
 } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { api } from '@/lib/api';
@@ -90,6 +94,48 @@ const ITEM_TYPES = [
   'GASKET',
 ];
 
+interface AdvancedFilters {
+  size_nb_mm: string;
+  pressure_class: string;
+  pressure_rating_bar: string;
+  schedule: string;
+  metallurgy: string;
+  weldability_class: string;
+  sour_service: boolean;
+  facing_end: string;
+  attachment: string;
+  mfg_method: string;
+  standard: string;
+  indian_standard: string;
+  oil_std_spec: string;
+  severe_cyclic: boolean;
+  trim_no: string;
+  port_bore: string;
+  piggable: boolean;
+  fire_safe_required: boolean;
+}
+
+const initialFilters: AdvancedFilters = {
+  size_nb_mm: '',
+  pressure_class: '',
+  pressure_rating_bar: '',
+  schedule: '',
+  metallurgy: '',
+  weldability_class: '',
+  sour_service: false,
+  facing_end: '',
+  attachment: '',
+  mfg_method: '',
+  standard: '',
+  indian_standard: '',
+  oil_std_spec: '',
+  severe_cyclic: false,
+  trim_no: '',
+  port_bore: '',
+  piggable: false,
+  fire_safe_required: false,
+};
+
 export default function SurplusDiscoveryPage() {
   const { cpse } = useTheme();
   const [queryText, setQueryText] = useState<string>('');
@@ -99,6 +145,43 @@ export default function SurplusDiscoveryPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isSearched, setIsSearched] = useState<boolean>(false);
+
+  // Advanced Engineering Specification Filters State
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+  const [filters, setFilters] = useState<AdvancedFilters>(initialFilters);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.size_nb_mm) count++;
+    if (filters.pressure_class) count++;
+    if (filters.pressure_rating_bar) count++;
+    if (filters.schedule) count++;
+    if (filters.metallurgy) count++;
+    if (filters.weldability_class) count++;
+    if (filters.sour_service) count++;
+    if (filters.facing_end) count++;
+    if (filters.attachment) count++;
+    if (filters.mfg_method) count++;
+    if (filters.standard) count++;
+    if (filters.indian_standard) count++;
+    if (filters.severe_cyclic) count++;
+    if (filters.trim_no) count++;
+    if (filters.port_bore) count++;
+    if (filters.piggable) count++;
+    if (filters.fire_safe_required) count++;
+    return count;
+  }, [filters]);
+
+  const updateFilter = (field: keyof AdvancedFilters, val: any) => {
+    setFilters((prev) => ({ ...prev, [field]: val }));
+  };
+
+  const handleResetFilters = () => {
+    setFilters(initialFilters);
+    setQueryText('');
+    setSelectedType('ALL');
+    loadInitialSurplus();
+  };
 
   // Inspector Side Drawer State
   const [inspectedItem, setInspectedItem] = useState<SearchResultItem | null>(null);
@@ -135,7 +218,8 @@ export default function SurplusDiscoveryPage() {
   // Perform Match Search using ML + Tolerance Rule Engine
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!queryText.trim() && selectedType === 'ALL') {
+    const hasAnyFilter = queryText.trim() || selectedType !== 'ALL' || activeFilterCount > 0;
+    if (!hasAnyFilter) {
       loadInitialSurplus();
       return;
     }
@@ -143,10 +227,30 @@ export default function SurplusDiscoveryPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.searchMatches({
+      const payload: any = {
         query_text: queryText,
         item_type: selectedType !== 'ALL' ? selectedType : undefined,
-      });
+      };
+
+      if (filters.size_nb_mm) payload.size_nb_mm = parseFloat(filters.size_nb_mm);
+      if (filters.pressure_class) payload.pressure_class = parseInt(filters.pressure_class);
+      if (filters.pressure_rating_bar) payload.pressure_rating_bar = parseFloat(filters.pressure_rating_bar);
+      if (filters.schedule) payload.schedule = filters.schedule;
+      if (filters.metallurgy) payload.metallurgy = filters.metallurgy;
+      if (filters.weldability_class) payload.weldability_class = filters.weldability_class;
+      if (filters.sour_service) payload.sour_service = true;
+      if (filters.facing_end) payload.facing_end = filters.facing_end;
+      if (filters.attachment) payload.attachment = filters.attachment;
+      if (filters.mfg_method) payload.mfg_method = filters.mfg_method;
+      if (filters.standard) payload.standard = filters.standard;
+      if (filters.indian_standard) payload.indian_standard = filters.indian_standard;
+      if (filters.severe_cyclic) payload.severe_cyclic = true;
+      if (filters.trim_no) payload.trim_no = parseInt(filters.trim_no);
+      if (filters.port_bore) payload.port_bore = filters.port_bore;
+      if (filters.piggable) payload.piggable = true;
+      if (filters.fire_safe_required) payload.fire_safe_required = true;
+
+      const res = await api.searchMatches(payload);
 
       setIsSearched(true);
 
@@ -239,37 +343,298 @@ export default function SurplusDiscoveryPage() {
             </button>
           </div>
 
-          {/* Search Input Bar */}
-          <form onSubmit={handleSearch} className="mt-3 flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[260px]">
-              <Search size={14} className="absolute left-3 top-2.5 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Search spec, metallurgy, dialect (e.g. 6 inch gate valve 600# IS 14846, A105 flange)..."
-                value={queryText}
-                onChange={(e) => setQueryText(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-hidden focus:border-zinc-400 dark:focus:border-zinc-500 font-sans"
-              />
+          {/* Search Input Bar & Collapsible Advanced Filters */}
+          <form onSubmit={handleSearch} className="mt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[260px]">
+                <Search size={14} className="absolute left-3 top-2.5 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Free-text spec, item code, or dialect (e.g. 6 inch gate valve 600# IS 14846, A105 flange)..."
+                  value={queryText}
+                  onChange={(e) => setQueryText(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-hidden focus:border-zinc-400 dark:focus:border-zinc-500 font-sans"
+                />
+              </div>
+
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                className="bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2.5 py-1.5 text-xs text-zinc-800 dark:text-zinc-200 outline-hidden font-mono"
+              >
+                {ITEM_TYPES.map((t) => (
+                  <option key={t} value={t}>{t.replace('_', ' ')}</option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className={`px-2.5 py-1.5 border rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                  showAdvanced || activeFilterCount > 0
+                    ? 'bg-zinc-100 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-zinc-900 dark:text-zinc-100'
+                    : 'bg-zinc-50 dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700/80 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                <SlidersHorizontal size={13} />
+                <span>Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900">
+                    {activeFilterCount}
+                  </span>
+                )}
+                {showAdvanced ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Search size={13} />
+                <span>Search</span>
+              </button>
+
+              {(activeFilterCount > 0 || queryText || isSearched) && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  title="Reset all filters and restore surplus catalog"
+                  className="px-2.5 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-400 rounded-md text-xs font-medium transition-colors flex items-center gap-1"
+                >
+                  <RotateCcw size={12} />
+                  <span>Reset</span>
+                </button>
+              )}
             </div>
 
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2.5 py-1.5 text-xs text-zinc-800 dark:text-zinc-200 outline-hidden font-mono"
-            >
-              {ITEM_TYPES.map((t) => (
-                <option key={t} value={t}>{t.replace('_', ' ')}</option>
-              ))}
-            </select>
+            {/* Collapsible Advanced Engineering Property Specification Panel */}
+            {showAdvanced && (
+              <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] font-mono text-zinc-500 gap-1">
+                  <span>Detailed Engineering Specification · Provide any 1 or multiple properties for pairwise 21-rule tolerance verification</span>
+                  {activeFilterCount > 0 && (
+                    <span className="text-zinc-800 dark:text-zinc-200 font-medium">
+                      {activeFilterCount} propert{activeFilterCount === 1 ? 'y' : 'ies'} specified
+                    </span>
+                  )}
+                </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50"
-            >
-              <Search size={13} />
-              <span>Search</span>
-            </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
+                  {/* Col 1: Dimensions & Pressure */}
+                  <div className="space-y-2 p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200/80 dark:border-zinc-800">
+                    <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">
+                      Dimensions & Pressure
+                    </span>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">Nominal Bore (NB mm)</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 50, 100, 150"
+                        value={filters.size_nb_mm}
+                        onChange={(e) => updateFilter('size_nb_mm', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden focus:border-zinc-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">Pressure Class (ASME)</label>
+                      <select
+                        value={filters.pressure_class}
+                        onChange={(e) => updateFilter('pressure_class', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden"
+                      >
+                        <option value="">Any Pressure Class</option>
+                        <option value="150">150# (PN 20)</option>
+                        <option value="300">300# (PN 50)</option>
+                        <option value="600">600# (PN 100)</option>
+                        <option value="900">900# (PN 150)</option>
+                        <option value="1500">1500# (PN 250)</option>
+                        <option value="2500">2500# (PN 420)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">Pipe Schedule (B36.10)</label>
+                      <select
+                        value={filters.schedule}
+                        onChange={(e) => updateFilter('schedule', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden"
+                      >
+                        <option value="">Any Schedule</option>
+                        <option value="SCH 10">SCH 10</option>
+                        <option value="SCH 20">SCH 20</option>
+                        <option value="SCH 40">SCH 40 / STD</option>
+                        <option value="SCH 80">SCH 80 / XS</option>
+                        <option value="SCH 120">SCH 120</option>
+                        <option value="SCH 160">SCH 160</option>
+                        <option value="SCH XXS">SCH XXS</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Col 2: Metallurgy & Weldability */}
+                  <div className="space-y-2 p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200/80 dark:border-zinc-800">
+                    <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">
+                      Metallurgy & Weldability
+                    </span>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">Material Grade / DAG</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. A105, WCB, LCB, F316L"
+                        value={filters.metallurgy}
+                        onChange={(e) => updateFilter('metallurgy', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden focus:border-zinc-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">Weldability Class</label>
+                      <select
+                        value={filters.weldability_class}
+                        onChange={(e) => updateFilter('weldability_class', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden"
+                      >
+                        <option value="">Any / Unspecified</option>
+                        <option value="HIGH_WELDABILITY">High Weldability (CE &le; 0.40%)</option>
+                        <option value="STANDARD">Standard Weldability (CE &le; 0.43% IIW)</option>
+                        <option value="NON_WELDABLE">Non-Weldable (Bolted Assembly)</option>
+                      </select>
+                    </div>
+                    <div className="pt-0.5 space-y-1.5">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-zinc-700 dark:text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={filters.sour_service}
+                          onChange={(e) => updateFilter('sour_service', e.target.checked)}
+                          className="rounded border-zinc-300 dark:border-zinc-700 text-zinc-900 focus:ring-0"
+                        />
+                        <span>Sour Service (NACE MR0175 / H2S)</span>
+                      </label>
+                      <div>
+                        <label className="text-[10px] text-zinc-500 block mb-0.5">Manufacturing Method</label>
+                        <select
+                          value={filters.mfg_method}
+                          onChange={(e) => updateFilter('mfg_method', e.target.value)}
+                          className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden"
+                        >
+                          <option value="">Any Method</option>
+                          <option value="SEAMLESS">Seamless (SMLS)</option>
+                          <option value="WELDED">Welded (ERW / LSAW)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Col 3: Connections & Geometry */}
+                  <div className="space-y-2 p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200/80 dark:border-zinc-800">
+                    <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">
+                      Connections & Geometry
+                    </span>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">Facing Type</label>
+                      <select
+                        value={filters.facing_end}
+                        onChange={(e) => updateFilter('facing_end', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden"
+                      >
+                        <option value="">Any Facing</option>
+                        <option value="RF">Raised Face (RF)</option>
+                        <option value="RTJ">Ring Type Joint (RTJ)</option>
+                        <option value="FF">Flat Face (FF)</option>
+                        <option value="BW">Butt Weld (BW)</option>
+                        <option value="SW">Socket Weld (SW)</option>
+                        <option value="NPT">Threaded / NPT</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">Attachment / Flange Type</label>
+                      <select
+                        value={filters.attachment}
+                        onChange={(e) => updateFilter('attachment', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden"
+                      >
+                        <option value="">Any Attachment</option>
+                        <option value="WELD_NECK">Weld Neck (WN)</option>
+                        <option value="SLIP_ON">Slip-On (SO)</option>
+                        <option value="BLIND">Blind Flange</option>
+                        <option value="SOCKET_WELD">Socket Weld (SW)</option>
+                      </select>
+                    </div>
+                    <div className="pt-1.5">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-zinc-700 dark:text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={filters.severe_cyclic}
+                          onChange={(e) => updateFilter('severe_cyclic', e.target.checked)}
+                          className="rounded border-zinc-300 dark:border-zinc-700 text-zinc-900 focus:ring-0"
+                        />
+                        <span>Severe Cyclic (Slip-On Banned)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Col 4: Standards & Valve Specs */}
+                  <div className="space-y-2 p-2.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-200/80 dark:border-zinc-800">
+                    <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">
+                      Standards & Component Specs
+                    </span>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">Indian Standard (BIS/IS)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. IS 14846, IS 1239, IS 2062"
+                        value={filters.indian_standard}
+                        onChange={(e) => updateFilter('indian_standard', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden focus:border-zinc-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">International Standard</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. ASME B16.5, API 600, B16.34"
+                        value={filters.standard}
+                        onChange={(e) => updateFilter('standard', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden focus:border-zinc-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">Valve Trim (API 600)</label>
+                      <select
+                        value={filters.trim_no}
+                        onChange={(e) => updateFilter('trim_no', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden"
+                      >
+                        <option value="">Any Trim</option>
+                        <option value="1">Trim 1 (F6a / 13Cr)</option>
+                        <option value="5">Trim 5 (Stellite Hardfaced)</option>
+                        <option value="8">Trim 8 (F6a + Stellite)</option>
+                        <option value="10">Trim 10 (316 SS)</option>
+                        <option value="12">Trim 12 (316 SS + Stellite)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Bar inside Expanded Filters */}
+                <div className="flex items-center justify-between pt-1 text-xs font-mono">
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline"
+                  >
+                    Clear All Filters
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Search size={13} />
+                    <span>Apply Specifications & Search</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </form>
         </div>
 

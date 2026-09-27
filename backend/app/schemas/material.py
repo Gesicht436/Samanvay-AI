@@ -182,6 +182,26 @@ class MatchRequest(BaseModel):
     """Search payload for cross-CPSE spare part discovery."""
 
     query_text: Optional[str] = Field(None, description="Free-form engineer search prompt")
+    item_type: Optional[str] = Field(None, description="e.g. FLANGE, GATE_VALVE, PIPE, PUMP, TUBE")
+    size_nb_mm: Optional[float] = Field(None, description="Nominal bore in mm")
+    pressure_class: Optional[int] = Field(None, description="ASME pressure class (e.g. 150, 300, 600)")
+    pressure_rating_bar: Optional[float] = Field(None, description="PN pressure in bar")
+    pressure_rating_psi: Optional[float] = Field(None, description="Operating PSI rating")
+    schedule: Optional[str] = Field(None, description="Pipe schedule (e.g. SCH 40, SCH 80)")
+    metallurgy: Optional[str] = Field(None, description="Material grade (e.g. ASTM A105, A216 WCB)")
+    weldability_class: Optional[str] = Field(None, description="HIGH_WELDABILITY, STANDARD, or NON_WELDABLE")
+    sour_service: Optional[bool] = Field(None, description="NACE MR0175 / ISO 15156 compliant")
+    facing_end: Optional[str] = Field(None, description="Flange facing (e.g. RF, RTJ, FF, BW)")
+    attachment: Optional[str] = Field(None, description="Attachment type (e.g. WELD_NECK, SLIP_ON, BLIND)")
+    mfg_method: Optional[str] = Field(None, description="Manufacturing method (e.g. SEAMLESS, WELDED)")
+    standard: Optional[str] = Field(None, description="International standard (ASME B16.5, API 600)")
+    indian_standard: Optional[str] = Field(None, description="BIS / IS standard (IS 14846, IS 1239)")
+    oil_std_spec: Optional[str] = Field(None, description="OISD / EIL spec (OISD-RP-126)")
+    severe_cyclic: Optional[bool] = Field(None, description="Severe cyclic service")
+    trim_no: Optional[int] = Field(None, description="API valve trim number (e.g. 1, 5, 8, 12)")
+    port_bore: Optional[str] = Field(None, description="Full Bore (FB) or Reduced Bore (RB)")
+    piggable: Optional[bool] = Field(None, description="Piggable line requirement")
+    fire_safe_required: Optional[bool] = Field(None, description="API 607 / 6FA fire-safe certification required")
     source_sku: Optional[str] = Field(None, description="Known SKU being replaced")
     source_attributes: Optional[PhysicalAttributes] = Field(
         None, description="Explicit physical attributes for structured search"
@@ -202,6 +222,7 @@ class MatchRequest(BaseModel):
         False, description="Filter strictly for Class-I Make in India suppliers"
     )
     top_k: int = Field(default=10, ge=1, le=50)
+    properties: dict[str, Any] = Field(default_factory=dict)
 
 
 # ── Property-by-Property Evaluation ──────────────────────────────────────
