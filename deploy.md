@@ -25,8 +25,8 @@
 From the repository root directory in PowerShell or Bash:
 
 ```bash
-# 1. Clone or navigate to the workspace
-cd Samanvay-AI
+# 1. Clean launch / Reset all persistent volumes (Recommended for fresh evaluation)
+docker compose -f docker/docker-compose.yml down -v
 
 # 2. Build & launch all 5 microservices with automated DB migrations & initial seeding
 docker compose -f docker/docker-compose.yml --env-file docker/.env.docker up -d --build
@@ -45,6 +45,7 @@ docker compose -f docker/docker-compose.yml ps
 | `samanvay-ai-neo4j` | Neo4j 5.20 Community | `7474:7474`, `7687:7687` | HTTP probe on `http://localhost:7474` |
 | `samanvay-ai-backend` | FastAPI Gateway Core | `8000:8000` | HTTP probe on `http://localhost:8000/health` |
 | `samanvay-ai-frontend` | Next.js 16 Web Portal | `3000:3000` | HTTP probe on `http://localhost:3000/` |
+| `samanvay-public-tunnel`| Cloudflare Edge Tunnel| Dynamic Edge | Outbound tunnel to `http://samanvay-ai-frontend:3000` |
 
 ### 2.4 Service URLs & Demonstrator Dashboards
 - **Web Portal & Command Center**: [http://localhost:3000](http://localhost:3000)
@@ -52,7 +53,23 @@ docker compose -f docker/docker-compose.yml ps
 - **Neo4j Graph Explorer**: [http://localhost:7474](http://localhost:7474) (Auth: `neo4j` / `samanvay_graph`)
 - **Qdrant Vector Dashboard**: [http://localhost:6333/dashboard](http://localhost:6333/dashboard)
 
-### 2.5 Live Subsystem Verification Suite
+### 2.5 Pre-Configured Evaluation Personas (Default Password: `Samanvay@2026`)
+The database automatically seeds 25+ demo accounts across all 7 CPSEs upon startup. Evaluators can sign in via 1-click on `/login` or enter credentials manually:
+
+| Username | Role | CPSE Domain | Depot / Facility Assignment | Primary Function in Evaluation Journey |
+| :--- | :--- | :--- | :--- | :--- |
+| `engineer_iocl` | `SITE_ENGINEER` | **IOCL** | Panipat Refinery Stores | Search surplus valves/flanges & submit requisition |
+| `stores_ongc` | `MATERIALS_MANAGER` | **ONGC** | Uran Terminal Stores | Approve mutual-aid transfer (Segregation of Duties) |
+| `cisf_ongc` | `CISF_SECURITY` | **ONGC** | Uran Perimeter Gate | Generate cryptographic gate pass with SVG QR |
+| `engineer_oil` | `SITE_ENGINEER` | **OIL** | Duliajan Central Stores | Plant piping & reliability requisition requester |
+| `stores_bpcl` | `MATERIALS_MANAGER` | **BPCL** | Mumbai Mahul Refinery | Senior Materials Executive & stock controller |
+| `engineer_gail` | `SITE_ENGINEER` | **GAIL** | Pata Petrochemical Complex | Pipeline & gas grid maintenance specialist |
+| `engineer_hpcl` | `SITE_ENGINEER` | **HPCL** | Visakh Refinery Stores | Process plant equipment requester |
+| `engineer_nrl` | `SITE_ENGINEER` | **NRL** | Numaligarh Refinery Depot | Expansion project piping lead |
+| `auditor` | `VIGILANCE_AUDITOR` | **MoPNG** | Central Oversight | Verify Merkle hash chain in sovereign audit ledger |
+| `admin` | `SUPER_ADMIN` | **MoPNG** | Sovereign Headquarters | Dual CPSE/Depot switcher & global requisition access |
+
+### 2.6 Live Subsystem Verification Suite
 Run the live integration test suite inside the running backend container:
 ```bash
 docker exec -it samanvay-ai-backend python -m scripts.verify_live_api
@@ -98,6 +115,13 @@ Cloudflare will output a public URL such as:
 +--------------------------------------------------------------------------------------------+
 ```
 Anyone with this URL can open the website from their smartphone, tablet, or external PC and interact with the live stack running on your laptop.
+
+> [!TIP]
+> **Mobile Ergonomics & Responsive UI Testing**:
+> The public tunnel URL is fully mobile-responsive. Open the link on any iOS/Android smartphone:
+> - Navigation collapses into an auto-closing slide-over sheet accessible via the mobile hamburger icon.
+> - Consignments, inventory, and audit tables utilize compact 38px/46px touch targets with horizontal swipe support.
+> - The single-origin Next.js reverse proxy routes all `/api/v1/*` calls internally to the FastAPI backend container, preventing CORS or mixed-content warnings on mobile browsers.
 
 ### 3.3 Stopping the Public Tunnel
 - If running interactively, press `Ctrl + C`.

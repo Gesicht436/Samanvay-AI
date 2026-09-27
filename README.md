@@ -14,15 +14,17 @@
 
 ## 1. Executive Summary
 
-India's 5 major public sector oil, gas, and petrochemical enterprises (**IOCL, ONGC, BPCL, HPCL, GAIL**) collectively hold over **₹12,000–15,000 Crore** in maintenance, repair, and overhaul (MRO) spare parts. Simultaneously, unplanned refinery shutdowns and emergency unit trips cost Indian Public Sector Undertakings (PSUs) **₹5–20 Crore per day**, largely driven by lengthy 6–18 month OEM procurement lead times.
+India's 7 major public sector oil, gas, and petrochemical enterprises (**OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL**) collectively hold over **₹15,000–18,000 Crore** in maintenance, repair, and overhaul (MRO) spare parts. Simultaneously, unplanned refinery shutdowns and emergency unit trips cost Indian Public Sector Undertakings (PSUs) **₹5–20 Crore per day**, largely driven by lengthy 6–18 month OEM procurement lead times.
 
 **Samanvay-AI** solves this systemic challenge through a sovereign, air-gapped, cross-CPSE mutual aid mesh. Without disrupting legacy ERP systems (SAP S/4HANA, Oracle ERP, Maximo), Samanvay-AI enables:
 1. **Intelligent MTC & Catalog Intake**: Sub-50ms vector PDF extraction and OCR parsing of EN 10204 3.1/3.2 Material Test Certificates.
 2. **Deterministic Physics & Safety Core**: 21 codified mechanical and metallurgical engineering standards (ASME, ASTM, API, TEMA, NACE, ISO) that maintain unilateral veto power over AI predictions.
-3. **Dynamic Tri-Tier Compatibility**: Runtime material parity evaluation with zero static tier assumptions.
-4. **Attribute-Level Commercial Privacy**: Commercial procurement pricing is strictly masked across enterprise boundaries.
-5. **Real-Time Logistics Topology & Star Graph**: Neo4j 5.20 knowledge graph modeling 19 CPSE refinery depots across India, road tortuosity ($1.28\times$), transit hours, and carbon footprint ($CO_2$) savings.
-6. **Sovereign Audit Ledger & CISF Pass**: Tamper-evident SHA-256 chained audit blocks with Merkle verification and 100% offline air-gapped SVG QR code gate passes.
+3. **Dynamic Tri-Tier Compatibility**: Runtime material parity evaluation relative to specific target specifications with zero static tier assumptions.
+4. **Multi-Property Engineering Discovery**: Detailed tolerance matching across nominal bore, pressure class, schedule, metallurgy, IIW weldability, sour service (NACE MR0175), facing ends, and valve trims.
+5. **Multi-Tenant Consignment Isolation & RBAC**: Strict consignment scoping (requesters see only their own demands and incoming depot requests; cross-tenant items are shielded) with locked organization badges and cryptographic segregation of duties.
+6. **25+ Pre-Seeded Evaluation Personas**: 1-Click login hub covering all 7 CPSEs, Central MoPNG Vigilance Auditor, and Super Admin.
+7. **Real-Time Logistics Topology & Star Graph**: Neo4j 5.20 knowledge graph modeling 19 CPSE refinery depots across India, road tortuosity ($1.28\times$), transit hours, and carbon footprint ($CO_2$) savings.
+8. **Sovereign Audit Ledger & CISF Pass**: Tamper-evident SHA-256 chained audit blocks with Merkle verification and 100% offline air-gapped SVG QR code gate passes.
 
 For deep architectural specifications, see **[architecture.md](architecture.md)**.
 
@@ -181,51 +183,62 @@ npm run dev
 
 ### Option B: Full Docker Deployment (Production Emulation)
 
-To launch all services (Databases, Backend, Frontend, and CDC Worker) in Docker containers:
+To launch all 5 services (PostgreSQL 16, Qdrant, Neo4j, Backend Gateway, and Next.js Frontend) in Docker:
 
 ```powershell
-docker compose -f docker/docker-compose.yml up -d --build
+# 1. Clean launch / Reset all persistent volumes
+docker compose -f docker/docker-compose.yml down -v
+
+# 2. Build & launch stack with production environment variables
+docker compose -f docker/docker-compose.yml --env-file docker/.env.docker up -d --build
 ```
 
 ---
 
 ## 5. Manual Testing & Feature Walkthrough
 
-Once running locally, open **`http://localhost:3000`** to test each feature manually:
+Once running, open **`http://localhost:3000`** (or your live Cloudflare Tunnel URL) to test each feature:
 
-### 1. Executive Command Center (`/`)
+### 1. Sovereign Identity & 1-Click Evaluation Hub (`/login`)
+- **Judge & Auditor Directory**: Access 25+ pre-configured personas across all 7 CPSEs (**OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL**), Central MoPNG Auditor, and Super Admin.
+- **1-Click Authentication**: Tap any persona card to auto-populate credentials and sign in instantly (Default password: `Samanvay@2026`).
+- **Core Evaluation Personas**:
+  - `engineer_iocl` (IOCL Panipat Site Engineer) &mdash; Procurement requester.
+  - `stores_ongc` (ONGC Uran Materials Manager) &mdash; Surplus approver.
+  - `cisf_ongc` (ONGC Uran CISF Security Officer) &mdash; Gate pass issuer.
+  - `auditor` (MoPNG Chief Vigilance Officer) &mdash; Statutory audit verifier.
+  - `admin` (Ministry Super Admin) &mdash; Global multi-tenant switcher.
+
+### 2. Executive Command Center (`/dashboard`)
 - **Interactive Geo Radar**: Click on any refinery depot dot on the Indian subcontinent map (e.g., *Panipat*, *Uran*, *Visakh*) to inspect local inventory counts and unlocked capital in real time.
 - **Active Logistics Corridors**: Review active emergency consignments and pulse transit markers across National Highway corridors (NH-44, NH-16).
+- **Locked Organization Header**: Notice that non-admin officers have an un-editable locked badge showing their assigned CPSE and Depot (e.g., `[IOCL] Panipat Refinery Stores`). Only `admin` sees the global CPSE and Depot switcher.
 
-### 2. Smart Document Intake & MTC Review (`/upload`)
+### 3. Surplus Discovery & Multi-Property Specification Search (`/discover`)
+- **Multi-Property Specification Search**: Click **"Advanced Engineering Specification"** to expand the engineering drawer.
+- **Flexible Filter Ingestion**: Search by Nominal Bore (`size_nb_mm`), ASME Pressure Class, Pipe Schedule, ASTM Metallurgy, IIW Weldability class (`HIGH_WELDABILITY`, `STANDARD`, `NON_WELDABLE`), NACE MR0175 sour service wet $H_2S$ compliance, facing ends, and valve trims.
+- **Zero Static Tiers**: Neutral unsearched catalog view with dynamic tri-tier calculation upon search execution.
+- **Inspect Safety Rules**: Click **"Inspect Safety Rules"** on any candidate to inspect the **21-Rule Scorecard** evaluated against ASME B16.5, ASTM DAG, and API 600.
+- Click **"Compose Requisition"** to submit an inter-CPSE transfer request.
+
+### 4. Consignments & Segregation of Duties (`/requests`)
+- **Multi-Tenant Isolation**: Standard users see only their own demands and incoming requests for their depot. Cross-tenant consignments from unrelated CPSEs are completely shielded.
+- **Persona Scoped Tabs**:
+  - **"My Outgoing Requisitions"**: Requisitions created by the user for their plant. Shows "Awaiting Supplying Approval".
+  - **"Incoming Depot Requests"**: Mutual-aid demands from sister CPSEs to draw surplus from this user's depot.
+- **Segregation of Duties Enforcement**: Requesters are blocked (`403 Forbidden`) from approving their own demands. Switch to the supplying CPSE Materials Manager (`stores_ongc`) to approve, and CISF Security (`cisf_ongc`) to generate the statutory gate pass.
+- Inspect the **Printable CISF Gate Pass** with self-contained SVG QR code and SHA-256 seal.
+
+### 5. Smart Document Intake & MTC Review (`/upload`)
 - Test using the 4 built-in production presets:
   - **Preset 1 (L&T Hazira ASTM A105 Flange)**: Fast-path vector extraction, $CE_{\text{IIW}} = 0.41\%$, `STANDARD_WELDABLE`, auto-approved.
   - **Preset 2 (BHEL Trichy Cryogenic Valve)**: A350 LF2 body, $CE = 0.45\%$ triggers `PREHEAT_REQUIRED`, Charpy impact at $-46^\circ\text{C}$ verified.
   - **Preset 3 (Pennar F316L Flange)**: Marine duty stainless steel, computes $\text{PREN} = 25.02$.
   - **Preset 4 (Vendor X Smudged Scan - Out of Spec)**: Degraded scan, out-of-spec carbon ($0.38\% > 0.35\%$), $CE = 0.67\%$, routes to **HITL Triage Queue**.
-- Click **"Commit to Sovereign Ledger"** to append the certificate to the cryptographic chain.
-
-### 3. Plant Stock Ledger & HITL Diff Triage (`/inventory`)
-- **Surplus Broadcast Toggle**: Click **"Broadcast"** / **"Un-broadcast"** on any item to transition state between local reserve (`IN_STORAGE`) and peer-visible surplus (`IDLE_SURPLUS`).
-- **HITL Triage Queue**: Navigate to the HITL tab to view side-by-side diffs between physical plant master records and MTC candidates with automated safety rule justifications.
-- **Export**: Click **"Export CSV / SAP MM"** to generate an RFC 4180 inventory spreadsheet.
-
-### 4. Pre-Purchase Semantic Radar (`/discover`)
-- Search by engineering terms (e.g., `gate valve 150#` or `flange 300#`).
-- Click **"Inspect Safety Rules"** on any candidate to inspect the **21-Rule Scorecard** evaluated against ASME B16.5, ASTM DAG, and API 600.
-- Verify that commercial prices are masked (`PRICE MASKED`) across peer enterprises.
-- Click **"Compose Requisition"** to submit an inter-CPSE transfer request.
-
-### 5. Requisition Hub & CISF Digital Gate Pass (`/requests` and `/requests/[id]`)
-- Confirm inbound supply requests to generate a statutory gate pass.
-- Inspect the **Printable CISF Gate Pass**:
-  - Live NavIC satellite telemetry simulation.
-  - **100% Offline SVG QR Code**: Deterministic Version 2 bit-matrix with embedded SHA-256 seal.
-  - Press `Ctrl+P` (or click **"Print CISF Gate Pass"**) to verify the clean print layout.
 
 ### 6. Sovereign Cryptographic Audit Trail (`/audit`)
 - Inspect chronological ledger blocks, parent hash links ($H_{i-1} \to H_i$), and consensus witness nodes.
-- Click **"Verify Merkle Chain"** to execute real-time anti-tamper integrity verification across all 1,842 blocks.
+- Click **"Verify Merkle Chain"** to execute real-time anti-tamper integrity verification across all blocks.
 
 ---
 

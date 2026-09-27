@@ -7,23 +7,23 @@
 ## 1. Architectural Mission, Context & Principles
 
 ### 1.1 Context & Problem Statement
-India's 5 major public sector oil, gas, and petrochemical enterprises—**Indian Oil Corporation Limited (IOCL)**, **Oil and Natural Gas Corporation (ONGC)**, **Bharat Petroleum Corporation Limited (BPCL)**, **Hindustan Petroleum Corporation Limited (HPCL)**, and **GAIL (India) Limited**—operate massive critical infrastructure spanning upstream offshore platforms, cross-country transmission pipelines, crude refineries, and petrochemical complexes.
+India's 7 major public sector oil, gas, and petrochemical enterprises—**Oil India Limited (OIL)**, **Indian Oil Corporation Limited (IOCL)**, **Oil and Natural Gas Corporation (ONGC)**, **Bharat Petroleum Corporation Limited (BPCL)**, **Hindustan Petroleum Corporation Limited (HPCL)**, **GAIL (India) Limited**, and **Numaligarh Refinery Limited (NRL)**—operate massive critical infrastructure spanning upstream exploration & production fields, offshore platforms, cross-country transmission pipelines, crude refineries, and petrochemical complexes under the guidance of the **Ministry of Petroleum & Natural Gas (MoPNG)**.
 
-Across these enterprises, more than **₹12,000–15,000 Crore** worth of critical engineering spares and MRO (Maintenance, Repair, Operations) items sit dormant in regional storehouses. Concurrently, unplanned plant shutdowns and emergency unit trips incur catastrophic losses of **₹5–20 Crore per day** due to 6–18 month OEM procurement lead times for long-lead items (special alloy valves, forged flanges, turbine rotors, and heavy pumps).
+Across these enterprises, more than **₹15,000–18,000 Crore** worth of critical engineering spares and MRO (Maintenance, Repair, Operations) items sit dormant in regional storehouses. Concurrently, unplanned plant shutdowns and emergency unit trips incur catastrophic losses of **₹5–20 Crore per day** due to 6–18 month OEM procurement lead times for long-lead items (special alloy valves, forged flanges, turbine rotors, and heavy pumps).
 
-### 1.2 The Five Non-Negotiable Invariants
+### 1.2 The Six Non-Negotiable Invariants
 
-Samanvay-AI is engineered around five fundamental, non-negotiable architectural invariants:
+Samanvay-AI is engineered around six fundamental, non-negotiable architectural invariants:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│                           THE 5 ARCHITECTURAL INVARIANTS                         │
+│                           THE 6 ARCHITECTURAL INVARIANTS                         │
 ├──────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
 │  1. ZERO STATIC TIER ASSIGNMENT                                                  │
 │     Compatibility is NEVER an intrinsic property of a spare part. Tiers are      │
 │     computed dynamically at runtime relative to query requirement Q and          │
-│     candidate C: S(Q, C).                                                        │
+│     candidate C: S(Q, C). Unsearched catalogs remain neutral with 0 tier bias.   │
 │                                                                                  │
 │  2. HARD SAFETY GATE (AI CANNOT OVERRIDE PHYSICS)                                │
 │     Vector similarities and XGBoost rankers only suggest candidates. The 21      │
@@ -44,6 +44,12 @@ Samanvay-AI is engineered around five fundamental, non-negotiable architectural 
 │  5. ZERO ERP DISRUPTION                                                          │
 │     Operates as a non-invasive sidecar to legacy enterprise ERPs (SAP S/4HANA,   │
 │     Oracle ERP, Maximo) using CDC outbox streaming and standard RFC 4180 CSVs.   │
+│                                                                                  │
+│  6. MULTI-TENANT ISOLATION & SEGREGATION OF DUTIES                               │
+│     Consignments are strictly isolated to the requesting officer and supplying   │
+│     depot. Plant engineers cannot alter organization context in the UI.          │
+│     Requesters are strictly barred from self-approving requisitions; only the    │
+│     supplying CPSE Materials Manager holds authority to release inventory.       │
 │                                                                                  │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -385,15 +391,53 @@ The CISF Digital Gate Pass (`frontend/src/components/QRCodeSVG.tsx`) renders a s
 
 ---
 
+### 3.9 Multi-Tenant Federation, RBAC & Consignment Isolation
+
+Samanvay-AI implements an enterprise-grade multi-tenant permission framework designed for inter-CPSE sovereign cooperation:
+
+1. **Strict Consignment Data Scoping**:
+   - Outgoing requisitions are visible only to the requesting engineer (`requested_by == username`) and their assigned plant division (`target_cpse == user.cpse`).
+   - Incoming transfer requests are visible only to materials managers and security officers at the supplying depot (`source_depot == user.depot_id` or `source_cpse == user.cpse`).
+   - Mutual-aid requisitions between unrelated CPSEs are completely shielded and invisible.
+
+2. **Locked Tenant Header Context**:
+   - In [`AppShell.tsx`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/frontend/src/components/AppShell.tsx), plant engineers and depot managers cannot switch their operating organization or branch in the UI. Their active context is locked to an un-editable tenant badge.
+   - Only `SUPER_ADMIN` possesses tenant-switching authority, facilitated by an administrative dual selector (CPSE dropdown + Depot dropdown).
+
+3. **Cryptographic Segregation of Duties (SoD)**:
+   - Requesters are barred at the API gateway layer (`403 Forbidden`) from approving their own requisitions.
+   - Material release authority belongs exclusively to the supplying CPSE Materials Manager.
+   - Gate passes are generated exclusively by authorized CISF Security Officers.
+
+4. **Sovereign Persona Directory**:
+   - **25+ Pre-seeded evaluation accounts** spanning 7 CPSEs (OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL), Central MoPNG Vigilance Auditor, and Super Admin.
+   - 1-Click Evaluation Hub on the login portal for streamlined evaluation by regulatory inspectors and hackathon judges.
+
+---
+
 ## 4. Database Entity-Relationship (ER) Architecture
 
 ```mermaid
 erDiagram
+    User ||--o{ Requisition : "creates / approves"
     InventoryItem ||--o{ InventoryLock : "locked by"
     InventoryItem ||--o{ Requisition : "requested in"
     Requisition ||--o| DigitalGatePass : "cleared with"
     Requisition ||--o{ SovereignAuditLedger : "audited by"
     IngestedDocument ||--o{ ActiveLearningFeedback : "reviewed in"
+
+    User {
+        int id PK
+        string username UK
+        string email UK
+        string full_name
+        string role "SITE_ENGINEER / MATERIALS_MANAGER / CISF_SECURITY / SUPER_ADMIN"
+        string cpse "OIL / IOCL / ONGC / BPCL / HPCL / GAIL / NRL / MoPNG"
+        string depot_id
+        boolean is_active
+        boolean is_approved
+        datetime created_at
+    }
 
     InventoryItem {
         string sku_code PK
@@ -547,40 +591,52 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Requester as ONGC Uran Officer
-    actor Approver as IOCL Panipat Officer
-    participant UI as Next.js Frontend
-    participant API as Requisition Router
+    actor Requester as IOCL Site Engineer
+    actor SupplyingMgr as ONGC Materials Manager
+    actor CISF as ONGC CISF Security Officer
+    participant UI as Next.js AppShell / Requests
+    participant API as FastAPI Requisition Router
     participant Service as Requisition Service
     participant PG as PostgreSQL 16
-    participant Ledger as Audit Service
-    participant Neo4j as Neo4j Graph
+    participant Ledger as Sovereign Audit Ledger
+    participant Neo4j as Neo4j Logistics Graph
 
-    Requester->>UI: Submits requisition for 2x Flanges (REQ-99201)
-    UI->>API: POST /api/v1/requisition (Idempotency-Key)
+    Requester->>UI: Submits requisition for 2x Valves (REQ-3BA232)
+    UI->>API: POST /api/v1/requisition (Bearer JWT Token, Idempotency-Key)
+    API->>API: Bind requested_by=user.username, target_cpse=user.cpse
     API->>Service: create_requisition()
-    Service->>PG: Acquire row lock: SELECT ... FOR UPDATE
-    Service->>PG: Insert into requisitions & inventory_locks
-    Service->>Ledger: Append audit block (REQUISITION_CREATED)
-    Service->>PG: Insert into cdc_outbox
+    Service->>PG: SELECT ... FOR UPDATE (Pessimistic Row Lock)
+    Service->>PG: INSERT into requisitions (status='PENDING_APPROVAL')
+    Service->>PG: INSERT into inventory_locks (locked_qty=2)
+    Service->>Ledger: Append audit block (CREATE_REQUISITION, SHA-256)
     PG-->>API: Commit transaction
-    API->>Neo4j: Sync Requisition relationship edge
-    API-->>UI: Requisition confirmed (REQ-99201)
+    API->>Neo4j: Sync mutual-aid edge & calculate road tortuosity
+    API-->>UI: Requisition confirmed (REQ-3BA232)
 
-    Approver->>UI: Reviews & confirms supply
-    UI->>API: PUT /api/v1/requisition/{id}/approve
-    API->>PG: Update status = 'APPROVED'
-    API-->>UI: Approval recorded
+    Note over Requester,API: Segregation of Duties Check
+    opt Requester Attempts Self-Approval
+        Requester->>UI: Clicks "Approve" on own request
+        UI->>API: PUT /api/v1/requisition/{id}/approve
+        API-->>UI: HTTP 403 Forbidden (Segregation of Duties Violation)
+    end
 
-    Approver->>UI: Generates statutory CISF Gate Pass
-    UI->>API: POST /api/v1/requisition/{id}/gatepass (transporter, vehicle, driver)
-    API->>Service: generate_digital_gate_pass()
-    Service->>Service: Compute HMAC SHA-256 gate pass seal
-    Service->>PG: Insert into digital_gate_passes
-    Service->>Ledger: Append audit block (GATE_PASS_GENERATED)
-    PG-->>API: Commit transaction
-    API-->>UI: Return Gate Pass details + QR payload
-    UI-->>Approver: Display printable Government of India CISF Pass
+    SupplyingMgr->>UI: Logs in as stores_ongc -> Views "Incoming Depot Requests"
+    SupplyingMgr->>UI: Reviews technical need & approves supply
+    UI->>API: PUT /api/v1/requisition/{id}/approve (Bearer JWT)
+    API->>Service: approve_requisition()
+    Service->>PG: UPDATE status='APPROVED', approved_by=stores_ongc
+    Service->>Ledger: Append audit block (APPROVE_REQUISITION, SHA-256)
+    API-->>UI: Approval confirmed
+
+    CISF->>UI: Logs in as cisf_ongc -> Issues Gate Pass
+    UI->>API: POST /api/v1/requisition/{id}/gatepass (Vehicle, Driver, Transporter)
+    API->>Service: generate_gate_pass()
+    Service->>Service: Calculate BEE CO2 savings & road distance
+    Service->>Service: Compute cryptographic SHA-256 seal & embed inline SVG QR
+    Service->>PG: INSERT into digital_gate_passes, status='GATE_PASS_ISSUED'
+    Service->>Ledger: Append audit block (GENERATE_GATE_PASS, SHA-256)
+    API-->>UI: Return printable CISF Gate Pass with cryptographic QR
+    UI-->>CISF: Display Gate Pass for dispatched freight
 ```
 
 ---
