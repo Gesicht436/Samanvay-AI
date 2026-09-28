@@ -1,11 +1,13 @@
 import React from 'react';
-import { Package, Radio, Building2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Package, Radio, Building2, CheckCircle2, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { KpiCard, Skeleton } from '@/components/ui';
 
 interface KpiStripProps {
   stats: {
     total_items?: number;
     total_surplus?: number;
+    total_hitl?: number;
+    total_requisitions?: number;
     capital_unlocked_cr?: number;
   } | null;
   auditVerified: boolean | null;
@@ -14,7 +16,7 @@ interface KpiStripProps {
 
 export function KpiStrip({ stats, auditVerified, loading }: KpiStripProps) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
       <KpiCard
         title="Total Mesh Items"
         value={loading ? <Skeleton className="h-7 w-20" /> : (stats?.total_items?.toLocaleString() ?? '—')}
@@ -44,6 +46,20 @@ export function KpiStrip({ stats, auditVerified, loading }: KpiStripProps) {
         icon={Building2}
         delta="Sovereign mesh"
         deltaType="positive"
+      />
+      <KpiCard
+        title="HITL Review Queue"
+        value={
+          loading ? (
+            <Skeleton className="h-7 w-16" />
+          ) : (
+            stats?.total_hitl?.toString() ?? '0'
+          )
+        }
+        subtext="Flagged for Engineering Review"
+        icon={ShieldAlert}
+        delta={stats?.total_hitl ? `${stats.total_hitl} pending` : 'Clean'}
+        deltaType={stats?.total_hitl && stats.total_hitl > 0 ? 'warning' : 'positive'}
       />
       <KpiCard
         title="Merkle Audit Ledger"

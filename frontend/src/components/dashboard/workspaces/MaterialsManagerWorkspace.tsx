@@ -10,7 +10,9 @@ interface MaterialsManagerWorkspaceProps {
 }
 
 export function MaterialsManagerWorkspace({ requests, loading, cpse }: MaterialsManagerWorkspaceProps) {
-  const pendingRequests = requests.filter((r) => r.status === 'REQUESTED');
+  const pendingRequests = requests.filter(
+    (r) => r.status === 'PENDING_APPROVAL' || r.status === 'REQUESTED'
+  );
 
   return (
     <div className="space-y-4">
@@ -28,17 +30,17 @@ export function MaterialsManagerWorkspace({ requests, loading, cpse }: Materials
           ) : (
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
               {pendingRequests.slice(0, 4).map((req) => (
-                <div key={req.id} className="py-2.5 flex items-center justify-between gap-4 text-xs">
+                <div key={req.requisition_id || req.id} className="py-2.5 flex items-center justify-between gap-4 text-xs">
                   <div>
                     <p className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                      {req.req_number || `REQ-${req.id}`}
+                      {req.requisition_id || req.req_number || `REQ-${req.id}`}
                     </p>
                     <p className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                      {req.requesting_cpse} requesting <span className="font-mono">{req.sku_code}</span> (Qty: {req.quantity_requested})
+                      {req.target_cpse || req.requesting_cpse || 'Sister CPSE'} requesting <span className="font-mono">{req.sku_code}</span> (Qty: {req.required_qty ?? req.quantity_requested ?? 1})
                     </p>
                   </div>
                   <Link
-                    href={`/requests/${req.id}`}
+                    href={`/requests/${req.requisition_id || req.id}`}
                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded text-xs font-medium transition-colors"
                   >
                     Authorize

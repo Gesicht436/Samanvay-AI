@@ -60,6 +60,7 @@ export default function AuditTrailPage() {
   const [chainValid, setChainValid] = useState<boolean | null>(null);
   const [verifying, setVerifying] = useState<boolean>(false);
   const [verificationStats, setVerificationStats] = useState<any>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
   // Filters & Search
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -106,13 +107,14 @@ export default function AuditTrailPage() {
   // Run cryptographic chain validation
   const runChainVerification = async () => {
     setVerifying(true);
+    setVerificationError(null);
     try {
       const res = await api.verifyAuditChain();
       setChainValid(Boolean(res.is_valid));
       setVerificationStats(res);
     } catch (err: any) {
       setChainValid(false);
-      alert(`Chain verification failed: ${err.message}`);
+      setVerificationError(`Chain verification failed: ${err.message}`);
     } finally {
       setVerifying(false);
     }
@@ -120,8 +122,11 @@ export default function AuditTrailPage() {
 
   useEffect(() => {
     fetchAuditLogs();
-    runChainVerification();
   }, [page, selectedCategory, selectedCpse]);
+
+  useEffect(() => {
+    runChainVerification();
+  }, []);
 
   // Client-side text filter on current page items
   const filteredLogs = useMemo(() => {
@@ -242,6 +247,13 @@ export default function AuditTrailPage() {
             </select>
           </div>
         </div>
+
+        {verificationError && (
+          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">
+            <span>{verificationError}</span>
+            <button onClick={() => setVerificationError(null)} className="text-zinc-400 hover:text-zinc-600">&times;</button>
+          </div>
+        )}
 
         {error && (
           <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">

@@ -77,27 +77,27 @@ export function SiteEngineerWorkspace({ requests, loading, cpse }: SiteEngineerW
         ) : (
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
             {requests.slice(0, 5).map((req: any) => (
-              <div key={req.id} className="py-2.5 flex items-center justify-between gap-4 text-xs">
+              <div key={req.requisition_id || req.id} className="py-2.5 flex items-center justify-between gap-4 text-xs">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                      {req.req_number || `REQ-${req.id}`}
+                      {req.requisition_id || req.req_number || `REQ-${req.id}`}
                     </span>
                     <span className="text-zinc-400">·</span>
                     <span className="font-mono text-zinc-600 dark:text-zinc-400">
-                      {req.requesting_cpse} &rarr; {req.fulfilling_cpse}
+                      {req.source_cpse || req.requesting_cpse} &rarr; {req.target_cpse || req.fulfilling_cpse}
                     </span>
                   </div>
                   <p className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    SKU: <span className="font-mono text-zinc-800 dark:text-zinc-200">{req.sku_code}</span> (Qty: {req.quantity_requested})
+                    SKU: <span className="font-mono text-zinc-800 dark:text-zinc-200">{req.sku_code}</span> (Qty: {req.required_qty ?? req.quantity_requested ?? 1})
                   </p>
                 </div>
                 <div className="text-right flex items-center gap-2">
                   <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                    {req.status}
+                    {req.status?.replace(/_/g, ' ')}
                   </span>
                   <Link
-                    href={`/requests/${req.id}`}
+                    href={`/requests/${req.requisition_id || req.id}`}
                     className="text-[11px] font-medium text-zinc-900 dark:text-zinc-100 hover:underline"
                   >
                     View &rarr;

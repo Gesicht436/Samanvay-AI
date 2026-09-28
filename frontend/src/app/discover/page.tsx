@@ -164,6 +164,7 @@ export default function SurplusDiscoveryPage() {
     if (filters.mfg_method) count++;
     if (filters.standard) count++;
     if (filters.indian_standard) count++;
+    if (filters.oil_std_spec) count++;
     if (filters.severe_cyclic) count++;
     if (filters.trim_no) count++;
     if (filters.port_bore) count++;
@@ -244,6 +245,7 @@ export default function SurplusDiscoveryPage() {
       if (filters.mfg_method) payload.mfg_method = filters.mfg_method;
       if (filters.standard) payload.standard = filters.standard;
       if (filters.indian_standard) payload.indian_standard = filters.indian_standard;
+      if (filters.oil_std_spec) payload.oil_std_spec = filters.oil_std_spec;
       if (filters.severe_cyclic) payload.severe_cyclic = true;
       if (filters.trim_no) payload.trim_no = parseInt(filters.trim_no);
       if (filters.port_bore) payload.port_bore = filters.port_bore;
@@ -275,7 +277,7 @@ export default function SurplusDiscoveryPage() {
 
   useEffect(() => {
     loadInitialSurplus();
-  }, [selectedType]);
+  }, [selectedType, maxDistance]);
 
   // Handle Requisition submission
   const handleCreateRequisition = async (e: React.FormEvent) => {
@@ -363,8 +365,20 @@ export default function SurplusDiscoveryPage() {
                 className="bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2.5 py-1.5 text-xs text-zinc-800 dark:text-zinc-200 outline-hidden font-mono"
               >
                 {ITEM_TYPES.map((t) => (
-                  <option key={t} value={t}>{t.replace('_', ' ')}</option>
+                  <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
                 ))}
+              </select>
+
+              <select
+                value={maxDistance}
+                onChange={(e) => setMaxDistance(Number(e.target.value))}
+                className="bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-md px-2.5 py-1.5 text-xs text-zinc-800 dark:text-zinc-200 outline-hidden font-mono"
+                title="Maximum logistics road transport radius"
+              >
+                <option value={500}>&le; 500 km radius</option>
+                <option value={1000}>&le; 1,000 km radius</option>
+                <option value={2000}>&le; 2,000 km radius</option>
+                <option value={5000}>All India (5,000 km)</option>
               </select>
 
               <button
@@ -594,6 +608,16 @@ export default function SurplusDiscoveryPage() {
                         placeholder="e.g. ASME B16.5, API 600, B16.34"
                         value={filters.standard}
                         onChange={(e) => updateFilter('standard', e.target.value)}
+                        className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden focus:border-zinc-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-zinc-500 block mb-0.5">OISD / EIL Specification</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. OISD-RP-126, EIL 6-44-0012"
+                        value={filters.oil_std_spec}
+                        onChange={(e) => updateFilter('oil_std_spec', e.target.value)}
                         className="w-full px-2 py-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-hidden focus:border-zinc-400"
                       />
                     </div>

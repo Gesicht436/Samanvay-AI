@@ -87,6 +87,7 @@ export default function InventoryLedgerPage() {
   const [inspectedItem, setInspectedItem] = useState<InventoryItem | null>(null);
   const [transitioningSku, setTransitioningSku] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Fetch Inventory from Live Backend (Strictly live, zero mock fallbacks)
   const fetchInventory = async () => {
@@ -178,7 +179,8 @@ export default function InventoryLedgerPage() {
       fetchInventory();
       setTimeout(() => setActionSuccess(null), 4000);
     } catch (err: any) {
-      alert(`Status update failed: ${err.message}`);
+      setActionError(`Status update failed: ${err.message}`);
+      setTimeout(() => setActionError(null), 5000);
     } finally {
       setTransitioningSku(null);
     }
@@ -346,6 +348,13 @@ export default function InventoryLedgerPage() {
           <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-mono rounded-lg flex items-center justify-between">
             <span>{actionSuccess}</span>
             <button onClick={() => setActionSuccess(null)} className="text-zinc-400 hover:text-zinc-600">&times;</button>
+          </div>
+        )}
+
+        {actionError && (
+          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">
+            <span>{actionError}</span>
+            <button onClick={() => setActionError(null)} className="text-zinc-400 hover:text-zinc-600">&times;</button>
           </div>
         )}
 

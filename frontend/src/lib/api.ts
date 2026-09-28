@@ -79,6 +79,11 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
+  createInventoryItem: (data: any) =>
+    fetchAPI<any>('/inventory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   // Requisitions & Consignments
   getRequests: (params?: string | { cpse?: string; depot?: string }) => {

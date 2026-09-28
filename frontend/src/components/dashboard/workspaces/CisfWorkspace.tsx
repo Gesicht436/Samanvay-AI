@@ -35,23 +35,23 @@ export function CisfWorkspace({ requests }: CisfWorkspaceProps) {
       <Card title="Consignments Ready for Gate Verification" icon={Truck}>
         <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
           {requests.slice(0, 5).map((req) => (
-            <div key={req.id} className="py-2.5 flex items-center justify-between gap-4 text-xs">
+            <div key={req.requisition_id || req.id} className="py-2.5 flex items-center justify-between gap-4 text-xs">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                    {req.req_number || `REQ-${req.id}`}
+                    {req.requisition_id || req.req_number || `REQ-${req.id}`}
                   </span>
                   <span className="text-zinc-400">|</span>
                   <span className="font-mono text-zinc-600 dark:text-zinc-400">
-                    {req.fulfilling_cpse} &rarr; {req.requesting_cpse}
+                    {req.source_cpse || req.fulfilling_cpse} &rarr; {req.target_cpse || req.requesting_cpse}
                   </span>
                 </div>
                 <p className="text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Material: <span className="font-mono">{req.sku_code}</span> · Status: <span className="font-medium text-zinc-800 dark:text-zinc-200">{req.status}</span>
+                  Material: <span className="font-mono">{req.sku_code}</span> · Status: <span className="font-medium text-zinc-800 dark:text-zinc-200">{req.status?.replace(/_/g, ' ')}</span>
                 </p>
               </div>
               <Link
-                href={`/requests/${req.id}`}
+                href={`/requests/${req.requisition_id || req.id}`}
                 className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded text-xs font-medium transition-colors"
               >
                 Inspect Gate Pass

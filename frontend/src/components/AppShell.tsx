@@ -251,6 +251,7 @@ export function AppShell({ children }: AppShellProps) {
       <CommandPalette
         isOpen={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
+        onOpen={() => setCommandPaletteOpen(true)}
       />
     </div>
   );

@@ -26,6 +26,7 @@ import {
 interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpen?: () => void;
 }
 
 const CPSE_OPTIONS = [
@@ -38,7 +39,7 @@ const CPSE_OPTIONS = [
   { id: 'NRL', name: 'Numaligarh Refinery (NRL)' },
 ];
 
-export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
+export function CommandPalette({ isOpen, onClose, onOpen }: CommandPaletteProps) {
   const router = useRouter();
   const { cpse, setCpse } = useTheme();
   const [query, setQuery] = useState('');
@@ -61,9 +62,10 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        if (isOpen) onClose();
-        else {
-          // Trigger open
+        if (isOpen) {
+          onClose();
+        } else {
+          onOpen?.();
         }
       } else if (e.key === 'Escape' && isOpen) {
         onClose();
@@ -71,7 +73,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, onOpen]);
 
   // Live Backend Search for items/SKUs
   useEffect(() => {
@@ -84,14 +86,16 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await api.getInventory({ limit: 5 });
+        const res = await api.getInventory({ limit: 50 });
         const items = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
         const q = query.toLowerCase();
         const matches = items.filter(
           (it: any) =>
             it.sku_code?.toLowerCase().includes(q) ||
             it.description?.toLowerCase().includes(q) ||
-            it.standard?.toLowerCase().includes(q)
+            it.standard?.toLowerCase().includes(q) ||
+            it.metallurgy?.toLowerCase().includes(q) ||
+            it.item_type?.toLowerCase().includes(q)
         );
         setSearchResults(matches);
       } catch {

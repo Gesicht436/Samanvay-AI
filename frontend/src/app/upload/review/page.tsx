@@ -14,12 +14,16 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { useAuth } from '@/context/AuthContext';
+import { api } from '@/lib/api';
 
 export default function MTCReviewPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [docData, setDocData] = useState<any | null>(null);
   const [committing, setCommitting] = useState<boolean>(false);
   const [commitSuccess, setCommitSuccess] = useState<boolean>(false);
+  const [commitError, setCommitError] = useState<string | null>(null);
 
   // Editable Form States for Manual Entry / Corrections
   const [itemType, setItemType] = useState<string>('');
@@ -139,14 +143,60 @@ export default function MTCReviewPage() {
 
   const handleCommit = async () => {
     setCommitting(true);
+    setCommitError(null);
     try {
-      // Simulate committing verified manual/OCR attributes to inventory
+      const skuRandom = Math.random().toString(36).substring(2, 7).toUpperCase();
+      const typeCode = (itemType || 'MAT').replace(/[^A-Z0-9]/gi, '').slice(0, 6).toUpperCase();
+      const generatedSku = `SKU-${typeCode}-${skuRandom}`;
+
+      const payload: any = {
+        sku_code: generatedSku,
+        cpse: user?.cpse || 'OIL',
+        depot_id: user?.depot_id || 'DULIAJAN-CENTRAL',
+        depot_location: `${user?.depot_id || 'Duliajan'} Stores`,
+        description: `${itemType || 'MATERIAL'} ${sizeNbMm ? sizeNbMm + 'NB ' : ''}${pressureClass ? 'CL' + pressureClass + ' ' : ''}${metallurgy || ''} ${standard || ''}`.trim(),
+        item_type: itemType || 'PIPE',
+        size_nb_mm: sizeNbMm ? parseFloat(sizeNbMm) : null,
+        pressure_class: pressureClass ? parseInt(pressureClass) : null,
+        schedule: schedule || null,
+        metallurgy: metallurgy || null,
+        facing_end: facingEnd || null,
+        standard: standard || null,
+        heat_no: heatNo || null,
+        po_no: poNo || null,
+        quantity: 10,
+        unit_cost_inr: 25000.0,
+        status: 'TO_BE_CONSUMED',
+        properties: {
+          chemistry: {
+            C: cVal,
+            Mn: mnVal,
+            Si: parseFloat(chemSi) || 0,
+            P: parseFloat(chemP) || 0,
+            S: parseFloat(chemS) || 0,
+            Cr: crVal,
+            Ni: niVal,
+            Mo: moVal,
+          },
+          mechanical: {
+            yield_strength_mpa: parseFloat(yieldStrength) || null,
+            tensile_strength_mpa: parseFloat(tensileStrength) || null,
+          },
+          calculated_ce: calculatedCE,
+          weldability_class: weldability,
+          certificate_no: certNo,
+          manufacturer: manufacturer,
+          source_filename: filename,
+        },
+      };
+
+      await api.createInventoryItem(payload);
       setCommitSuccess(true);
       setTimeout(() => {
         router.push('/inventory');
       }, 1200);
     } catch (err: any) {
-      alert(`Failed to commit item: ${err.message}`);
+      setCommitError(`Failed to commit item: ${err.message || 'Server error'}`);
       setCommitting(false);
     }
   };
@@ -225,6 +275,13 @@ export default function MTCReviewPage() {
         {commitSuccess && (
           <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-mono rounded-lg">
             Material specifications confirmed and saved to the sovereign stock ledger! Redirecting...
+          </div>
+        )}
+
+        {commitError && (
+          <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-mono rounded-lg flex items-center justify-between">
+            <span>{commitError}</span>
+            <button onClick={() => setCommitError(null)} className="text-zinc-400 hover:text-zinc-600">&times;</button>
           </div>
         )}
 
@@ -378,13 +435,16 @@ export default function MTCReviewPage() {
               <span className="text-[11px] font-mono text-zinc-400 block mb-2">
                 Ladle Chemical Elements (% Weight) — Type to Recalculate CE
               </span>
-              <div className="grid grid-cols-5 gap-2 text-center text-xs font-mono">
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 text-center text-xs font-mono">
                 {[
                   { el: 'C', val: chemC, set: setChemC },
                   { el: 'Mn', val: chemMn, set: setChemMn },
                   { el: 'Si', val: chemSi, set: setChemSi },
                   { el: 'P', val: chemP, set: setChemP },
                   { el: 'S', val: chemS, set: setChemS },
+                  { el: 'Cr', val: chemCr, set: setChemCr },
+                  { el: 'Ni', val: chemNi, set: setChemNi },
+                  { el: 'Mo', val: chemMo, set: setChemMo },
                 ].map((item) => (
                   <div key={item.el} className="p-2 bg-zinc-50 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700">
                     <label className="text-[10px] text-zinc-400 block font-bold mb-1">{item.el}</label>

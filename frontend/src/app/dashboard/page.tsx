@@ -104,8 +104,8 @@ export default function DashboardPage() {
                   <h1 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 font-sans">
                     {user?.full_name || 'CPSE Authorized Personnel'}
                   </h1>
-                  <span className="px-1.5 py-0.2 text-[10px] font-mono font-medium uppercase bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded border border-zinc-200 dark:border-zinc-700">
-                    {role.replace('_', ' ')}
+                  <span className="px-1.5 py-0.5 text-[10px] font-mono font-medium uppercase bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded border border-zinc-200 dark:border-zinc-700">
+                    {role.replace(/_/g, ' ')}
                   </span>
                 </div>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono mt-0.5 truncate">
@@ -161,7 +161,7 @@ export default function DashboardPage() {
           <CisfWorkspace requests={requests} loading={loading} />
         )}
 
-        {role === 'VIGILANCE_AUDITOR' && (
+        {(role === 'VIGILANCE_AUDITOR' || role === 'AUDITOR') && (
           <VigilanceAuditorWorkspace
             auditLogs={auditLogs}
             auditVerified={auditVerified}

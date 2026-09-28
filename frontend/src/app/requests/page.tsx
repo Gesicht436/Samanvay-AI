@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Card, Skeleton } from '@/components/ui';
+import { Card, Skeleton, Modal } from '@/components/ui';
 import {
   Truck,
   Inbox,
@@ -71,6 +71,19 @@ export default function RequisitionsListPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Rejection Modal State
+  const [rejectModalReq, setRejectModalReq] = useState<RequisitionItem | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('Material currently earmarked for local maintenance shutdown');
+
+  // Gate Pass Modal State
+  const [gatePassModalReq, setGatePassModalReq] = useState<RequisitionItem | null>(null);
+  const [gatePassForm, setGatePassForm] = useState({
+    vehicle_no: 'AS-01-EA-4102',
+    driver_name: 'B. K. Sharma',
+    driver_id: 'DL-04201988102',
+    transporter_name: 'CONCOR Heavy Logistics',
+  });
+
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const isAuditor = user?.role === 'AUDITOR' || user?.role === 'VIGILANCE_AUDITOR';
 
@@ -126,17 +139,21 @@ export default function RequisitionsListPage() {
     }
   };
 
-  const handleReject = async (req: RequisitionItem) => {
-    const reason = window.prompt(`Enter reason for declining requisition ${req.requisition_id}:`, 'Material currently earmarked for local maintenance shutdown');
-    if (!reason) return;
+  const handleOpenReject = (req: RequisitionItem) => {
+    setRejectModalReq(req);
+    setRejectReason('Material currently earmarked for local maintenance shutdown');
+  };
 
-    const reqId = req.requisition_id;
+  const handleConfirmReject = async () => {
+    if (!rejectModalReq) return;
+    const reqId = rejectModalReq.requisition_id;
     setActionLoadingId(reqId);
     setActionSuccess(null);
     setActionError(null);
     try {
-      await api.rejectRequisition(reqId, { reason });
+      await api.rejectRequisition(reqId, { reason: rejectReason.trim() || 'Declined by Materials Authority' });
       setActionSuccess(`Requisition ${reqId} rejected.`);
+      setRejectModalReq(null);
       fetchRequisitions();
     } catch (err: any) {
       setActionError(`Rejection failed: ${err.message}`);
@@ -145,8 +162,13 @@ export default function RequisitionsListPage() {
     }
   };
 
-  const handleGenerateGatePass = async (req: RequisitionItem) => {
-    const reqId = req.requisition_id;
+  const handleOpenGatePassModal = (req: RequisitionItem) => {
+    setGatePassModalReq(req);
+  };
+
+  const handleConfirmGatePass = async () => {
+    if (!gatePassModalReq) return;
+    const reqId = gatePassModalReq.requisition_id;
     setActionLoadingId(reqId);
     setActionSuccess(null);
     setActionError(null);
@@ -154,12 +176,13 @@ export default function RequisitionsListPage() {
       const res = await api.generateGatePass(reqId, {
         pass_type: 'NON-RETURNABLE-MUTUAL-AID',
         issuing_officer: `${user?.username || 'CISF_OFFICER'} (${user?.role || 'CISF_SECURITY'})`,
-        vehicle_no: 'AS-01-EA-4102',
-        driver_name: 'B. K. Sharma',
-        driver_id: 'DL-04201988102',
-        transporter_name: 'CONCOR Heavy Logistics',
+        vehicle_no: gatePassForm.vehicle_no,
+        driver_name: gatePassForm.driver_name,
+        driver_id: gatePassForm.driver_id,
+        transporter_name: gatePassForm.transporter_name,
       });
       setActionSuccess(`CISF Non-Returnable Gate Pass ${res.gate_pass_no || ''} issued with SHA-256 seal.`);
+      setGatePassModalReq(null);
       fetchRequisitions();
     } catch (err: any) {
       setActionError(`Gate pass generation failed: ${err.message}`);
@@ -658,7 +681,7 @@ export default function RequisitionsListPage() {
                                       Approve
                                     </button>
                                     <button
-                                      onClick={() => handleReject(req)}
+                                      onClick={() => handleOpenReject(req)}
                                       disabled={isProcessing}
                                       className="px-2 py-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-rose-600 rounded text-[11px] font-medium transition-colors disabled:opacity-50"
                                       title="Decline / Reject Requisition"
@@ -677,7 +700,7 @@ export default function RequisitionsListPage() {
                               <>
                                 {(isSupplyingDepot || isSuperAdmin) ? (
                                   <button
-                                    onClick={() => handleGenerateGatePass(req)}
+                                    onClick={() => handleOpenGatePassModal(req)}
                                     disabled={isProcessing}
                                     className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-[11px] font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
                                     title="Generate CISF Security Gate Pass"
@@ -746,6 +769,140 @@ export default function RequisitionsListPage() {
             </table>
           </div>
         </div>
+
+        {/* Rejection Reason Modal */}
+        <Modal
+          isOpen={!!rejectModalReq}
+          onClose={() => setRejectModalReq(null)}
+          title={`Decline Consignment Requisition ${rejectModalReq?.requisition_id || ''}`}
+        >
+          <div className="space-y-4 text-xs font-sans">
+            <p className="text-zinc-600 dark:text-zinc-400">
+              Please enter the official justification for declining this inter-CPSE requisition. This rationale will be permanently recorded in the Sovereign Audit Ledger.
+            </p>
+            <div>
+              <label className="block font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                Decline Reason / Remarks
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={3}
+                className="w-full p-2.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-hidden font-sans"
+                placeholder="State statutory or operational grounds for decline..."
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRejectModalReq(null)}
+                className="px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReject}
+                disabled={actionLoadingId === rejectModalReq?.requisition_id}
+                className="px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-medium disabled:opacity-50"
+              >
+                {actionLoadingId === rejectModalReq?.requisition_id ? 'Declining...' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* CISF Digital Gate Pass Logistics Modal */}
+        <Modal
+          isOpen={!!gatePassModalReq}
+          onClose={() => setGatePassModalReq(null)}
+          title={`Generate CISF Gate Pass — ${gatePassModalReq?.requisition_id || ''}`}
+        >
+          <div className="space-y-3.5 text-xs font-sans">
+            <p className="text-zinc-600 dark:text-zinc-400">
+              Verify logistics, transport vehicle, and driver credentials for dispatch from{' '}
+              <strong className="text-zinc-800 dark:text-zinc-200">{gatePassModalReq?.source_cpse}</strong> stores to{' '}
+              <strong className="text-zinc-800 dark:text-zinc-200">{gatePassModalReq?.target_cpse}</strong>.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  Vehicle / Trailer Registration No.
+                </label>
+                <input
+                  type="text"
+                  value={gatePassForm.vehicle_no}
+                  onChange={(e) => setGatePassForm({ ...gatePassForm, vehicle_no: e.target.value })}
+                  placeholder="e.g. AS-01-EA-4102"
+                  className="w-full px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs font-mono text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  Transporter / Logistics Operator
+                </label>
+                <input
+                  type="text"
+                  value={gatePassForm.transporter_name}
+                  onChange={(e) => setGatePassForm({ ...gatePassForm, transporter_name: e.target.value })}
+                  placeholder="e.g. CONCOR Heavy Logistics"
+                  className="w-full px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  Designated Driver Full Name
+                </label>
+                <input
+                  type="text"
+                  value={gatePassForm.driver_name}
+                  onChange={(e) => setGatePassForm({ ...gatePassForm, driver_name: e.target.value })}
+                  placeholder="e.g. B. K. Sharma"
+                  className="w-full px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  Driver License / National ID
+                </label>
+                <input
+                  type="text"
+                  value={gatePassForm.driver_id}
+                  onChange={(e) => setGatePassForm({ ...gatePassForm, driver_id: e.target.value })}
+                  placeholder="e.g. DL-04201988102"
+                  className="w-full px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded text-xs font-mono text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 rounded text-[11px] font-mono">
+              Digital Pass Type: <strong>NON-RETURNABLE-MUTUAL-AID</strong> · Cryptographic SHA-256 HMAC Seal will be burned into offline SVG bit-matrix QR code.
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setGatePassModalReq(null)}
+                className="px-3 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmGatePass}
+                disabled={actionLoadingId === gatePassModalReq?.requisition_id}
+                className="px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-700 text-white font-medium flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <QrCode size={13} />
+                <span>{actionLoadingId === gatePassModalReq?.requisition_id ? 'Issuing Pass...' : 'Issue Digital Gate Pass'}</span>
+              </button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </ProtectedRoute>
   );
