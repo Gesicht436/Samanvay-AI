@@ -1,69 +1,168 @@
 # API Routers (`backend/app/api/routers/`)
 
-This directory contains the controller endpoints of the **Samanvay-AI** REST API gateway.
+This directory houses the 7 endpoint router controllers comprising the **Samanvay-AI** REST API gateway. Each router is registered with the FastAPI application in [`backend/main.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/main.py#L72-L78) under the versioned prefix `/api/v1/`.
 
 ---
 
-## 1. Router-by-Router Breakdown
+## 1. Complete Router-by-Router Specification
 
-### `match.py` — Semantic Matching & Engineering Evaluation
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Requester as Site Engineer (OIL Duliajan)
+    actor Approver as Materials Manager (IOCL Panipat)
+    actor CISF as CISF Security Officer (IOCL Panipat)
+    participant ReqRouter as /api/v1/requisition
+    participant MatchRouter as /api/v1/match
+    participant DB as PostgreSQL 16 (ACID)
+    participant Audit as Sovereign SHA-256 Ledger
+
+    Note over Requester,MatchRouter: Step 1: Multi-Property Discovery
+    Requester->>MatchRouter: POST /api/v1/match/search (NB 100mm, Cl 300, WCB, NACE, IIW CE)
+    MatchRouter->>DB: Query candidates & evaluate 21 deterministic safety rules
+    MatchRouter-->>Requester: Returns dynamic compatibility results S(Q, C) with Tier 1/2/3
+
+    Note over Requester,ReqRouter: Step 2: Atomic Consignment Creation
+    Requester->>ReqRouter: POST /api/v1/requisition (SKU, Qty: 2, Urgency, Idempotency-Key)
+    ReqRouter->>DB: Pessimistic Lock (SELECT ... FOR UPDATE on InventoryItem)
+    ReqRouter->>DB: Insert InventoryLock & Requisition (PENDING_APPROVAL)
+    ReqRouter->>Audit: Append CREATE_REQUISITION Block
+    ReqRouter-->>Requester: 201 Created (REQ-XXXX)
+
+    Note over Requester,ReqRouter: Step 3: Segregation of Duties Enforcement
+    Requester->>ReqRouter: PUT /api/v1/requisition/REQ-XXXX/approve
+    ReqRouter-->>Requester: 403 Forbidden (Requester cannot self-approve)
+    Approver->>ReqRouter: PUT /api/v1/requisition/REQ-XXXX/approve
+    ReqRouter->>DB: Update Requisition (APPROVED, approved_by='stores_iocl')
+    ReqRouter->>Audit: Append APPROVE_REQUISITION Block
+    ReqRouter-->>Approver: 200 OK (Status: APPROVED)
+
+    Note over CISF,ReqRouter: Step 4: CISF Digital Gate Pass & Seal
+    CISF->>ReqRouter: POST /api/v1/requisition/REQ-XXXX/gatepass (Vehicle, Driver ID)
+    ReqRouter->>ReqRouter: Compute SHA-256 Seal & SVG QR Code
+    ReqRouter->>DB: Insert DigitalGatePass (Status: GATE_PASS_ISSUED)
+    ReqRouter->>Audit: Append GENERATE_GATE_PASS Block
+    ReqRouter-->>CISF: 201 Created (Gate Pass SVG + SHA-256 Seal)
+```
+
+---
+
+### A. [`auth.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/auth.py) — Authentication & RBAC Governance
+Coordinates enterprise user onboarding, credential authentication, and issuance of signed JWT tokens containing multi-tenant enterprise claims (`sub`, `user_id`, `role`, `cpse`, `depot_id`, `full_name`).
+
+- **Endpoints:**
+  - `POST /api/v1/auth/login`: Authenticates credentials via bcrypt, checks `is_active` and `is_approved`, and issues a 24-hour signed JWT bearer token. Automatically bootstraps seed accounts if the table is empty.
+  - `POST /api/v1/auth/signup`: Registers new CPSE personnel into [`User`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L249-L270), seals the registration in [`SovereignAuditLedger`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L182-L200), and issues a JWT token.
+  - `GET /api/v1/auth/me`: Returns the authenticated user profile and claims extracted from the JWT token.
+  - `GET /api/v1/auth/seed-users`: Returns the list of all 25 pre-configured demo persona accounts across 7 CPSEs + MoPNG with the default password `Samanvay@2026`.
+  - `POST /api/v1/auth/seed`: Idempotently populates the database with seed persona accounts.
+  - `GET /api/v1/auth/users`: Lists all system users (restricted to `SUPER_ADMIN`).
+  - `POST /api/v1/auth/users/{user_id}/approve`: Approves a pending user account (restricted to `SUPER_ADMIN`).
+  - `POST /api/v1/auth/users/{user_id}/reject`: Rejects and deletes a pending user account (restricted to `SUPER_ADMIN`).
+
+---
+
+### B. [`requisition.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/requisition.py) — Consignments, SoD & Gate Passes
+Coordinates the full requisition lifecycle with multi-tenant consignment isolation, atomic pessimistic locks, Segregation of Duties, and CISF security gate pass generation.
+
+- **Endpoints:**
+  - `POST /api/v1/requisition/`: Creates a new transfer order. Automatically binds `requested_by`, `target_cpse`, and `target_depot` from the authenticated user. Executes pessimistic locking (`SELECT ... FOR UPDATE`) on [`InventoryItem`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L41-L97), inserts an active [`InventoryLock`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L134-L152), and records a cryptographically sealed block in the audit ledger.
+  - `GET /api/v1/requisition/`: **Multi-Tenant Consignment Isolation.** If the user is a `SUPER_ADMIN` or `AUDITOR`, lists all orders. For regular users, calls [`list_requisitions_for_user(db, current_user)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py#L33-L59), completely shielding unrelated cross-tenant consignments.
+  - `GET /api/v1/requisition/{req_id}`: Retrieves complete requisition details including associated CISF gate pass data.
+  - `PUT /api/v1/requisition/{req_id}/approve`: **Segregation of Duties.** Enforces two hard checks:
+    1. *Self-Approval Block:* Requesters cannot approve their own requisition (`HTTP 403 Forbidden`).
+    2. *Supplying CPSE Only:* Only Materials Managers from the supplying CPSE holding the material can authorize release.
+  - `PUT /api/v1/requisition/{req_id}/reject`: Declines requisition and restores locked inventory.
+  - `POST /api/v1/requisition/{req_id}/gatepass`: Generates a Non-Returnable Material Gate Pass ([`DigitalGatePass`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L154-L180)). Calculates GIS road distance ($1.28\times$ road tortuosity), transit hours at $40\text{ km/h}$, $CO_2$ emission savings, computes an unforgeable SHA-256 digital seal, and renders an SVG QR code.
+  - `PUT /api/v1/requisition/{req_id}/dispatch`: CISF Out-Gate officer dispatches consignment, updating status to `DISPATCHED`.
+  - `PUT /api/v1/requisition/{req_id}/deliver`: CISF In-Gate officer confirms arrival, updates status to `DELIVERED`, and permanently releases the inventory lock.
+
+---
+
+### C. [`match.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/match.py) — Dynamic Compatibility & Safety Evaluation
+Implements the zero-mock multi-property compatibility and discovery pipeline.
+
 - **Endpoints:**
   - `POST /api/v1/match/search`:
-    - Accepts raw text requisition queries or structured attributes (item type, size NB mm, pressure class, metallurgy).
-    - Executes 4-stage pipeline: (1) NFKC Dialect Normalization $\rightarrow$ (2) Candidate Retrieval from PostgreSQL / Qdrant $\rightarrow$ (3) Deterministic 21-Rule Engineering Safety Engine $\rightarrow$ (4) Continuous ML Compatibility Ranker $\rightarrow$ (5) Active Learning feedback incorporation.
-    - Strictly enforces Attribute-Level Privacy by masking commercial purchase costs for cross-CPSE callers.
-  - `GET /api/v1/match/benchmark`:
-    - Runs automated accuracy benchmarking across the 150 public sector test cases in `datasets/golden_benchmarks.json`.
-
-### `inventory.py` — Enterprise Inventory & Surplus Catalog
-- **Endpoints:**
-  - `GET /api/v1/inventory/`: Browses master catalog (5,000 authentic items) with multi-field filtering (`cpse`, `depot`, `status`, `category`) and server-side pagination (`skip`, `limit`).
-  - `GET /api/v1/inventory/stats`: Returns live aggregate metrics across all CPSEs: total items, declared surplus count, HITL queue count, active requisitions count, unlocked surplus capital value (₹ Cr), and per-CPSE distribution breakdown.
-  - `GET /api/v1/inventory/surplus`: Retrieves items declared as surplus across sister CPSEs with commercial purchase prices protected.
-  - `GET /api/v1/inventory/hitl-queue`: Retrieves items requiring Human-In-The-Loop engineering review (unverified MTCs or $>90$ days idle).
-  - `GET /api/v1/inventory/{sku_code}`: Fetches individual SKU attributes with Indian procurement specifications (BIS IS standard, OIL MESC code, GeM category, CPPP tender ref, MII class).
-  - `PUT /api/v1/inventory/{sku_code}/status`: Transitions SKU status (`IDLE_SURPLUS`, `TO_BE_CONSUMED`, `ARCHIVED`) and records a cryptographically sealed event to the Sovereign Audit Ledger.
-
-### `requisition.py` — Requisition & Order Lifecycle
-- **Endpoints:**
-  - `POST /api/v1/requisition/`: Creates a new inter-CPSE transfer requisition using pessimistic row-level locking to reserve candidate inventory. Supports `Idempotency-Key` header.
-  - `GET /api/v1/requisition/`: Lists requisitions filtered by requesting enterprise or status (`PENDING`, `APPROVED`, `GATE_PASS_ISSUED`, `DISPATCHED`, `DELIVERED`).
-  - `GET /api/v1/requisition/{req_id}`: Retrieves comprehensive requisition details, matched SKU, and transit progress.
-  - `PUT /api/v1/requisition/{req_id}/approve`: Approves requisition and transitions status to `APPROVED`.
-  - `PUT /api/v1/requisition/{req_id}/reject`: Declines requisition with reason.
-  - `POST /api/v1/requisition/{req_id}/gatepass`: Generates Non-Returnable CISF Gate Pass with SHA-256 digital seal.
-  - `PUT /api/v1/requisition/{req_id}/dispatch`: Dispatches consignment with vehicle reg, transitioning status to `DISPATCHED`.
-  - `PUT /api/v1/requisition/{req_id}/deliver`: Confirms delivery at destination and triggers inventory ledger reconciliation.
-
-### `graph.py` — Knowledge Graph Discovery & Logistics
-- **Endpoints:**
-  - `GET /api/v1/graph/discover`: Performs regional surplus cluster discovery and shortest road transit route calculation ($1.28\times$ tortuosity, transit hours, $CO_2$ savings) across 19 CPSE depots.
-  - `GET /api/v1/graph/depot/{depot_id}`: Fetches depot details, GPS coordinates, and connected transit corridors.
-  - `GET /api/v1/graph/item/{sku_code}/properties`: Traverses graph property relationships for an item.
-
-### `audit.py` — Sovereign SHA-256 Audit Ledger
-- **Endpoints:**
-  - `GET /api/v1/audit/`: Paginated retrieval of immutable audit log blocks filtered by category and CPSE.
-  - `GET /api/v1/audit/verify` (also `POST`): **Chain Verification Engine.** Traverses every block in the ledger from Genesis block to latest, re-hashing parent-child SHA-256 links. Returns cryptographic proof of ledger integrity.
-  - `GET /api/v1/audit/export`: Exports compliance audit report in strict RFC 4180 CSV format for submission to the Comptroller and Auditor General (CAG) or Central Vigilance Commission (CVC).
-
-### `ingest.py` — Document Vision & MTC Ingestion
-- **Endpoints:**
-  - `POST /api/v1/ingest/document`: Multipart PDF or image file upload.
-    - Dual-path extraction: PyMuPDF digital vector stream parser (< 50ms) or PaddleOCR/EasyOCR vision on NVIDIA CUDA GPU.
-    - Invokes `MTCParser` and `chemistry.py` to extract heat number, ladle chemical analysis ($\%C, \%Mn, \%Si, \%P, \%S$), IIW Carbon Equivalent ($CE_{\text{IIW}}$), PREN, and verify ASTM boundary compliance.
-  - `GET /api/v1/ingest/documents`: Lists ingested document history with extraction confidence scores.
-  - `GET /api/v1/ingest/documents/{doc_id}`: Retrieves full parsed metadata and raw text for an ingested document.
+    - Normalizes unstructured queries via [`DialectNormalizer`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/ml/ner/normalizer.py).
+    - Accepts multi-property specifications: `size_nb_mm`, `pressure_class`, `pressure_rating_bar`, `schedule`, `metallurgy`, `facing_end`, `trim_no`, `port_bore`, `severe_cyclic`, `weldability_class`, and `sour_service`.
+    - Enforces the **IIW Carbon Equivalent Formula**:
+      $$CE = C + \frac{Mn}{6} + \frac{Cr + Mo + V}{5} + \frac{Ni + Cu}{15}$$
+      Capping high weldability at $CE \le 0.40$ and standard at $CE \le 0.43$.
+    - Enforces **NACE MR0175 / ISO 15156 Sour Hydrocarbon Invariant**: Hardness $\le 22\text{ HRC}$ ceiling with certified SSC/HIC resistance. Non-NACE material in sour duty triggers an immediate safety veto.
+    - Evaluates 21 codified deterministic engineering rules via [`evaluate_pair`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/rules/tolerance.py).
+    - Computes continuous ML compatibility score:
+      $$S(Q, C) = 0.70 \cdot S_{\text{rules}} + 0.30 \cdot S_{\text{ML}}$$
+    - Applies **Indian Cross-Standard Equivalence Bonus** (BIS/IS $\leftrightarrow$ ASTM/ASME/API) and **Make in India (PPP-MII)** $+3\%$ soft scoring boost for Class-I suppliers ($\ge 50\%$ local content).
+    - **Invariant #1 (Zero Static Tiers):** Any zero-tolerance rule violation forces an unoverrideable **Tier 3** verdict and caps score at $\le 74\%$.
+    - **Attribute-Level Privacy:** Proprietary unit purchase costs (`unit_cost_inr`, `total_value_inr`) are stripped for cross-CPSE candidates.
+  - `GET /api/v1/match/benchmark`: Evaluates all 150 Golden Benchmark paired cases in `datasets/golden_benchmarks.json`, validating 100% zero-tolerance precision (zero hazardous false positives).
 
 ---
 
-## 2. Testing Routers
+### D. [`inventory.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/inventory.py) — Master Stock & Surplus Radar
+Provides full catalog visibility, surplus tracking, and status transitions.
 
-```bash
-# Run tests for specific router
-pytest tests/api/test_inventory_api.py -v
-pytest tests/api/test_match_api.py -v
-pytest tests/api/test_audit_api.py -v
-pytest tests/api/test_requisition_api.py -v
-pytest tests/api/test_graph_api.py -v
+- **Endpoints:**
+  - `GET /api/v1/inventory/`: Paginated catalog browsing with multi-field filtering (`cpse`, `depot`, `status`, `item_type`). Strips sensitive purchase prices for cross-CPSE callers.
+  - `GET /api/v1/inventory/stats`: Returns live enterprise aggregates: total catalog items, surplus counts, HITL triage count, active requisitions, and unlocked capital (₹ Cr).
+  - `GET /api/v1/inventory/surplus`: Pre-Purchase Radar endpoint returning items declared as surplus across all CPSEs.
+  - `GET /api/v1/inventory/hitl-queue`: Fetches parts requiring Human-In-The-Loop engineering triage (stained/unreadable MTCs or $>90$ days idle).
+  - `GET /api/v1/inventory/{sku_code}`: Detailed SKU view including Indian standards (IS 14846, IS 1239, IS 2062), OIL MESC material code, GeM product ID, CPPP tender ref, and Make-in-India percentage.
+  - `POST /api/v1/inventory/`: Creates new inventory item and appends a cryptographically sealed `CREATE_INVENTORY` audit entry.
+  - `PUT /api/v1/inventory/{sku_code}/status`: Transitions inventory lifecycle status (`TO_BE_CONSUMED`, `IN_STORAGE`, `IDLE_SURPLUS`, `CONSUMED`) with audit ledger anchoring. Supports `Idempotency-Key` header.
+
+---
+
+### E. [`graph.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/graph.py) — Knowledge Graph & Logistics Topology
+Interfaces with the logistics engine and Neo4j Knowledge Graph.
+
+- **Endpoints:**
+  - `GET /api/v1/graph/discover`: Regional surplus discovery with GIS logistics calculation (road distance with $1.28\times$ tortuosity, transit hours, and $CO_2$ savings). Protects commercial prices cross-enterprise.
+  - `GET /api/v1/graph/item/{sku_code}/properties`: Retrieves full property graph hierarchy for an item.
+  - `GET /api/v1/graph/depot/{depot_id}/surplus`: Retrieves all surplus items stationed at a specific depot node.
+  - `GET /api/v1/graph/logistics/{source_depot}/{target_depot}`: Computes GIS road distance, transit hours, $CO_2$ saved, and estimated freight cost (₹) between any two CPSE depots.
+  - `GET /api/v1/graph/topology`: Returns the nationwide sovereign logistics topology across 19 depots, active transit corridors, total items, and unlocked surplus value (₹ Cr).
+
+---
+
+### F. [`audit.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/audit.py) — Sovereign SHA-256 Audit Ledger
+Statutory audit verification and CVC/CAG compliance reporting.
+
+- **Endpoints:**
+  - `GET /api/v1/audit/`: Paginated chronological audit entries with action category and CPSE filters.
+  - `GET /api/v1/audit/verify` (and `POST`): **Automated Chain Verification.** Traverses every block from Genesis ($H_0 = \text{"0"*64}$) to the latest entry, re-computing SHA-256 digests. Mathematically proves ledger immutability and returns first broken block index if tampered.
+  - `GET /api/v1/audit/export`: Exports compliance audit logs in strict RFC 4180 CSV format with SHA-256 seal headers for submission to CVC or CAG statutory auditors.
+  - `GET /api/v1/audit/{log_id}`: Retrieves individual audit block details and cryptographic seals.
+  - `POST /api/v1/audit/feedback`: Submits Human-In-The-Loop engineering feedback and seals it in the audit trail.
+
+---
+
+### G. [`ingest.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/ingest.py) — Document Vision & MTC Ingestion
+Handles procurement document ingestion, PDF vector parsing, and raster OCR.
+
+- **Endpoints:**
+  - `POST /api/v1/ingest/document`: Multipart PDF / image file upload.
+    - Dual-Path extraction: High-speed PyMuPDF digital vector stream parser ($<50\text{ ms}$) or PaddleOCR raster engine.
+    - Extracts EN 10204 3.1 Mill Test Certificate (MTC) chemistry ($\%C, \%Mn, \%Si, \%P, \%S, \%Cr, \%Mo, \%Ni$), IIW Carbon Equivalent ($CE$), PREN, and mechanical tensile/yield properties.
+    - Graceful degradation: Sparse or stained scans automatically set `requires_hitl = True` and route to the HITL triage queue rather than failing.
+  - `POST /api/v1/ingest/catalog`: Batch streaming CSV / Excel ingestion of ERP stock catalogs.
+  - `GET /api/v1/ingest/documents`: Retrieves ingested document history and extraction confidence scores.
+  - `GET /api/v1/ingest/documents/{doc_id}`: Retrieves parsed metadata and raw text for a specific ingested document.
+
+---
+
+## 2. API Router Registration
+
+In [`backend/main.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/main.py#L72-L78), routers are registered with clean separation of concerns:
+
+```python
+# API Router Registration in backend/main.py
+app.include_router(auth.router, prefix=settings.api_v1_prefix, tags=["Authentication"])
+app.include_router(ingest.router, prefix=settings.api_v1_prefix, tags=["Ingestion"])
+app.include_router(match.router, prefix=settings.api_v1_prefix, tags=["Matching"])
+app.include_router(inventory.router, prefix=settings.api_v1_prefix, tags=["Inventory"])
+app.include_router(requisition.router, prefix=settings.api_v1_prefix, tags=["Requisition"])
+app.include_router(graph.router, prefix=settings.api_v1_prefix, tags=["Graph"])
+app.include_router(audit.router, prefix=settings.api_v1_prefix, tags=["Audit"])
 ```

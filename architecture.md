@@ -76,7 +76,7 @@ Samanvay-AI employs a layered, event-driven, micro-modular architecture designed
               │                                                             │
               ▼                                                             ▼
 ┌───────────────────────────────┐                             ┌───────────────────────────┐
-│     MULTIMODAL ML PIPELINE    │                             │  TRANSACTIONAL CORE (ACID)│
+│     MULTIMODAL ML PIPELINE    │                             │ TRANSACTIONAL CORE (ACID) │
 │  ┌─────────────────────────┐  │                             │  ┌─────────────────────┐  │
 │  │ Dual-Path OCR Engine    │  │                             │  │ PostgreSQL 16       │  │
 │  │ PyMuPDF (<50ms) / OCR   │  │                             │  │ Pessimistic Locking │  │
