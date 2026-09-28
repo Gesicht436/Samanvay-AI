@@ -174,13 +174,15 @@ def reject_requisition(db: Session, req_id: str, reason: str) -> Requisition:
     req.status = "REJECTED"
     req.rejection_reason = reason
 
-    # Release lock and restore quantity
+    # Release lock and restore quantity with pessimistic locking
     lock = db.query(InventoryLock).filter(
         InventoryLock.requisition_id == req.requisition_id,
         InventoryLock.is_active == True,
     ).first()
     if lock:
-        item = db.query(InventoryItem).filter(InventoryItem.sku_code == lock.sku_code).first()
+        item = db.query(InventoryItem).filter(
+            InventoryItem.sku_code == lock.sku_code
+        ).with_for_update().first()
         if item:
             item.quantity += lock.locked_qty
         lock.is_active = False
@@ -214,9 +216,18 @@ def generate_gate_pass(db: Session, req_id: str, gate_pass_request: Dict[str, An
     driver_id = gate_pass_request.get("driver_id", "DL-04201988102")
     timestamp_str = datetime.now(timezone.utc).isoformat()
 
-    # Calculate logistics metrics
-    src_coord = DEPOT_COORDINATES.get("Panipat", (29.3909, 76.9635))
-    tgt_coord = DEPOT_COORDINATES.get("Visakh", (17.6868, 83.2185))
+    # Calculate logistics metrics using actual source/target depots
+    src_coord = None
+    tgt_coord = None
+    for name, coord in DEPOT_COORDINATES.items():
+        if name.lower() in req.source_depot.lower() or name.lower() in (gate_pass_request.get("source_location", "")).lower():
+            src_coord = coord
+        if name.lower() in req.target_depot.lower() or name.lower() in (gate_pass_request.get("target_location", "")).lower():
+            tgt_coord = coord
+    if not src_coord:
+        src_coord = DEPOT_COORDINATES.get("Panipat", (29.3909, 76.9635))
+    if not tgt_coord:
+        tgt_coord = DEPOT_COORDINATES.get("Visakh", (17.6868, 83.2185))
     distance_km = road_distance(src_coord[0], src_coord[1], tgt_coord[0], tgt_coord[1])
     transit_hrs = int(estimate_transit_hours(distance_km))
     co2_saved = compute_co2_saved(distance_km)

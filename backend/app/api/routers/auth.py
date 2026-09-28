@@ -43,9 +43,6 @@ def login_user(
     Authenticates a CPSE plant engineer, materials manager, CISF officer,
     or auditor and returns an access token embedding their tenant role and depot.
     """
-    # Ensure seed users are available
-    seed_users_if_empty(db)
-
     user = db.query(User).filter(User.username == credentials.username).first()
 
     if not user or not verify_password(credentials.password, user.hashed_password):

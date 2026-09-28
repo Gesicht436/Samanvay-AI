@@ -238,6 +238,7 @@ def start_cdc_worker(stop_event=None):
             logger.info("[CDC WORKER] Stop event detected. Exiting worker loop.")
             break
 
+        conn = None
         try:
             conn = psycopg2.connect(**dsn_params)
             conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
@@ -266,6 +267,12 @@ def start_cdc_worker(stop_event=None):
         except Exception as e:
             logger.warning(f"[CDC WORKER] Connection error in CDC listener: {e}. Retrying in 5 seconds...")
             time.sleep(5.0)
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     syncer.close()
     logger.info("[CDC WORKER] Shutdown complete.")

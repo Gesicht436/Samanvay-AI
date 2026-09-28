@@ -22,7 +22,9 @@ def check_nace_sour_service(
     Evaluates NACE MR0175 / ISO 15156 sour hydrocarbon compliance.
     """
     nace_req = query_props.get("nace_mr0175", False) or query_props.get("nace_required", False) or query_props.get("sour_service", False)
-    cand_compliant = cand_props.get("nace_mr0175", cand_props.get("nace_compliant", True))
+    # Fail-secure: missing NACE certification data must NOT be assumed compliant.
+    # Material must explicitly carry NACE MR0175 certification for sour H₂S service.
+    cand_compliant = cand_props.get("nace_mr0175", cand_props.get("nace_compliant", False))
     if "nace_compliant" not in cand_props and "nace_mr0175" not in cand_props and "nace" in str(cand_props).lower():
         cand_compliant = True
 

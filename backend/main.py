@@ -28,6 +28,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         import logging
         logging.getLogger("samanvay.startup").warning(f"Auto-seed notification: {e}")
 
+    # Pre-seed active learning cache from golden benchmarks
+    try:
+        import os
+        benchmarks_file = os.path.join(os.path.dirname(__file__), "../../datasets/golden_benchmarks.json")
+        if os.path.exists(benchmarks_file):
+            from ml.active_learning.bootstrapper import seed_from_golden_benchmarks
+            from backend.app.api.routers.match import active_cache
+            seed_from_golden_benchmarks(active_cache, benchmarks_file)
+    except Exception as e:
+        import logging
+        logging.getLogger("samanvay.startup").warning(f"Benchmark cache seed: {e}")
+
     # Start Real-Time CDC Worker if enabled (or standalone daemon)
     import os
     import threading
@@ -61,8 +73,10 @@ app = FastAPI(
 # ── CORS Middleware ────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
-    allow_origin_regex=r"^https?://.*",
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -25,6 +25,9 @@ SCHEDULE_LADDER = [
     "SCH 100", "SCH 120", "SCH 140", "SCH 160", "XXS",
 ]
 
+# Pre-computed rank dictionary for O(1) schedule comparison
+_SCHEDULE_RANK = {s: i for i, s in enumerate(SCHEDULE_LADDER)}
+
 EQUIVALENCES = {
     "40": "SCH 40",
     "80": "SCH 80",
@@ -79,8 +82,8 @@ def check_pipe_schedule(
     if qs == cs:
         return (DynamicCompatibilityTier.TIER_1_IDENTICAL, 1.0, None)
 
-    q_idx = SCHEDULE_LADDER.index(qs) if qs in SCHEDULE_LADDER else -1
-    c_idx = SCHEDULE_LADDER.index(cs) if cs in SCHEDULE_LADDER else -1
+    q_idx = _SCHEDULE_RANK.get(qs, -1)
+    c_idx = _SCHEDULE_RANK.get(cs, -1)
 
     if q_idx < 0 or c_idx < 0:
         return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.85, None)

@@ -57,11 +57,11 @@ class Neo4jSyncer:
                 except Exception as e:
                     logger.debug(f"Constraint notice ({query}): {e}")
 
-    def sync_inventory_item(self, item: Dict[str, Any]):
-        """Synchronizes a single inventory item into Neo4j graph nodes and relationships."""
+    def _prepare_item_payload(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Shared helper to extract and normalize item data for Neo4j sync."""
         sku_code = item.get("sku_code")
         if not sku_code:
-            return
+            return None
 
         cpse = (item.get("cpse") or "IOCL").upper()
         depot_id = item.get("depot_id") or f"{cpse}_DEPOT"
@@ -76,25 +76,34 @@ class Neo4jSyncer:
         if not matched_coord:
             matched_coord = (22.3217, 73.1384)
 
-        lat, lon = matched_coord
-
-        item_type = item.get("item_type") or "EQUIPMENT"
-        size_val = None
-        if item.get("size_nb_mm"):
-            size_val = f"{float(item['size_nb_mm'])} mm"
-
-        pressure_class_val = None
-        if item.get("pressure_class"):
-            pressure_class_val = f"{item['pressure_class']}#"
-
-        metallurgy_val = item.get("metallurgy")
-        facing_val = item.get("facing_end")
         qty = int(item.get("quantity") or 0)
-        days_idle = int(item.get("days_idle") or 0)
         unit_cost = float(item.get("unit_cost_inr") or 0.0)
-        total_val = float(item.get("total_value_inr") or (qty * unit_cost))
-        status = item.get("status") or "TO_BE_CONSUMED"
-        desc = item.get("description") or ""
+
+        return {
+            "sku_code": sku_code,
+            "cpse": cpse,
+            "depot_id": depot_id,
+            "depot_loc": depot_loc,
+            "lat": matched_coord[0],
+            "lon": matched_coord[1],
+            "desc": item.get("description") or "",
+            "item_type": item.get("item_type") or "EQUIPMENT",
+            "qty": qty,
+            "days_idle": int(item.get("days_idle") or 0),
+            "status": item.get("status") or "TO_BE_CONSUMED",
+            "unit_cost": unit_cost,
+            "total_val": float(item.get("total_value_inr") or (qty * unit_cost)),
+            "is_broadcast": bool(item.get("is_broadcasted_surplus")),
+            "size_val": f"{float(item['size_nb_mm'])} mm" if item.get("size_nb_mm") else None,
+            "pressure_class_val": f"{item['pressure_class']}#" if item.get("pressure_class") else None,
+            "metallurgy_val": item.get("metallurgy"),
+        }
+
+    def sync_inventory_item(self, item: Dict[str, Any]):
+        """Synchronizes a single inventory item into Neo4j graph nodes and relationships."""
+        prepared = self._prepare_item_payload(item)
+        if not prepared:
+            return
 
         cypher = """
         // 1. CPSE and Depot
@@ -137,72 +146,17 @@ class Neo4jSyncer:
         """
 
         with self.driver.session() as session:
-            session.run(
-                cypher,
-                cpse=cpse,
-                depot_id=depot_id,
-                depot_loc=depot_loc,
-                lat=lat,
-                lon=lon,
-                sku_code=sku_code,
-                desc=desc,
-                item_type=item_type,
-                qty=qty,
-                days_idle=days_idle,
-                status=status,
-                unit_cost=unit_cost,
-                total_val=total_val,
-                is_broadcast=bool(item.get("is_broadcasted_surplus")),
-                size_val=size_val,
-                pressure_class_val=pressure_class_val,
-                metallurgy_val=metallurgy_val,
-            )
+            session.run(cypher, **prepared)
 
     def batch_sync_inventory(self, items: List[Dict[str, Any]], batch_size: int = 500):
         """High-throughput bulk ingestion using UNWIND Cypher batching."""
         for i in range(0, len(items), batch_size):
             chunk = items[i : i + batch_size]
-            prepared = []
+            batch_prepared = []
             for item in chunk:
-                sku_code = item.get("sku_code")
-                if not sku_code:
-                    continue
-                cpse = (item.get("cpse") or "IOCL").upper()
-                depot_id = item.get("depot_id") or f"{cpse}_DEPOT"
-                depot_loc = item.get("depot_location") or depot_id
-
-                matched_coord = None
-                for name, coord in DEPOT_COORDINATES.items():
-                    if name.lower() in depot_loc.lower() or name.lower() in depot_id.lower():
-                        matched_coord = coord
-                        break
-                if not matched_coord:
-                    matched_coord = (22.3217, 73.1384)
-
-                size_val = f"{float(item['size_nb_mm'])} mm" if item.get("size_nb_mm") else None
-                pc_val = f"{item['pressure_class']}#" if item.get("pressure_class") else None
-                qty = int(item.get("quantity") or 0)
-                unit_cost = float(item.get("unit_cost_inr") or 0.0)
-
-                prepared.append({
-                    "sku_code": sku_code,
-                    "cpse": cpse,
-                    "depot_id": depot_id,
-                    "depot_loc": depot_loc,
-                    "lat": matched_coord[0],
-                    "lon": matched_coord[1],
-                    "desc": item.get("description") or "",
-                    "item_type": item.get("item_type") or "EQUIPMENT",
-                    "qty": qty,
-                    "days_idle": int(item.get("days_idle") or 0),
-                    "status": item.get("status") or "TO_BE_CONSUMED",
-                    "unit_cost": unit_cost,
-                    "total_val": float(item.get("total_value_inr") or (qty * unit_cost)),
-                    "is_broadcast": bool(item.get("is_broadcasted_surplus")),
-                    "size_val": size_val,
-                    "pressure_class_val": pc_val,
-                    "metallurgy_val": item.get("metallurgy"),
-                })
+                payload = self._prepare_item_payload(item)
+                if payload:
+                    batch_prepared.append(payload)
 
             cypher = """
             UNWIND $batch AS row
@@ -241,7 +195,7 @@ class Neo4jSyncer:
             """
 
             with self.driver.session() as session:
-                session.run(cypher, batch=prepared)
+                session.run(cypher, batch=batch_prepared)
 
     def sync_requisition(self, req: Dict[str, Any]):
         """Synchronizes an inter-CPSE requisition into Neo4j graph nodes and logistics flows."""

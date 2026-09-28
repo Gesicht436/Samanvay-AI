@@ -38,7 +38,11 @@ class ActiveLearningCache:
             self.demote_rejected(source_sku)
             
     def boost_approved(self, sku_code: str):
+        if len(self.sku_stamps) >= self.max_size and sku_code not in self.sku_stamps:
+            self.sku_stamps.pop(next(iter(self.sku_stamps)))
         self.sku_stamps[sku_code] = "[VERIFIED BY HUMAN EXPERT]"
         
     def demote_rejected(self, sku_code: str):
+        if len(self.sku_stamps) >= self.max_size and sku_code not in self.sku_stamps:
+            self.sku_stamps.pop(next(iter(self.sku_stamps)))
         self.sku_stamps[sku_code] = "[REJECTED BY HUMAN EXPERT]"

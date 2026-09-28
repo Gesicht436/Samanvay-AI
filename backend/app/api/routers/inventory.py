@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, Any
-from backend.app.api.dependencies import get_db_session, verify_cpse_access, PaginationParams, InventoryFilterParams, validate_idempotency_key
+from backend.app.api.dependencies import get_db_session, verify_cpse_access, PaginationParams, InventoryFilterParams, validate_idempotency_key, require_roles
+from backend.app.models.tables import User
 from backend.app.services.inventory_service import (
     list_inventory,
     get_item,
@@ -51,6 +52,7 @@ def create_inventory_item(payload: Dict[str, Any], db: Session = Depends(get_db_
 def update_item_status(
     sku_code: str, 
     payload: Dict[str, Any], 
+    current_user: User = Depends(require_roles(["MATERIALS_MANAGER", "SUPER_ADMIN"])),
     idempotency_key: str = Depends(validate_idempotency_key),
     db: Session = Depends(get_db_session)
 ):
@@ -59,5 +61,5 @@ def update_item_status(
         
     new_status = payload.get("status")
     reason = payload.get("reason", "")
-    officer = payload.get("officer", "SYSTEM")
+    officer = current_user.username
     return transition_status(db, sku_code, new_status, reason, officer)

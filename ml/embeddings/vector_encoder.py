@@ -1,5 +1,8 @@
 import random
+import logging
 from typing import List
+
+logger = logging.getLogger("samanvay.vector_encoder")
 
 class VectorEncoder:
     def __init__(self, model_name="BAAI/bge-m3"):
@@ -18,8 +21,17 @@ class VectorEncoder:
                     self.use_transformer = True
                 else:
                     self.model = None
-        except (ImportError, Exception):
+                    logger.critical(
+                        "EMBEDDING MODEL NOT LOADED: SentenceTransformer '%s' unavailable. "
+                        "Vector search will use pseudo-random embeddings and return MEANINGLESS results. "
+                        "Set DOWNLOAD_EMBEDDING_MODEL=true or provide a local model.",
+                        model_name,
+                    )
+        except (ImportError, Exception) as e:
             self.model = None
+            logger.critical(
+                "EMBEDDING MODEL IMPORT FAILED: %s. Vector search is non-functional.", e
+            )
 
     def encode(self, text: str) -> List[float]:
         if self.use_transformer:

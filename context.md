@@ -188,19 +188,20 @@ Public sector enterprises operate under strict regulatory, commercial, and natio
 
 ---
 
-## 3. The Five Non-Negotiable Architectural Invariants
+## 3. The Six Non-Negotiable Architectural Invariants
 
-Samanvay-AI is architected around **Five Core Non-Negotiable Invariants** that cannot be bypassed, disabled, or compromised under any operating condition:
+Samanvay-AI is architected around **Six Core Non-Negotiable Invariants** that cannot be bypassed, disabled, or compromised under any operating condition:
 
 ```
 +----------------------------------------------------------------------------------------------------+
-|                               THE 5 NON-NEGOTIABLE ARCHITECTURAL INVARIANTS                         |
+|                               THE 6 NON-NEGOTIABLE ARCHITECTURAL INVARIANTS                         |
 +====================================================================================================+
 | 1. Dynamic Compatibility Tiers: S(Q, C) dynamic score. ZERO static global compatibility tiers.     |
 | 2. Hard Deterministic Safety Gate: 21 Safety Rules have unilateral hard veto (Cap <= 0.74, Tier 3). |
 | 3. Sovereign Attribute-Level Privacy: unit_cost_inr & PO data strictly stripped across CPSEs.      |
 | 4. Air-Gapped Cryptographic Sovereignty: Zero external CDN/Cloud; SHA-256 Merkle chain & SVG QR.   |
 | 5. Zero ERP Disruption: Transactional CDC Outbox (cdc_outbox table) without modifying SAP/Oracle.  |
+| 6. Multi-Tenant Isolation & Segregation of Duties: Strict demand scoping & self-approval lock.     |
 +----------------------------------------------------------------------------------------------------+
 ```
 
@@ -208,16 +209,19 @@ Samanvay-AI is architected around **Five Core Non-Negotiable Invariants** that c
 Compatibility is strictly a **dynamic relational function** $S(Q, C)$ evaluated between a specific Query Requisition $Q$ and a Candidate Spare Part $C$ within an operational context. No item possesses a static global compatibility tier in isolation. A valve that is a Tier 1 direct replacement for a low-pressure utility water line will be an immediate Tier 3 fatal incompatibility for high-pressure sour gas service.
 
 ### Invariant 2: Hard Deterministic Safety Gate (Deterministic Rule Primacy)
-While statistical vector embeddings and machine learning rankers propose candidate matches based on semantic similarity, they **NEVER** make final safety decisions. The **21 Codified Deterministic Engineering Safety Modules** hold unilateral, non-overridable veto power. If any deterministic safety invariant fails (e.g., pressure rating deficiency, NACE non-compliance, metallurgy downgrade), the candidate's final score is capped at $le 0.74$, forcing an immediate Tier 3 (Incompatible) classification regardless of a 99% vector similarity score.
+While statistical vector embeddings and machine learning rankers propose candidate matches based on semantic similarity, they **NEVER** make final safety decisions. The **21 Codified Deterministic Engineering Safety Modules** hold unilateral, non-overridable veto power. If any deterministic safety invariant fails (e.g., pressure rating deficiency, NACE non-compliance, metallurgy downgrade), the candidate's final score is capped at $\le 0.74$, forcing an immediate Tier 3 (Incompatible) classification regardless of a 99% vector similarity score.
 
 ### Invariant 3: Sovereign Attribute-Level Privacy
 Cross-enterprise data federation strictly filters commercial pricing, historical vendor procurement terms, and purchase order numbers at the serializer layer. Peer CPSEs can inspect technical engineering specifications, physical metallurgy, stock quantities, and depot geographical locations, but commercial financial terms remain completely masked.
 
 ### Invariant 4: Air-Gapped Cryptographic Sovereignty
-The entire software stack operates with **zero external cloud or CDN dependencies**. All JavaScript libraries, CSS frameworks, vector models, and OCR engines are self-contained within local on-premises containers. The cryptographic audit ledger maintains an unbroken SHA-256 parent-linked Merkle chain initialized from the hardcoded genesis block $H_0 = 	ext{"0000000000000000000000000000000000000000000000000000000000000000"}$, and gate passes are rendered via pure inline SVG 25x25 bit-matrix QR generators.
+The entire software stack operates with **zero external cloud or CDN dependencies**. All JavaScript libraries, CSS frameworks, vector models, and OCR engines are self-contained within local on-premises containers. The cryptographic audit ledger maintains an unbroken SHA-256 parent-linked Merkle chain initialized from the hardcoded genesis block $H_0 = \text{"0000000000000000000000000000000000000000000000000000000000000000"}$, and gate passes are rendered via pure inline SVG 25x25 bit-matrix QR generators.
 
 ### Invariant 5: Zero ERP Disruption
 Samanvay-AI integrates seamlessly with legacy enterprise systems without necessitating intrusive schema modifications or real-time distributed transactions across SAP/Oracle databases. Synchronization is achieved via a non-blocking PostgreSQL transactional Change Data Capture (`cdc_outbox`) mechanism and automated asynchronous event streams.
+
+### Invariant 6: Multi-Tenant Isolation & Segregation of Duties
+Inter-CPSE material requisitions are strictly isolated at the query layer via `list_requisitions_for_user(db, user)`. Regular site engineers and plant managers can only access requisitions created by their own user account or incoming requests specifically targeting their depot/CPSE; cross-tenant transactions are completely shielded. Furthermore, requesters are strictly barred from approving their own requisitions (`HTTP 403 Forbidden`). Only the supplying CPSE's Materials Manager holds the statutory authority to release surplus inventory, and CISF Security Officers issue digital gate passes with SHA-256 cryptographic seals.
 
 ---
 
@@ -1078,13 +1082,59 @@ def verify_merkle_chain_integrity(audit_blocks: list) -> tuple[bool, str]:
 ---
 
 ### 12.4 Role-Based Access Control (RBAC) & Sovereign Multi-Tenancy Architecture
-Samanvay-AI enforces strict multi-tenant boundary isolation using signed JWT tokens containing claims:
-- `enterprise_code`: (`IOCL`, `ONGC`, `BPCL`, `HPCL`, `GAIL`, `OIL`, `NRL`).
-- `user_role`:
-  - **`PLANT_ENGINEER`**: Search catalog, inspect technical specs, initiate borrow requisitions.
-  - **`RELIABILITY_LEAD`**: Approve/reject Tier 2 functional substitutions and MTC overrides.
-  - **`DEPOT_SUPERVISOR`**: Authorize physical dispatch, verify CISF gate passes, confirm return receipts.
-  - **`CAG_AUDITOR`**: Read-only cryptographic verification of the Merkle audit chain.
+Samanvay-AI enforces strict multi-tenant boundary isolation and cryptographic Segregation of Duties (SoD) using signed JWT tokens containing claims:
+- `sub`: Username (e.g. `iocl_eng`, `ongc_mm`).
+- `cpse`: Tenant enterprise code (`OIL`, `IOCL`, `ONGC`, `BPCL`, `HPCL`, `GAIL`, `NRL`, `MOPNG`, `ADMIN`).
+- `depot_id`: Assigned refinery depot identifier (e.g. `IOCL-PANIPAT`, `ONGC-URAN`).
+- `role`: Production RBAC role:
+  - **`SITE_ENGINEER`**: Search catalog, run multi-property discovery, inspect technical scorecards, initiate borrow requisitions.
+  - **`MATERIALS_MANAGER`**: Authorize/reject surplus material release for their depot, manage depot inventory status, triage HITL queues.
+  - **`CISF_SECURITY`**: Sentry gate verification, inspect SHA-256 digital seals, sign and issue physical digital gate passes with inline SVG QR codes.
+  - **`TECHNICAL_AUTHORITY`**: Evaluate Tier 2 engineering substitutions, verify MTC chemistry ($CE_{\text{IIW}}$, PREN), and review welding preheat waivers.
+  - **`VIGILANCE_AUDITOR`**: Read-only sovereign audit verification, trace cryptographic Merkle hash chains root-to-tip, export RFC 4180 CSV reports for CVC/CAG statutory reviews.
+  - **`SUPER_ADMIN`**: Global inter-CPSE administration, user lifecycle governance, and interactive multi-tenant context switching.
+
+#### 12.4.1 Multi-Tenant Consignment Isolation (`list_requisitions_for_user`)
+Consignment visibility is strictly scoped at the database layer via `list_requisitions_for_user(db, user)`:
+- **`SUPER_ADMIN` / `VIGILANCE_AUDITOR`**: Full federation visibility across all inter-CPSE requisitions.
+- **`MATERIALS_MANAGER`**: Can inspect incoming demands where `source_depot == user.depot_id` or `source_cpse == user.cpse` (to approve surplus releases), plus their own created requisitions.
+- **`SITE_ENGINEER` / Standard Officers**: Strictly restricted to requisitions they individually submitted (`requested_by == user.username`) or incoming transfers to their immediate depot. Requisitions between unrelated CPSEs are completely shielded.
+
+#### 12.4.2 Segregation of Duties (SoD) & Self-Approval Prevention
+To prevent unauthorized transfer of public assets and ensure compliance with Central Vigilance Commission (CVC) statutory guidelines:
+- A user who creates a requisition is **strictly prohibited from approving it** (`HTTP 403 Forbidden: Segregation of Duties violation: Requesters cannot approve their own requisitions`).
+- Only a `MATERIALS_MANAGER` belonging to the **supplying CPSE** can authorize surplus release.
+- Only a `CISF_SECURITY` officer can issue the digital gate pass with its cryptographic SHA-256 seal.
+
+#### 12.4.3 The 25+ Pre-Configured Demo Persona Matrix
+The database auto-seeder initializes pre-configured persona accounts across all 7 CPSEs, Central MoPNG Vigilance, and Super Admin (all with default credentials: `Samanvay@2026`):
+
+| Username | CPSE / Org | Depot | Role | Key Capabilities |
+|---|---|---|---|---|
+| `oil_eng` | OIL | Duliajan | `SITE_ENGINEER` | Creates exploration & pipeline requisitions |
+| `oil_mm` | OIL | Duliajan | `MATERIALS_MANAGER` | Authorizes Duliajan central store surplus releases |
+| `oil_sec` | OIL | Duliajan | `CISF_SECURITY` | Issues physical digital gate passes at Duliajan |
+| `iocl_eng` | IOCL | Panipat | `SITE_ENGINEER` | Requisitions refinery spares, tests isolation |
+| `iocl_mm` | IOCL | Panipat | `MATERIALS_MANAGER` | Approves Panipat refinery surplus releases |
+| `iocl_sec` | IOCL | Panipat | `CISF_SECURITY` | Gate pass verification for outward logistics |
+| `ongc_eng` | ONGC | Uran | `SITE_ENGINEER` | Offshore/onshore asset maintenance demands |
+| `ongc_mm` | ONGC | Uran | `MATERIALS_MANAGER` | Authorizes Uran gas complex surplus releases |
+| `ongc_sec` | ONGC | Uran | `CISF_SECURITY` | Sentry verification at Uran checkpoint |
+| `bpcl_eng` | BPCL | Mahul | `SITE_ENGINEER` | Refinery maintenance borrow requests |
+| `bpcl_mm` | BPCL | Mahul | `MATERIALS_MANAGER` | Authorizes Mumbai refinery surplus dispatch |
+| `bpcl_sec` | BPCL | Mahul | `CISF_SECURITY` | Issues gate passes at Mahul gate |
+| `hpcl_eng` | HPCL | Visakh | `SITE_ENGINEER` | Coastal refinery maintenance requisitions |
+| `hpcl_mm` | HPCL | Visakh | `MATERIALS_MANAGER` | Authorizes Visakh refinery surplus dispatch |
+| `hpcl_sec` | HPCL | Visakh | `CISF_SECURITY` | Security verification at Visakh refinery |
+| `gail_eng` | GAIL | Pata | `SITE_ENGINEER` | Gas transmission & petrochemical demands |
+| `gail_mm` | GAIL | Pata | `MATERIALS_MANAGER` | Authorizes Pata petrochemical surplus release |
+| `gail_sec` | GAIL | Pata | `CISF_SECURITY` | Gate sentry at Pata complex |
+| `nrl_eng` | NRL | Numaligarh | `SITE_ENGINEER` | North-East hydrocracker spare requisitions |
+| `nrl_mm` | NRL | Numaligarh | `MATERIALS_MANAGER` | Authorizes Numaligarh refinery surplus release |
+| `nrl_sec` | NRL | Numaligarh | `CISF_SECURITY` | Gate pass issuance at Numaligarh |
+| `mopng_tech` | MoPNG | Central | `TECHNICAL_AUTHORITY` | Reviews technical waivers & MTC overrides |
+| `mopng_auditor` | MoPNG | Central | `VIGILANCE_AUDITOR` | Full sovereign audit verification & CAG CSV export |
+| `super_admin` | ADMIN | HQ | `SUPER_ADMIN` | Global tenant switching & system administration |
 
 
 ## 13. Subsystem 9: Sovereign CISF Physical Verification & Pure SVG QR Gate Pass
@@ -1402,25 +1452,33 @@ Built on **Next.js 16 (App Router)** with Turbopack, **React 19**, and **Tailwin
   - `Rose` (`#f43f5e`): Veto, Tier 3 Incompatible, ASME Flange Mismatch, Cryptographic Tamper Alert.
 
 ### 16.2 Navigation & App Shell Architecture
-- **Collapsible Linear-Style Sidebar (`Sidebar.tsx`)**:
-  - Smoothly expands to 240px (`w-60`) or collapses to a 56px (`w-14`) minimal icon dock.
-  - Global `[` keyboard shortcut and click toggle button to instantly maximize screen real estate.
-  - Hexagonal sovereign mark (`SV`) with clean active-route indicators.
+- **Single-Origin Reverse Proxy (`next.config.ts`)**:
+  - The Next.js 16 standalone container internally rewrites `/api/v1/:path*` to `http://samanvay-ai-backend:8000/api/v1/:path*`.
+  - Eliminates Cross-Origin Resource Sharing (CORS) preflights, cookie partitioning issues, and mixed-content SSL errors when running over public Cloudflare Tunnels.
+- **Locked Organization Header Badge (`AppShell.tsx`)**:
+  - Standard officers (`SITE_ENGINEER`, `MATERIALS_MANAGER`, `CISF_SECURITY`) have an un-editable locked organization badge reflecting their sovereign CPSE and refinery depot assignment (e.g. `[IOCL] Panipat Refinery Stores`).
+  - Only `SUPER_ADMIN` accounts possess the interactive dual-dropdown switcher to emulate and inspect operations across any CPSE and depot.
+- **Collapsible Desktop Sidebar & Mobile-Responsive Slide-Out Sheet**:
+  - Desktop (`md:flex`): Smoothly expands to 240px (`w-60`) or collapses to a 56px (`w-14`) minimal icon dock. Global `[` keyboard shortcut and toggle button.
+  - Mobile (`< 768px`): Hidden by default. Slide-over drawer with backdrop overlay triggered via a hamburger menu with ergonomic touch targets ($> 44\times 44\text{px}$) per Apple/Google HIG guidelines, auto-closing upon route navigation.
 - **Compact 48px Utility Bar (`AppShell.tsx`)**:
   - Unobtrusive 48px height (`h-12`) preserving vertical workspace height.
   - Hierarchical breadcrumbs (`MoPNG Mesh > [Active View]`).
-  - Persistent CPSE Tenant Switcher dropdown with live backend connection pulse.
+  - Persistent CPSE Tenant Badge with live backend connection pulse.
   - Global Command Palette trigger button (`⌘K` / `Ctrl+K`).
 - **Comprehensive Global Command Palette (`CommandPalette.tsx`)**:
   - Instant keyboard access via `Cmd+K` or `Ctrl+K`.
   - Live fuzzy search across parts, SKUs, and MTCs via backend PostgreSQL and vector search.
-  - Instant CPSE Context Switcher (`OIL`, `IOCL`, `ONGC`, `BPCL`, `HPCL`, `GAIL`, `NRL`).
+  - Instant CPSE Context Switcher for administrators (`OIL`, `IOCL`, `ONGC`, `BPCL`, `HPCL`, `GAIL`, `NRL`).
   - Quick action shortcuts: Export CAG Audit CSV, Verify Merkle Ledger, Scan CISF Gate Pass.
 
 ### 16.3 High-Density Information Architecture & Inspection Pattern
 - **Balanced Compact 38px Table Standard**:
   - Compact table rows (`.compact-table`, 38px row height) providing 16–22 data rows above the fold.
   - Right-aligned tabular monospaced numbers for physical dimensions, quantities, and pricing.
+- **Multi-Property Specification Search Panel (`/discover`)**:
+  - Expandable drawer accepting detailed engineering filters: Nominal Bore (`size_nb_mm`), ASME Pressure Class, Pipe Schedule, ASTM Metallurgy Grade, IIW Weldability Class (`HIGH_WELDABILITY`, `STANDARD`, `NON_WELDABLE`), NACE MR0175 sour service compliance, flange facing ends, and API 600 valve trims.
+  - Dynamically calculates Compatibility Tiers (Tier 1 Drop-in, Tier 2 Functional Substitute, Tier 3 Incompatible) without pre-baked static tier assumptions (Invariant #1 & #2).
 - **Sliding Side Inspector Drawer (`SideDrawer.tsx` in `src/components/ui`)**:
   - Palantir/Linear style 480px slide-over inspection sheet sliding from the right edge when any inventory or surplus item row is clicked.
   - Retains operator's table scroll position and active filter state while surfacing:
@@ -1435,13 +1493,14 @@ Built on **Next.js 16 (App Router)** with Turbopack, **React 19**, and **Tailwin
   - All views bind strictly to live backend API routes (`/api/v1/...`). Missing or unreadable data safely defaults to empty arrays (`[]`), `null`, or manual editable fields.
 
 ### 16.4 Route Topography
-- `/dashboard`: Role-adaptive Command Center with live KPI cards, active requisitions, and Merkle ledger status.
-- `/discover`: Surplus Discovery Radar with category segmented pills, compact table, and slide-over 21-gate inspector drawer.
+- `/login`: 1-Click Sovereign Evaluation Hub featuring 25+ pre-configured demo personas categorized across 10 filter tabs (`ALL`, `OIL`, `IOCL`, `ONGC`, `BPCL`, `HPCL`, `GAIL`, `NRL`, `MOPNG`, `ADMIN`).
+- `/dashboard`: Role-adaptive Command Center with live KPI cards, active requisitions, interactive GIS refinery depot map, and Merkle ledger status.
+- `/discover`: Multi-Property Specification Search with category segmented pills, compact table, dynamic tri-tier calculation, and slide-over 21-gate inspector drawer.
 - `/inventory`: Plant stock ledger and HITL triage desk with 1-click surplus broadcasting.
 - `/upload`: PyMuPDF and PaddleOCR MTC document dropzone with recent document tracking.
 - `/upload/review`: Interactive manual property review screen with unreadable scan fallback protection and client-side $CE_{\text{IIW}}$ recalculation.
-- `/requests`: Consignment and loan requisition manager with approval and dispatch pipeline triggers.
-- `/requests/[id]`: Printable CISF Gate Pass with standalone SVG QR bit-matrix.
+- `/requests`: Consignment and loan requisition manager with persona-scoped tabs (`"My Outgoing Requisitions"`, `"Incoming Depot Requests"`, `"All Requisitions"`) and Segregation of Duties approval controls.
+- `/requests/[id]`: Printable CISF Gate Pass with standalone SVG QR bit-matrix and cryptographic SHA-256 seal.
 - `/audit`: Sovereign cryptographic audit trail with SHA-256 linked blocks and 1-click CAG RFC-4180 export.
 - `/admin/users`: Sovereign identity management and node authorization desk.
 

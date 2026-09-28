@@ -56,6 +56,13 @@ DIALECT_THESAURUS = {
 }
 
 
+# Pre-compile thesaurus patterns at module level (sorted longest-first for greedy matching)
+_COMPILED_THESAURUS = [
+    (re.compile(r'\b' + re.escape(k) + r'\b'), v, k)
+    for k, v in sorted(DIALECT_THESAURUS.items(), key=lambda x: len(x[0]), reverse=True)
+]
+
+
 def unicode_normalize(text: str) -> str:
     """Apply NFKC normalization"""
     return unicodedata.normalize("NFKC", text)
@@ -64,13 +71,12 @@ def unicode_normalize(text: str) -> str:
 def normalize_description(raw_text: str) -> str:
     """Apply NFKC + thesaurus replacement"""
     text = unicode_normalize(raw_text).upper()
-    for k, v in sorted(DIALECT_THESAURUS.items(), key=lambda x: len(x[0]), reverse=True):
-        pattern = re.compile(r'\b' + re.escape(k) + r'\b')
-        text = pattern.sub(v, text)
-        if k == '4"':
+    for pattern, replacement, original_key in _COMPILED_THESAURUS:
+        text = pattern.sub(replacement, text)
+        if original_key == '4"':
             text = text.replace('4"', '100.0 mm')
-        if "#" in k:
-            text = text.replace(k, v)
+        if "#" in original_key:
+            text = text.replace(original_key, replacement)
     return text
 
 

@@ -560,9 +560,9 @@ sequenceDiagram
     participant Rules as 21 Safety Rules Engine
     participant Privacy as Privacy Filter Service
 
-    Engineer->>UI: Search "Gate Valve 6 inch 150# WCB"
-    UI->>API: POST /api/v1/match/search (query_text, tenant_cpse)
-    API->>Norm: Expand acronyms & extract slots
+    Engineer->>UI: Search with Multi-Property Specs (NB 150mm, Class 300, A216 WCB, Sour NACE)
+    UI->>API: POST /api/v1/match (query_text, size_nb_mm, pressure_class, metallurgy, sour_service, ...)
+    API->>Norm: Expand acronyms & extract missing slots
     Norm-->>API: Normalized query attributes
     API->>Vec: Encode query text (1024-dim dense vector)
     Vec-->>API: Dense vector embedding
@@ -620,15 +620,15 @@ sequenceDiagram
         API-->>UI: HTTP 403 Forbidden (Segregation of Duties Violation)
     end
 
-    SupplyingMgr->>UI: Logs in as stores_ongc -> Views "Incoming Depot Requests"
+    SupplyingMgr->>UI: Logs in as ongc_mm -> Views "Incoming Depot Requests"
     SupplyingMgr->>UI: Reviews technical need & approves supply
     UI->>API: PUT /api/v1/requisition/{id}/approve (Bearer JWT)
     API->>Service: approve_requisition()
-    Service->>PG: UPDATE status='APPROVED', approved_by=stores_ongc
+    Service->>PG: UPDATE status='APPROVED', approved_by=ongc_mm
     Service->>Ledger: Append audit block (APPROVE_REQUISITION, SHA-256)
     API-->>UI: Approval confirmed
 
-    CISF->>UI: Logs in as cisf_ongc -> Issues Gate Pass
+    CISF->>UI: Logs in as ongc_sec -> Issues Gate Pass
     UI->>API: POST /api/v1/requisition/{id}/gatepass (Vehicle, Driver, Transporter)
     API->>Service: generate_gate_pass()
     Service->>Service: Calculate BEE CO2 savings & road distance
@@ -647,3 +647,32 @@ sequenceDiagram
 2. **Deterministic Cryptographic Verification**: Every database transaction links to the previous block hash ($H_{i-1}$), anchoring all operations in an immutable, cryptographically verifiable Merkle tree.
 3. **Attribute-Level Commercial Privacy**: Enforced via FastAPI Pydantic response filters. Financial procurement figures are masked at the API layer for cross-CPSE requests, preventing commercial price leakage while maintaining physical interoperability.
 4. **Offline SVG QR Pass Verification**: The CISF gate pass QR code contains self-contained cryptographic HMAC signatures, allowing gate sentries to verify authenticity using standard air-gapped barcode scanners without network access.
+5. **Single-Origin Reverse Proxy**: Next.js 16 (`next.config.ts`) proxies `/api/v1/*` to `http://samanvay-ai-backend:8000`, completely eliminating cross-origin preflights and CORS issues over Cloudflare Tunnels while enforcing strict network isolation.
+6. **25+ Pre-Configured Demo Persona Matrix**: Ground-truth demo accounts initialized by `backend/app/services/seeder.py` across all 7 CPSEs + MoPNG Central + Super Admin with password `Samanvay@2026`:
+
+| Username | CPSE / Org | Depot | Role | Key Governance Scope |
+|---|---|---|---|---|
+| `oil_eng` | OIL | Duliajan | `SITE_ENGINEER` | Creates exploration & pipeline requisitions |
+| `oil_mm` | OIL | Duliajan | `MATERIALS_MANAGER` | Authorizes Duliajan central store surplus releases |
+| `oil_sec` | OIL | Duliajan | `CISF_SECURITY` | Issues physical digital gate passes at Duliajan |
+| `iocl_eng` | IOCL | Panipat | `SITE_ENGINEER` | Requisitions refinery spares, tests isolation |
+| `iocl_mm` | IOCL | Panipat | `MATERIALS_MANAGER` | Approves Panipat refinery surplus releases |
+| `iocl_sec` | IOCL | Panipat | `CISF_SECURITY` | Gate pass verification for outward logistics |
+| `ongc_eng` | ONGC | Uran | `SITE_ENGINEER` | Offshore/onshore asset maintenance demands |
+| `ongc_mm` | ONGC | Uran | `MATERIALS_MANAGER` | Authorizes Uran gas complex surplus releases |
+| `ongc_sec` | ONGC | Uran | `CISF_SECURITY` | Sentry verification at Uran checkpoint |
+| `bpcl_eng` | BPCL | Mahul | `SITE_ENGINEER` | Refinery maintenance borrow requests |
+| `bpcl_mm` | BPCL | Mahul | `MATERIALS_MANAGER` | Authorizes Mumbai refinery surplus dispatch |
+| `bpcl_sec` | BPCL | Mahul | `CISF_SECURITY` | Issues gate passes at Mahul gate |
+| `hpcl_eng` | HPCL | Visakh | `SITE_ENGINEER` | Coastal refinery maintenance requisitions |
+| `hpcl_mm` | HPCL | Visakh | `MATERIALS_MANAGER` | Authorizes Visakh refinery surplus dispatch |
+| `hpcl_sec` | HPCL | Visakh | `CISF_SECURITY` | Security verification at Visakh refinery |
+| `gail_eng` | GAIL | Pata | `SITE_ENGINEER` | Gas transmission & petrochemical demands |
+| `gail_mm` | GAIL | Pata | `MATERIALS_MANAGER` | Authorizes Pata petrochemical surplus release |
+| `gail_sec` | GAIL | Pata | `CISF_SECURITY` | Gate sentry at Pata complex |
+| `nrl_eng` | NRL | Numaligarh | `SITE_ENGINEER` | North-East hydrocracker spare requisitions |
+| `nrl_mm` | NRL | Numaligarh | `MATERIALS_MANAGER` | Authorizes Numaligarh refinery surplus release |
+| `nrl_sec` | NRL | Numaligarh | `CISF_SECURITY` | Gate pass issuance at Numaligarh |
+| `mopng_tech` | MoPNG | Central | `TECHNICAL_AUTHORITY` | Reviews technical waivers & MTC overrides |
+| `mopng_auditor` | MoPNG | Central | `VIGILANCE_AUDITOR` | Full sovereign audit verification & CAG CSV export |
+| `super_admin` | ADMIN | HQ | `SUPER_ADMIN` | Global tenant switching & system administration |

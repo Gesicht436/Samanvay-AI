@@ -1,7 +1,7 @@
 from fastapi import Request, Depends, Header, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Generator
 from datetime import datetime, timezone, timedelta
 from backend.app.models.base import get_db
 from backend.app.models.tables import IdempotencyKey, User
@@ -10,12 +10,8 @@ from backend.app.core.security import decode_access_token
 security_bearer = HTTPBearer(auto_error=False)
 
 
-async def get_db_session() -> Session:
-    db = next(get_db())
-    try:
-        yield db
-    finally:
-        db.close()
+def get_db_session() -> Generator[Session, None, None]:
+    yield from get_db()
 
 
 def get_current_user(

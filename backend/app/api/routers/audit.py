@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Query
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
-from backend.app.api.dependencies import get_db_session, PaginationParams
+from backend.app.api.dependencies import get_db_session, PaginationParams, get_current_user
+from backend.app.models.tables import User
 from backend.app.services.audit_service import (
     verify_chain,
     export_csv,
@@ -83,13 +84,17 @@ def get_entry(log_id: str, db: Session = Depends(get_db_session)):
 
 
 @router.post("/feedback")
-def submit_feedback(payload: Dict[str, Any], db: Session = Depends(get_db_session)):
+def submit_feedback(
+    payload: Dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
     entry = create_audit_entry(db, {
         "action_category": "HITL_TRIAGE",
         "action": "HITL_FEEDBACK",
-        "actor": payload.get("actor", "QUALITY_AUDITOR"),
-        "cpse": payload.get("cpse", "IOCL"),
-        "depot": payload.get("depot", "DEFAULT_DEPOT"),
+        "actor": current_user.username,
+        "cpse": current_user.cpse,
+        "depot": current_user.depot_id,
         "reference_id": payload.get("reference_id", "FEEDBACK-001"),
         "payload": payload,
     })

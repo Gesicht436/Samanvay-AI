@@ -70,7 +70,7 @@ class InventoryItem(Base):
     local_content_percentage = Column(Numeric(5, 2), nullable=True, default=75.0)  # Make-in-India %
     pressure_rating_bar = Column(Numeric(8, 2), nullable=True)  # PN rating in Bar (e.g. 16.0, 20.0, 50.0)
     location_state = Column(String(64), nullable=True)  # Assam, Gujarat, Maharashtra, etc.
-    properties = Column(JSONB, default={})  # Equipment-specific: trim, port_bore, seal_plan
+    properties = Column(JSONB, default=dict)  # Equipment-specific: trim, port_bore, seal_plan
     quantity = Column(Integer, nullable=False)
     unit_cost_inr = Column(Numeric(14, 2), nullable=False)
     total_value_inr = Column(

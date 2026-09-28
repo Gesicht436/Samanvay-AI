@@ -224,6 +224,8 @@ class MatchRequest(BaseModel):
     top_k: int = Field(default=10, ge=1, le=50)
     properties: dict[str, Any] = Field(default_factory=dict)
 
+    model_config = {"extra": "allow"}
+
 
 # ── Property-by-Property Evaluation ──────────────────────────────────────
 
@@ -378,3 +380,58 @@ class CompatibilityResult(BaseModel):
         if self.engineering_upgrades:
             return "; ".join(self.engineering_upgrades)
         return self.summary or "Direct interchangeable engineering match"
+
+
+# ── Match Search Schema Contracts ─────────────────────────────────────────
+
+
+class CandidateMatchItem(BaseModel):
+    """Output contract for a single matching candidate spare in search response."""
+
+    sku_code: str
+    cpse: str
+    depot_id: Optional[str] = None
+    depot_location: Optional[str] = None
+    description: Optional[str] = None
+    item_type: Optional[str] = None
+    size_nb_mm: Optional[float] = None
+    pressure_class: Optional[int] = None
+    pressure_rating_bar: Optional[float] = None
+    metallurgy: Optional[str] = None
+    standard: Optional[str] = None
+    indian_standard: Optional[str] = None
+    oil_std_spec: Optional[str] = None
+    oil_material_code: Optional[str] = None
+    gem_category_id: Optional[str] = None
+    gem_product_id: Optional[str] = None
+    cppp_tender_ref: Optional[str] = None
+    make_in_india_class: Optional[str] = None
+    local_content_percentage: Optional[float] = None
+    mii_compliant: Optional[bool] = None
+    mii_warning: Optional[str] = None
+    quantity: int = 0
+    days_idle: int = 0
+    compatibility_score: float
+    tier: str
+    tier_level: int
+    is_compatible: bool
+    violation_code: Optional[str] = None
+    rule_violations: list[dict[str, Any]] = Field(default_factory=list)
+    distance_km: float = 0.0
+    transit_hours: float = 0.0
+    explanation: Optional[str] = None
+    unit_cost_inr: Optional[float] = None
+    total_value_inr: Optional[float] = None
+
+    model_config = {"extra": "allow"}
+
+
+class MatchSearchResponse(BaseModel):
+    """Output contract for cross-CPSE spare part search."""
+
+    query: str = ""
+    normalized_spec: dict[str, Any] = Field(default_factory=dict)
+    total_candidates_evaluated: int = 0
+    candidates: list[CandidateMatchItem] = Field(default_factory=list)
+
+    model_config = {"extra": "allow"}

@@ -103,19 +103,4 @@ def check_flange_facing(
                 ),
             )
 
-    # Flange Attachment Type: Slip-On vs Weld Neck in severe cyclic
-    qt = (query_flange_type or "").upper()
-    ct = (cand_flange_type or "").upper()
-    if severe_cyclic and ("WELD NECK" in qt or "WN" in qt) and ("SLIP ON" in ct or "SO" in ct):
-        return (
-            DynamicCompatibilityTier.TIER_3_INCOMPATIBLE,
-            0.0,
-            RuleViolation(
-                module_name="ASME_B31_3_CYCLIC",
-                standard_code="ASME B31.3 Severe Cyclic Service",
-                failure_mode_prevented="Slip-on flange fillet weld fatigue fracture",
-                explanation="FATIGUE FRACTURE TRAP: Slip-On flanges are prohibited in Severe Cyclic Service. Weld Neck with full penetration butt weld is mandatory.",
-            ),
-        )
-
     return (DynamicCompatibilityTier.TIER_2_SUBSTITUTE, 0.85, None)

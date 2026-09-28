@@ -203,11 +203,11 @@ Once running, open **`http://localhost:3000`** (or your live Cloudflare Tunnel U
 - **Judge & Auditor Directory**: Access 25+ pre-configured personas across all 7 CPSEs (**OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL**), Central MoPNG Auditor, and Super Admin.
 - **1-Click Authentication**: Tap any persona card to auto-populate credentials and sign in instantly (Default password: `Samanvay@2026`).
 - **Core Evaluation Personas**:
-  - `engineer_iocl` (IOCL Panipat Site Engineer) &mdash; Procurement requester.
-  - `stores_ongc` (ONGC Uran Materials Manager) &mdash; Surplus approver.
-  - `cisf_ongc` (ONGC Uran CISF Security Officer) &mdash; Gate pass issuer.
-  - `auditor` (MoPNG Chief Vigilance Officer) &mdash; Statutory audit verifier.
-  - `admin` (Ministry Super Admin) &mdash; Global multi-tenant switcher.
+  - `iocl_eng` (or `engineer_iocl`): IOCL Panipat Site Engineer &mdash; Procurement requester.
+  - `ongc_mm` (or `stores_ongc`): ONGC Uran Materials Manager &mdash; Surplus approver.
+  - `ongc_sec` (or `cisf_ongc`): ONGC Uran CISF Security Officer &mdash; Gate pass issuer.
+  - `mopng_auditor` (or `auditor`): MoPNG Chief Vigilance Officer &mdash; Statutory audit verifier.
+  - `super_admin` (or `admin`): Ministry Super Admin &mdash; Global multi-tenant switcher.
 
 ### 2. Executive Command Center (`/dashboard`)
 - **Interactive Geo Radar**: Click on any refinery depot dot on the Indian subcontinent map (e.g., *Panipat*, *Uran*, *Visakh*) to inspect local inventory counts and unlocked capital in real time.
