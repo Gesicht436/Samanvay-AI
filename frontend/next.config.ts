@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   async rewrites() {
     const backendUrl = process.env.INTERNAL_BACKEND_URL || 'http://samanvay-ai-backend:8000';
 

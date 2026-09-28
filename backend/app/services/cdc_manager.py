@@ -29,8 +29,21 @@ logger = logging.getLogger("samanvay.cdc")
 
 
 def init_cdc_schema():
-    """Initializes the cdc_outbox table and PostgreSQL transactional triggers."""
+    """Initializes the cdc_outbox table and PostgreSQL transactional triggers.
+
+    Uses a PostgreSQL advisory lock (key 0x53414D41 = 'SAMA') to guard against
+    concurrent execution by multiple uvicorn worker processes at startup.
+    The first worker acquires the lock and runs all DDL; subsequent workers
+    wait, then acquire the lock and find all objects already exist (IF NOT EXISTS /
+    DROP IF EXISTS make the DDL idempotent), so they complete immediately.
+    """
+    # Advisory lock key: ord('S')<<24 | ord('A')<<16 | ord('M')<<8 | ord('A') = 0x53414D41
+    _ADVISORY_LOCK_KEY = 1396789057  # 0x53414D41
+
     with engine.begin() as conn:
+        # Acquire session-level exclusive advisory lock — blocks until acquired
+        conn.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADVISORY_LOCK_KEY})
+
         # Create outbox table if not exists
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS cdc_outbox (
@@ -99,7 +112,9 @@ def init_cdc_schema():
         FOR EACH ROW EXECUTE FUNCTION fn_cdc_capture();
         """))
 
+    # Advisory lock is released automatically when the transaction commits
     logger.info("[CDC] PostgreSQL CDC triggers and outbox initialized successfully.")
+
 
 
 def backfill_graph_if_empty(syncer: Neo4jSyncer):
