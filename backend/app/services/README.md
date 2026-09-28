@@ -97,7 +97,27 @@ Coordinates enterprise master inventory queries and enforces cross-CPSE data mas
 
 ---
 
-### C. [`audit_service.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/audit_service.py) — Sovereign Cryptographic Audit Ledger
+### C. [`match_service.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/match_service.py) — Material Matching, Safety Rules & ML Re-Ranking
+Coordinates the complete multi-stage matching pipeline, decoupling business orchestration from HTTP controllers:
+
+- **Query Normalization (`parse_query`):**
+  Uses [`DialectNormalizer`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/ml/ner/normalizer.py) to resolve colloquial CPSE equipment descriptions into structured engineering specifications (nominal bore size `size_nb_mm`, pressure rating `pressure_class`/`pressure_rating_bar`, metallurgy `material_grade`, and facing type `facing`).
+- **SQL Candidate Pre-Filtering (`fetch_candidates`):**
+  Executes high-performance indexed queries against `inventory_items` in PostgreSQL, retrieving active candidates with status `SURPLUS_DECLARED` or `AVAILABLE` while filtering out the requesting enterprise's own stock or inactive assets.
+- **21 Codified Deterministic Safety Rules (`evaluate_pair`):**
+  Applies the physics and standards engine ([`rules/tolerance.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/rules/tolerance.py)) to verify mechanical and chemical interchangeability (ASME B16.5 / B16.47 pressure/facing limits, NACE MR0175 sour service metallurgy, API 6D fire safety, API 600 valve trim, and ASME Sec VIII heat exchanger tube layouts).
+  > [!IMPORTANT]
+  > **Invariant #1 (Hard Safety Gate):** Safety rules strictly veto ML continuous scores. If any critical safety rule fails (`passed_rules = False`), the candidate is immediately rejected with a compatibility score of `0.0`.
+- **Continuous ML Scoring & Active Learning (`CompatibilityRanker`):**
+  For safety-cleared candidates, computes a continuous 0.0–1.0 score combining dense vector semantic similarity, dimensional tolerance closeness, and historical feedback adjustments from [`ActiveLearningCache`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/ml/active_learning/cache.py).
+- **Logistics & Carbon Footprint Computation:**
+  Integrates [`graph.logistics`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py) to calculate highway route distances ($1.28\times$ road tortuosity factor), freight transit time ($40\text{ km/h}$ average freight speed), and Bureau of Energy Efficiency (BEE) freight carbon savings ($62\text{ g } CO_2 / \text{tonne-km}$).
+- **Commercial Data Shielding:**
+  Automatically masks proprietary procurement data (`unit_cost_inr`, `total_value_inr`, `po_no`) for any candidate items belonging to external CPSEs.
+
+---
+
+### D. [`audit_service.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/audit_service.py) — Sovereign Cryptographic Audit Ledger
 Implements the immutable, mathematically verifiable SHA-256 blockchain-style ledger:
 
 - **Block Creation:**
@@ -114,7 +134,7 @@ Implements the immutable, mathematically verifiable SHA-256 blockchain-style led
 
 ---
 
-### D. [`cdc_manager.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py) — Real-Time Change Data Capture (CDC) Worker
+### E. [`cdc_manager.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py) — Real-Time Change Data Capture (CDC) Worker
 Provides real-time event streaming between PostgreSQL and the Neo4j Knowledge Graph:
 
 ```mermaid
@@ -144,7 +164,9 @@ flowchart TD
     end
 ```
 
-- **PostgreSQL Triggers ([`init_cdc_schema`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py#L31-L100)):**
+- **PostgreSQL Advisory Lock Concurrency Protection:**
+  [`init_cdc_schema()`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py#L31-L100) executes `SELECT pg_advisory_xact_lock(0x53414D41)` (`1396789057`, ASCII for `'SAMA'`). This session-level exclusive lock guarantees that when multiple Uvicorn workers boot concurrently, only one worker performs DDL and trigger attachment while others wait cleanly, eliminating startup race conditions.
+- **PostgreSQL Triggers:**
   - Attaches `trg_inventory_cdc` and `trg_requisition_cdc` to `inventory_items` and `requisitions`.
   - Every row mutation automatically writes a row snapshot to [`cdc_outbox`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L233-L247) and broadcasts a JSON notification via `pg_notify('samanvay_cdc_channel', ...)`.
 - **Background Worker Thread ([`start_cdc_worker`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py)):**
@@ -154,7 +176,7 @@ flowchart TD
 
 ---
 
-### E. [`seeder.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py) — Cold-Start Database Seeder
+### F. [`seeder.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py) — Cold-Start Database Seeder
 Ensures zero manual setup is required on fresh deployment volumes:
 
 - **5,000 Inventory Items Seeding ([`seed_database_if_empty`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py#L25-L162)):**

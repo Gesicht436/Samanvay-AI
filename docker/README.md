@@ -24,7 +24,7 @@ graph TD
     end
 
     subgraph Application & Intelligence Gateway
-        BACKEND["samanvay-ai-backend<br/>(FastAPI / Python 3.11 / Physics Core)<br/>Port 8000:8000 | 420MB RAM | 1.0 CPU<br/>[Embedded CDC Enabled]"]
+        BACKEND["samanvay-ai-backend<br/>(FastAPI / Python 3.12 / Physics Core)<br/>Port 8000:8000 | 420MB RAM | 1.0 CPU<br/>[Embedded CDC Enabled]"]
     end
 
     subgraph Distributed Streaming Tier [Profile: distributed]
@@ -66,11 +66,11 @@ All services are defined in [docker-compose.yml](file:///C:/Users/mayan/Developm
 
 | Service | Container Name | Base Image / Build Context | Exposed Ports | Resource Limits | Healthcheck Probe | Operational Role |
 |---|---|---|---|---|---|---|
-| **postgres** | `samanvay-ai-postgres` | `samanvay-ai/postgres:16-alpine` | `5432:5432` | 160MB RAM<br>0.75 CPU | `pg_isready -U samanvay -d samanvay_db` (interval: 5s, retries: 5) | Relational master ledger, requisitions, inventory locks, `cdc_outbox` table, and cryptographic SHA-256 audit ledger. Pre-loaded with `uuid-ossp` and `pgcrypto`. |
-| **qdrant** | `samanvay-ai-qdrant` | `samanvay-ai/qdrant:v1.12.0` | `6333:6333`<br>`6334:6334` | 220MB RAM<br>0.75 CPU | `bash -c '</dev/tcp/localhost/6333'` (interval: 5s, retries: 5) | Dense vector search engine indexing 1024-dimensional `BAAI/bge-m3` embeddings over HNSW cosine distance. Telemetry disabled for sovereign privacy. |
-| **neo4j** | `samanvay-ai-neo4j` | `samanvay-ai/neo4j:5.20` | `7474:7474`<br>`7687:7687` | 580MB RAM<br>1.0 CPU | `wget -q --spider http://localhost:7474` (interval: 5s, retries: 5) | Property star knowledge graph mapping CPSE catalogs, depots, transit corridors, and logistics topology with APOC extensions and tuned G1GC heap. |
-| **backend** | `samanvay-ai-backend` | [Dockerfile.backend](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/docker/Dockerfile.backend) (Python 3.11 slim) | `8000:8000` | 420MB RAM<br>1.0 CPU | `curl -f http://localhost:8000/health` (interval: 10s, retries: 3) | FastAPI REST gateway, DeBERTa-v3 token classification, 21-rule deterministic safety core, embedded CDC synchronizer, and cryptographic verification engine. |
-| **frontend** | `samanvay-ai-frontend` | [Dockerfile.frontend](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/docker/Dockerfile.frontend) (Node 20 Alpine standalone) | `3000:3000` | 220MB RAM<br>0.75 CPU | `wget -q --spider http://localhost:3000/` (interval: 10s, retries: 3) | Next.js 16.3.5 industrial command center, single-origin API proxy (`/api/v1/*`), 1-Click Evaluation Hub, locked tenant badge, and offline air-gapped QR code generator. |
+| **postgres** | `samanvay-ai-postgres` | `postgres:16-alpine` | `5432:5432` | 160MB RAM<br>0.75 CPU | `pg_isready -U samanvay -d samanvay_db` (interval: 5s, retries: 5) | Relational master ledger, requisitions, inventory locks, `cdc_outbox` table, and cryptographic SHA-256 audit ledger. Pre-loaded with `uuid-ossp` and `pgcrypto`. |
+| **qdrant** | `samanvay-ai-qdrant` | `qdrant/qdrant:v1.12.0` | `6333:6333`<br>`6334:6334` | 220MB RAM<br>0.75 CPU | `grep -q '18BD' /proc/net/tcp` (interval: 5s, retries: 10) | Dense vector search engine indexing 1024-dimensional `BAAI/bge-m3` embeddings over HNSW cosine distance. Telemetry disabled for sovereign privacy. Zero-dependency port 6333 (0x18BD) procfs check. |
+| **neo4j** | `samanvay-ai-neo4j` | `neo4j:5.20` | `7474:7474`<br>`7687:7687` | 580MB RAM<br>1.0 CPU | `wget -q --spider http://localhost:7474` (interval: 5s, retries: 5) | Property star knowledge graph mapping CPSE catalogs, depots, transit corridors, and logistics topology with APOC extensions and tuned G1GC heap. |
+| **backend** | `samanvay-ai-backend` | [Dockerfile.backend](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/docker/Dockerfile.backend) (Python 3.12 slim) | `8000:8000` | 420MB RAM<br>1.0 CPU | `curl -f http://localhost:8000/health` (interval: 10s, retries: 3) | FastAPI REST gateway, DeBERTa-v3 token classification, 21-rule deterministic safety core, embedded CDC synchronizer, and cryptographic verification engine. |
+| **frontend** | `samanvay-ai-frontend` | [Dockerfile.frontend](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/docker/Dockerfile.frontend) (Node 22 Alpine standalone) | `3000:3000` | 220MB RAM<br>0.75 CPU | `wget -q --spider http://localhost:3000/` (interval: 10s, retries: 3) | Next.js 16.3.5 industrial command center, single-origin API proxy (`/api/v1/*`), 1-Click Evaluation Hub, locked tenant badge, and offline air-gapped QR code generator. |
 | **tunnel** | `samanvay-ai-tunnel` | `cloudflare/cloudflared:latest` (profile: `tunnel`) | Dynamic Public URL | 128MB RAM<br>0.5 CPU | Docker daemon liveness check | Optional public ingress tunnel proxying to `http://samanvay-ai-frontend:3000` for remote demonstration and field evaluation without port-forwarding. |
 | **cdc-worker** | `samanvay-ai-cdc` | [Dockerfile.backend](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/docker/Dockerfile.backend) (profile: `distributed`) | Internal Only | 160MB RAM<br>0.5 CPU | Python database driver ping | Optional dedicated microservice running [cdc_worker.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/scripts/cdc_worker.py) to stream Postgres outbox events to Neo4j. |
 
@@ -81,10 +81,10 @@ All services are defined in [docker-compose.yml](file:///C:/Users/mayan/Developm
 ```
 docker/
 ├── .dockerignore                 # Production build context exclusions (node_modules, venvs, caches)
-├── .env.docker                   # Containerized runtime environment defaults
+├── .env.docker                   # Containerized runtime environment defaults (single source of truth)
 ├── docker-compose.yml            # Canonical multi-container orchestration manifest
-├── Dockerfile.backend            # Multi-stage hardened Python 3.11 FastAPI container
-├── Dockerfile.frontend           # Multi-stage optimized Next.js 16 standalone container
+├── Dockerfile.backend            # Multi-stage hardened Python 3.12 FastAPI container
+├── Dockerfile.frontend           # Multi-stage optimized Next.js 16 (Node 22) standalone container
 ├── Dockerfile.ml                 # Standalone ML inference container (optional)
 ├── init-db/                      # Database bootstrap scripts
 │   ├── 01-init-samanvay.sql      # PostgreSQL extensions (uuid-ossp, pgcrypto) & DB permissions
@@ -114,7 +114,7 @@ sequenceDiagram
     D->>N: Start container with APOC & G1GC
     Note over P: Executes 01-init-samanvay.sql<br/>Enables uuid-ossp, pgcrypto
     P-->>D: Healthy (pg_isready exits 0)
-    Q-->>D: Healthy (/dev/tcp/localhost/6333 open)
+    Q-->>D: Healthy (grep 18BD /proc/net/tcp exits 0)
     N-->>D: Healthy (HTTP 7474 responsive)
     D->>B: Start backend (depends_on P, Q, N: service_healthy)
     Note over B: Starts uvicorn & initializes CDC triggers
@@ -137,10 +137,10 @@ To completely reset state, wipe all persistent database volumes, rebuild contain
 
 ```bash
 # 1. Stop all running containers and purge persistent volumes
-docker compose -f docker/docker-compose.yml down -v
+docker compose -f docker/docker-compose.yml --env-file docker/.env.docker down -v
 
 # 2. Build images from scratch without cache and start in detached mode
-docker compose -f docker/docker-compose.yml up -d --build
+docker compose -f docker/docker-compose.yml --env-file docker/.env.docker up -d --build
 
 # 3. Seed the freshly initialized database (5,000 items + 25 personas + Qdrant vectors)
 docker exec -it samanvay-ai-backend python scripts/seed_database.py
@@ -150,19 +150,19 @@ docker exec -it samanvay-ai-backend python scripts/seed_database.py
 
 ```bash
 # Start all standard services in the background
-docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml --env-file docker/.env.docker up -d
 
 # Start with Cloudflare Public Ingress Tunnel enabled
-docker compose -f docker/docker-compose.yml --profile tunnel up -d
+docker compose -f docker/docker-compose.yml --env-file docker/.env.docker --profile tunnel up -d
 
 # Start in distributed mode with dedicated CDC worker
-docker compose -f docker/docker-compose.yml --profile distributed up -d
+docker compose -f docker/docker-compose.yml --env-file docker/.env.docker --profile distributed up -d
 
 # Check live health status across all containers
 docker ps --filter "name=samanvay-ai" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 # Inspect live container logs
-docker compose -f docker/docker-compose.yml logs -f --tail=100
+docker compose -f docker/docker-compose.yml --env-file docker/.env.docker logs -f --tail=100
 
 # Inspect backend logs only
 docker logs -f samanvay-ai-backend

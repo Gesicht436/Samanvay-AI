@@ -17,14 +17,16 @@
 India's 7 major public sector oil, gas, and petrochemical enterprises (**OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL**) collectively hold over **₹15,000–18,000 Crore** in maintenance, repair, and overhaul (MRO) spare parts. Simultaneously, unplanned refinery shutdowns and emergency unit trips cost Indian Public Sector Undertakings (PSUs) **₹5–20 Crore per day**, largely driven by lengthy 6–18 month OEM procurement lead times.
 
 **Samanvay-AI** solves this systemic challenge through a sovereign, air-gapped, cross-CPSE mutual aid mesh. Without disrupting legacy ERP systems (SAP S/4HANA, Oracle ERP, Maximo), Samanvay-AI enables:
-1. **Intelligent MTC & Catalog Intake**: Sub-50ms vector PDF extraction and OCR parsing of EN 10204 3.1/3.2 Material Test Certificates.
+1. **Intelligent MTC & Catalog Intake**: Sub-50ms vector PDF extraction and OCR parsing of EN 10204 3.1/3.2 Material Test Certificates with direct catalog persistence (`POST /inventory/`).
 2. **Deterministic Physics & Safety Core**: 21 codified mechanical and metallurgical engineering standards (ASME, ASTM, API, TEMA, NACE, ISO) that maintain unilateral veto power over AI predictions.
 3. **Dynamic Tri-Tier Compatibility**: Runtime material parity evaluation relative to specific target specifications with zero static tier assumptions.
 4. **Multi-Property Engineering Discovery**: Detailed tolerance matching across nominal bore, pressure class, schedule, metallurgy, IIW weldability, sour service (NACE MR0175), facing ends, and valve trims.
-5. **Multi-Tenant Consignment Isolation & RBAC**: Strict consignment scoping (requesters see only their own demands and incoming depot requests; cross-tenant items are shielded) with locked organization badges and cryptographic segregation of duties.
-6. **25+ Pre-Seeded Evaluation Personas**: 1-Click login hub covering all 7 CPSEs, Central MoPNG Vigilance Auditor, and Super Admin.
-7. **Real-Time Logistics Topology & Star Graph**: Neo4j 5.20 knowledge graph modeling 19 CPSE refinery depots across India, road tortuosity ($1.28\times$), transit hours, and carbon footprint ($CO_2$) savings.
-8. **Sovereign Audit Ledger & CISF Pass**: Tamper-evident SHA-256 chained audit blocks with Merkle verification and 100% offline air-gapped SVG QR code gate passes.
+5. **Decoupled Matching & Ranking Architecture**: Dedicated `match_service.py` coordinating normalization, candidate filtering, rule evaluation, ML cross-scoring, and commercial privacy masking.
+6. **Multi-Tenant Consignment Isolation & RBAC**: Strict consignment scoping (requesters see only their own demands and incoming depot requests; cross-tenant items are shielded) with locked organization badges and cryptographic segregation of duties.
+7. **25+ Pre-Seeded Evaluation Personas**: 1-Click login hub covering all 7 CPSEs, Central MoPNG Vigilance Auditor, and Super Admin.
+8. **Real-Time Logistics Topology & Star Graph**: Neo4j 5.20 knowledge graph modeling 19 CPSE refinery depots across India, road tortuosity ($1.28\times$), transit hours, and carbon footprint ($CO_2$) savings.
+9. **Sovereign Audit Ledger & CISF Pass**: Tamper-evident SHA-256 chained audit blocks with Merkle verification, accessible modal dialogues, and 100% offline air-gapped SVG QR code gate passes.
+10. **Modern Industrial Command Center**: Next.js 16 App Router with React Server Components, staged parallel loading, 5-card KPI strip with HITL review pulse, and 6 role-tailored operational workspaces.
 
 For deep architectural specifications, see **[architecture.md](architecture.md)**.
 
@@ -43,7 +45,7 @@ Samanvay-AI/
 │   │   ├── core/                 # App Settings, Security, Hashing & Exceptions
 │   │   ├── models/               # SQLAlchemy 2.0 Database ORM Models
 │   │   ├── schemas/              # Pydantic Schemas & Transfer Objects
-│   │   └── services/             # Business Logic (Requisitions, Audit, CDC, Seeder)
+│   │   └── services/             # Business Logic (Requisitions, Matching, Audit, CDC, Seeder)
 ├── rules/                        # 21 Codified Mechanical Safety Standards Engine
 │   ├── asme/                     # ASME B16.5, B16.34, B16.11, B16.47, B16.48, B16.20
 │   ├── astm/                     # ASTM Metallurgy DAG, A193/A194 Fasteners, LME Cracking
@@ -82,7 +84,7 @@ Samanvay-AI/
 | **Security & Config** | [backend/app/core/README.md](backend/app/core/README.md) | Chained SHA-256 hashing, HMAC gate seals, Pydantic settings, custom exceptions |
 | **Relational Models** | [backend/app/models/README.md](backend/app/models/README.md) | PostgreSQL 16 schema: Inventory, Requisitions, Locks, Gate Passes, Audit, Outbox |
 | **Pydantic Schemas** | [backend/app/schemas/README.md](backend/app/schemas/README.md) | Data transfer contracts, Dynamic Compatibility Tiers, privacy filtering schemas |
-| **Core Services** | [backend/app/services/README.md](backend/app/services/README.md) | Pessimistic locking, audit chain verification, outbox CDC listeners, catalog seeder |
+| **Core Services** | [backend/app/services/README.md](backend/app/services/README.md) | Multi-stage matching, pessimistic locking, audit chain verification, outbox CDC listeners with advisory locking, catalog seeder |
 | **Rules Engine Root** | [rules/README.md](rules/README.md) | Master orchestrator, hard safety gate invariant, universal property scorecard |
 | **ASME Rules** | [rules/asme/README.md](rules/asme/README.md) | Pressure classes, flange facings, cast iron ear cracking, Series A/B, gaskets |
 | **ASTM Rules** | [rules/astm/README.md](rules/astm/README.md) | Metallurgy DAG, cryogenic brittle fracture, stud/nut pairing, Liquid Metal Embrittlement |
@@ -102,7 +104,7 @@ Samanvay-AI/
 | **Scripts & Workers** | [scripts/README.md](scripts/README.md) | Standalone CDC worker, database seeder, live API verification smoke test |
 | **Datasets Root** | [datasets/README.md](datasets/README.md) | Master inventory catalog (5,000 items), golden benchmarks, OCR payloads |
 | **Dataset Generators** | [datasets/generators/README.md](datasets/generators/README.md) | Procedural synthetic ERP generator with realistic dialect noise and 15% sparsity |
-| **Frontend Portal** | [frontend/README.md](frontend/README.md) | Next.js 16 App Router, React 19, zero-mock live API integration, light/dark mode |
+| **Frontend Portal** | [frontend/README.md](frontend/README.md) | Next.js 16 App Router, React Server Components, 6 role workspaces, interactive modals, zero-mock live API integration |
 | **Test Suite Root** | [tests/README.md](tests/README.md) | Test architecture, test running instructions, coverage reporting |
 | **API Tests** | [tests/api/README.md](tests/api/README.md) | FastAPI TestClient integration tests for all 6 router controllers |
 | **Integration Tests** | [tests/integration/README.md](tests/integration/README.md) | Parameterized validation against 150 ground-truth Golden Benchmarks |
@@ -210,13 +212,15 @@ Once running, open **`http://localhost:3000`** (or your live Cloudflare Tunnel U
   - `super_admin` (or `admin`): Ministry Super Admin &mdash; Global multi-tenant switcher.
 
 ### 2. Executive Command Center (`/dashboard`)
+- **Staged Loading & 5-Metric KPI Strip**: Real-time aggregate telemetry across 5 core indicators: Total Cataloged, Available Surplus, Locked Reserved, Allocated Capital, and an animated pulse indicator for items awaiting Human-In-The-Loop (HITL) engineering review.
+- **6 Role-Tailored Operational Workspaces**: Dynamically serves targeted operational consoles for Site Engineers, Materials Managers, Technical Authorities, CISF Officers, Vigilance Auditors, and Super Admins.
 - **Interactive Geo Radar**: Click on any refinery depot dot on the Indian subcontinent map (e.g., *Panipat*, *Uran*, *Visakh*) to inspect local inventory counts and unlocked capital in real time.
 - **Active Logistics Corridors**: Review active emergency consignments and pulse transit markers across National Highway corridors (NH-44, NH-16).
 - **Locked Organization Header**: Notice that non-admin officers have an un-editable locked badge showing their assigned CPSE and Depot (e.g., `[IOCL] Panipat Refinery Stores`). Only `admin` sees the global CPSE and Depot switcher.
 
 ### 3. Surplus Discovery & Multi-Property Specification Search (`/discover`)
 - **Multi-Property Specification Search**: Click **"Advanced Engineering Specification"** to expand the engineering drawer.
-- **Flexible Filter Ingestion**: Search by Nominal Bore (`size_nb_mm`), ASME Pressure Class, Pipe Schedule, ASTM Metallurgy, IIW Weldability class (`HIGH_WELDABILITY`, `STANDARD`, `NON_WELDABLE`), NACE MR0175 sour service wet $H_2S$ compliance, facing ends, and valve trims.
+- **Flexible Filter Ingestion**: Search by Nominal Bore (`size_nb_mm`), ASME Pressure Class, Pipe Schedule, ASTM Metallurgy, IIW Weldability class (`HIGH_WELDABILITY`, `STANDARD`, `NON_WELDABLE`), NACE MR0175 sour service wet $H_2S$ compliance, facing ends, valve trims, and transit radius limit (`max_distance_km`).
 - **Zero Static Tiers**: Neutral unsearched catalog view with dynamic tri-tier calculation upon search execution.
 - **Inspect Safety Rules**: Click **"Inspect Safety Rules"** on any candidate to inspect the **21-Rule Scorecard** evaluated against ASME B16.5, ASTM DAG, and API 600.
 - Click **"Compose Requisition"** to submit an inter-CPSE transfer request.
@@ -227,6 +231,7 @@ Once running, open **`http://localhost:3000`** (or your live Cloudflare Tunnel U
   - **"My Outgoing Requisitions"**: Requisitions created by the user for their plant. Shows "Awaiting Supplying Approval".
   - **"Incoming Depot Requests"**: Mutual-aid demands from sister CPSEs to draw surplus from this user's depot.
 - **Segregation of Duties Enforcement**: Requesters are blocked (`403 Forbidden`) from approving their own demands. Switch to the supplying CPSE Materials Manager (`stores_ongc`) to approve, and CISF Security (`cisf_ongc`) to generate the statutory gate pass.
+- **Interactive Accessible Modals**: Requisition rejection requires mandatory justification via a dedicated `<Modal>` dialog; CISF gate pass entry captures vehicle number, driver name, and carrier details before generating the seal.
 - Inspect the **Printable CISF Gate Pass** with self-contained SVG QR code and SHA-256 seal.
 
 ### 5. Smart Document Intake & MTC Review (`/upload`)
@@ -235,10 +240,12 @@ Once running, open **`http://localhost:3000`** (or your live Cloudflare Tunnel U
   - **Preset 2 (BHEL Trichy Cryogenic Valve)**: A350 LF2 body, $CE = 0.45\%$ triggers `PREHEAT_REQUIRED`, Charpy impact at $-46^\circ\text{C}$ verified.
   - **Preset 3 (Pennar F316L Flange)**: Marine duty stainless steel, computes $\text{PREN} = 25.02$.
   - **Preset 4 (Vendor X Smudged Scan - Out of Spec)**: Degraded scan, out-of-spec carbon ($0.38\% > 0.35\%$), $CE = 0.67\%$, routes to **HITL Triage Queue**.
+- **Direct Catalog Commit**: On `/upload/review`, clicking "Commit to Inventory" issues a live `POST /api/v1/inventory/` call that persists the parsed SKU into PostgreSQL and writes an immutable `CREATE_INVENTORY` block into the Sovereign Audit Ledger.
 
 ### 6. Sovereign Cryptographic Audit Trail (`/audit`)
 - Inspect chronological ledger blocks, parent hash links ($H_{i-1} \to H_i$), and consensus witness nodes.
 - Click **"Verify Merkle Chain"** to execute real-time anti-tamper integrity verification across all blocks.
+- Export statutory compliance records formatted in strict RFC 4180 CSV with cryptographic seal headers.
 
 ---
 

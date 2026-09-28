@@ -80,12 +80,12 @@ Coordinates the full requisition lifecycle with multi-tenant consignment isolati
 ---
 
 ### C. [`match.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/match.py) — Dynamic Compatibility & Safety Evaluation
-Implements the zero-mock multi-property compatibility and discovery pipeline.
+Thin HTTP controller delegating all multi-stage matching and ranking to [`backend/app/services/match_service.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/match_service.py).
 
 - **Endpoints:**
   - `POST /api/v1/match/search`:
+    - Accepts typed [`MatchRequest`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/schemas/material.py) with technical attributes: `size_nb_mm`, `pressure_class`, `pressure_rating_bar`, `schedule`, `metallurgy`, `facing_end`, `trim_no`, `port_bore`, `severe_cyclic`, `weldability_class`, `sour_service`, `oil_std_spec`, and `max_distance_km`.
     - Normalizes unstructured queries via [`DialectNormalizer`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/ml/ner/normalizer.py).
-    - Accepts multi-property specifications: `size_nb_mm`, `pressure_class`, `pressure_rating_bar`, `schedule`, `metallurgy`, `facing_end`, `trim_no`, `port_bore`, `severe_cyclic`, `weldability_class`, and `sour_service`.
     - Enforces the **IIW Carbon Equivalent Formula**:
       $$CE = C + \frac{Mn}{6} + \frac{Cr + Mo + V}{5} + \frac{Ni + Cu}{15}$$
       Capping high weldability at $CE \le 0.40$ and standard at $CE \le 0.43$.
@@ -94,14 +94,15 @@ Implements the zero-mock multi-property compatibility and discovery pipeline.
     - Computes continuous ML compatibility score:
       $$S(Q, C) = 0.70 \cdot S_{\text{rules}} + 0.30 \cdot S_{\text{ML}}$$
     - Applies **Indian Cross-Standard Equivalence Bonus** (BIS/IS $\leftrightarrow$ ASTM/ASME/API) and **Make in India (PPP-MII)** $+3\%$ soft scoring boost for Class-I suppliers ($\ge 50\%$ local content).
-    - **Invariant #1 (Zero Static Tiers):** Any zero-tolerance rule violation forces an unoverrideable **Tier 3** verdict and caps score at $\le 74\%$.
-    - **Attribute-Level Privacy:** Proprietary unit purchase costs (`unit_cost_inr`, `total_value_inr`) are stripped for cross-CPSE candidates.
+    - **Invariant #1 (Hard Safety Gate):** Critical rule violations trigger an immediate zero score ($0.0$) and Tier 3 safety rejection.
+    - **Attribute-Level Privacy:** Proprietary unit purchase costs (`unit_cost_inr`, `total_value_inr`, `po_no`) are stripped for cross-CPSE candidates.
+    - Returns structured [`MatchSearchResponse`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/schemas/material.py) containing candidates, rule breakdowns, and logistics metrics.
   - `GET /api/v1/match/benchmark`: Evaluates all 150 Golden Benchmark paired cases in `datasets/golden_benchmarks.json`, validating 100% zero-tolerance precision (zero hazardous false positives).
 
 ---
 
 ### D. [`inventory.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/inventory.py) — Master Stock & Surplus Radar
-Provides full catalog visibility, surplus tracking, and status transitions.
+Provides full catalog visibility, surplus tracking, direct item creation, and status transitions.
 
 - **Endpoints:**
   - `GET /api/v1/inventory/`: Paginated catalog browsing with multi-field filtering (`cpse`, `depot`, `status`, `item_type`). Strips sensitive purchase prices for cross-CPSE callers.
@@ -109,7 +110,7 @@ Provides full catalog visibility, surplus tracking, and status transitions.
   - `GET /api/v1/inventory/surplus`: Pre-Purchase Radar endpoint returning items declared as surplus across all CPSEs.
   - `GET /api/v1/inventory/hitl-queue`: Fetches parts requiring Human-In-The-Loop engineering triage (stained/unreadable MTCs or $>90$ days idle).
   - `GET /api/v1/inventory/{sku_code}`: Detailed SKU view including Indian standards (IS 14846, IS 1239, IS 2062), OIL MESC material code, GeM product ID, CPPP tender ref, and Make-in-India percentage.
-  - `POST /api/v1/inventory/`: Creates new inventory item and appends a cryptographically sealed `CREATE_INVENTORY` audit entry.
+  - `POST /api/v1/inventory/`: Creates a new inventory item in PostgreSQL (used by direct MTC ingestion reviews and manual catalog entries) and immediately appends a cryptographically sealed `CREATE_INVENTORY` block to [`SovereignAuditLedger`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L182-L200).
   - `PUT /api/v1/inventory/{sku_code}/status`: Transitions inventory lifecycle status (`TO_BE_CONSUMED`, `IN_STORAGE`, `IDLE_SURPLUS`, `CONSUMED`) with audit ledger anchoring. Supports `Idempotency-Key` header.
 
 ---

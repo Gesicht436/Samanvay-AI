@@ -237,8 +237,9 @@ backend/
     └── services/               # [services/README.md](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/README.md) Transactional business logic
         ├── requisition_service.py # Row locks, multi-tenant scoped consignments, SoD checks
         ├── inventory_service.py   # Catalog queries, surplus radar, privacy stripping
+        ├── match_service.py       # Decoupled matching pipeline: candidate retrieval, 21 safety rules, ML scoring
         ├── audit_service.py       # SHA-256 block creation, chain verification, CSV export
-        ├── cdc_manager.py         # PostgreSQL triggers + LISTEN/NOTIFY -> Neo4j sync worker
+        ├── cdc_manager.py         # PostgreSQL triggers + advisory locking + LISTEN/NOTIFY -> Neo4j sync worker
         └── seeder.py              # 5,000-item inventory seeder & 25-user persona seeder
 ```
 
@@ -248,11 +249,9 @@ backend/
 
 ### Local Development:
 ```bash
-# 1. Activate Python virtual environment
-.venv\Scripts\activate
-
-# 2. Start Uvicorn ASGI server on port 8000
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+# 1. Activate Python virtual environment or use uv directly
+# Run Uvicorn ASGI server on port 8000 with auto-reload
+uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### Verification & Documentation Endpoints:
@@ -264,11 +263,11 @@ uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ### Running the Test Suite:
 ```bash
 # Run unit and API router tests
-pytest tests/api/ -v
+uv run pytest tests/api/ -v
 
 # Run deterministic engineering tolerance test suite
-pytest tests/rules/ -v
+uv run pytest tests/rules/ -v
 
 # Run full integration tests with active database
-pytest tests/integration/ -v
+uv run pytest tests/ -q
 ```

@@ -122,6 +122,22 @@ The Surplus Discovery interface pairs dense vector search with a multi-property 
 
 ---
 
+### G. Server Components, Staged Loading & Role Workspaces
+
+- **Zero-Client Landing Portal:** The root landing page (`/`, [page.tsx](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/frontend/src/app/page.tsx)) is compiled as a pure React Server Component (RSC) without client JavaScript overhead. Dynamic authentication state is isolated to the leaf component [LandingAuthCTA.tsx](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/frontend/src/components/LandingAuthCTA.tsx).
+- **Staged Dashboard Parallel Fetching:** The operational dashboard (`/dashboard`) performs fault-tolerant parallel data loading (`Promise.allSettled`) across inventory statistics, active consignments, audit chains, and CPSE footprints.
+- **5-Metric Executive KPI Strip:** [KpiStrip.tsx](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/frontend/src/components/dashboard/KpiStrip.tsx) visualizes Cataloged Items, Available Surplus, Locked Reserved, Allocated Value, and an animated pulse indicator for Human-In-The-Loop (HITL) pending reviews.
+- **Role-Tailored Operational Workspaces:** The dashboard dynamically switches between six specialized workspaces based on authenticated persona:
+  1. `SiteEngineerWorkspace`: Quick radar discovery shortcuts and active outgoing requisitions.
+  2. `MaterialsManagerWorkspace`: Prioritized HITL review queue, high-value surplus items, and stock movement actions.
+  3. `TechnicalAuthorityWorkspace`: MTC compliance metrics, carbon equivalent analysis ($CE_{\text{IIW}}$), and standard specifications.
+  4. `CisfWorkspace`: Non-returnable gate pass management, driver credentials, and in-transit dispatch tracking.
+  5. `VigilanceAuditorWorkspace`: Real-time cryptographic SHA-256 chain verification, anomalous allocations, and CSV export.
+  6. `SuperAdminWorkspace`: Pan-CPSE allocation distribution, depot balance overview, and user access control.
+- **Accessible Interactive Dialogs:** Replaced all browser-native popups (`alert`, `prompt`) with accessible `<Modal>` components for rejection reasons and CISF logistics data entry (vehicle number, driver name, contact info).
+
+---
+
 ## 2. Directory Layout
 
 ```
@@ -134,15 +150,17 @@ frontend/
     ├── app/                  # Next.js App Router
     │   ├── globals.css       # Tailwind CSS v4 directives & utility classes
     │   ├── layout.tsx        # Master root layout with ThemeProvider & AppShell
-    │   ├── page.tsx          # Public Landing Portal & High-Level System Overview
-    │   ├── dashboard/        # Operational Command Center: live KPIs, footprint, audit stream
+    │   ├── loading.tsx       # Global root loading skeleton boundary
+    │   ├── error.tsx         # Global fault-tolerant error boundary
+    │   ├── page.tsx          # Public Landing Portal (React Server Component)
+    │   ├── dashboard/        # Operational Command Center: KpiStrip, role workspaces
     │   ├── inventory/        # Stock Ledger: 5,000 items, server pagination, filters, HITL review
     │   ├── discover/         # Surplus Discovery: Multi-property radar, 21-rule breakdown, orders
-    │   ├── requests/         # Consignments Hub: persona-scoped tabs, lifecycle actions
+    │   ├── requests/         # Consignments Hub: persona-scoped tabs, interactive modals
     │   │   └── [id]/         # Consignment Detail: milestone stepper, CISF gate pass & QR code
     │   ├── audit/            # Sovereign Audit Trail: SHA-256 chain verification & CSV export
     │   ├── upload/           # Document Intake: PyMuPDF / PaddleOCR intake list
-    │   │   └── review/       # MTC Inspection: chemical breakdown, CE_IIW calculation, weldability
+    │   │   └── review/       # MTC Inspection: chemical breakdown, CE_IIW calculation, direct POST
     │   ├── login/            # 1-Click Evaluation Hub (25+ personas across 7 CPSEs)
     │   ├── signup/           # CPSE Officer Registration & immediate JWT issuance
     │   └── admin/            # Multi-Tenant Administration & user approval
@@ -152,10 +170,20 @@ frontend/
     │   ├── CommandPalette.tsx# Global keyboard shortcut palette (⌘K)
     │   ├── ProtectedRoute.tsx# Role-based route guard redirecting unauthenticated sessions
     │   ├── PublicNavbar.tsx  # Minimal top navigation for landing and authentication pages
+    │   ├── LandingAuthCTA.tsx# Client auth CTA buttons for RSC landing page
     │   ├── QRCodeSVG.tsx     # Air-gapped SVG QR code renderer for CISF gate passes
     │   ├── UserHeaderBadge.tsx # Locked tenant badge for non-superadmins
     │   ├── ThemeProvider.tsx # Light/Dark theme context (defaults to Light Mode)
-    │   └── ui/               # Card, KpiCard, StatusBadge, SideDrawer, Skeleton primitives
+    │   ├── dashboard/        # Dashboard modular components
+    │   │   ├── KpiStrip.tsx  # 5-card metric strip with HITL review pulse indicator
+    │   │   └── workspaces/   # Persona-specific command workspaces
+    │   │       ├── SiteEngineerWorkspace.tsx
+    │   │       ├── MaterialsManagerWorkspace.tsx
+    │   │       ├── TechnicalAuthorityWorkspace.tsx
+    │   │       ├── CisfWorkspace.tsx
+    │   │       ├── VigilanceAuditorWorkspace.tsx
+    │   │       └── SuperAdminWorkspace.tsx
+    │   └── ui/               # Modal, Card, KpiCard, StatusBadge, SideDrawer, Skeleton primitives
     ├── context/
     │   └── AuthContext.tsx   # Authentication context, JWT storage, seed persona injection
     └── lib/
@@ -172,15 +200,15 @@ frontend/
 
 | Route | View Name | Backend API Endpoints | Functionality |
 |---|---|---|---|
-| `/` | **Landing Portal** | Static | Public introduction, high-level architecture overview, and CTA buttons to login and registration. |
-| `/dashboard` | **Command Center** | `GET /inventory/stats`<br>`GET /requisition/`<br>`GET /audit/?limit=5`<br>`GET /audit/verify` | Real-time aggregate KPIs (cataloged SKUs, surplus capital, HITL queue count), active requisitions table, cross-CPSE inventory footprint progress bars, and latest SHA-256 audit blocks. |
+| `/` | **Landing Portal** | Static | Pure React Server Component (RSC) landing page with zero client bundle overhead; authentication buttons delegated to client leaf `LandingAuthCTA.tsx`. |
+| `/dashboard` | **Command Center** | `GET /inventory/stats`<br>`GET /requisition/`<br>`GET /audit/?limit=5`<br>`GET /audit/verify` | Staged parallel loading (`Promise.allSettled`) with 5-card `KpiStrip` (Cataloged Items, Surplus, Reserved, Value, HITL review pulse) and 6 persona-tailored operational workspace views. |
 | `/inventory` | **Stock Ledger** | `GET /inventory?skip=..&limit=25`<br>`GET /inventory/hitl-queue`<br>`PUT /inventory/{sku}/status` | Server-paginated table across 5,000 catalog items. Filters by CPSE, category, status, and dialect text search. Includes technical specification modal (BIS IS standards, OIL MESC codes, GeM IDs, MII %) and status transition actions (`Broadcast`, `Retract`). |
 | `/discover` | **Surplus Discovery** | `GET /graph/discover`<br>`POST /match/search`<br>`POST /requisition/` | Multi-property Pre-Purchase Radar querying sister CPSE surplus with 21-rule engineering tolerance, continuous ML score, road transit distance, and inline requisition submission modal. |
-| `/requests` | **Consignments Hub** | `GET /requisition/`<br>`PUT /requisition/{id}/approve`<br>`POST /requisition/{id}/gatepass`<br>`PUT /requisition/{id}/dispatch`<br>`PUT /requisition/{id}/deliver` | Persona-scoped mutual-aid transfer order management with live workflow actions (Approve $\rightarrow$ Issue Gate Pass $\rightarrow$ Dispatch $\rightarrow$ Confirm Receipt). |
+| `/requests` | **Consignments Hub** | `GET /requisition/`<br>`PUT /requisition/{id}/approve`<br>`PUT /requisition/{id}/reject`<br>`POST /requisition/{id}/gatepass`<br>`PUT /requisition/{id}/dispatch`<br>`PUT /requisition/{id}/deliver` | Persona-scoped mutual-aid transfer order management with live workflow actions and accessible `<Modal>` dialogs for rejection reason input and CISF gate pass logistics (vehicle, driver). |
 | `/requests/[id]` | **Requisition Detail** | `GET /requisition/{id}` | Detailed requisition parameters, 5-stage lifecycle milestone stepper, CISF non-returnable gate pass, and offline air-gapped SVG QR code. |
 | `/audit` | **Audit Trail** | `GET /audit/`<br>`GET /audit/verify`<br>`GET /audit/export-csv` | Sovereign SHA-256 Merkle chain verification, CSV export for audit authorities, category/CPSE filters, and block transaction payload inspector. |
 | `/upload` | **Document Intake** | `POST /ingest/document`<br>`GET /ingest/documents` | Upload PDF or image Material Test Certificates (MTCs), delivery challans, and invoices for dual-path OCR parsing. Displays recent intake ledger. |
-| `/upload/review` | **MTC Inspection** | `sessionStorage`<br>`POST /inventory/` | Visual chemical analysis breakdown ($\%C, \%Mn, \%Si, \%P, \%S$), IIW Carbon Equivalent ($CE_{\text{IIW}}$) calculation, weldability classification, and direct commit to ledger. |
+| `/upload/review` | **MTC Inspection** | `sessionStorage`<br>`POST /inventory/` | Visual chemical analysis breakdown ($\%C, \%Mn, \%Si, \%P, \%S$), IIW Carbon Equivalent ($CE_{\text{IIW}}$) calculation, weldability classification, and direct SKU creation into PostgreSQL ledger via `POST /inventory/`. |
 | `/login` | **1-Click Eval Hub** | `GET /auth/seed-users`<br>`POST /auth/login` | 25+ seed personas across 7 CPSEs + Central Ministry, one-click authentication, and manual credential sign-in. |
 | `/signup` | **Officer Registration** | `POST /auth/signup` | Self-service registration for CPSE engineers and stores superintendents with immediate JWT Bearer issuance. |
 | `/admin/users` | **User Approvals** | `GET /admin/users`<br>`PUT /admin/users/{id}/approve` | Administrative console for Super Admin to review pending user accounts and manage permissions. |
