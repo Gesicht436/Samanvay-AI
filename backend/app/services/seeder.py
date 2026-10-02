@@ -163,10 +163,18 @@ def seed_database_if_empty():
 def seed_users_if_empty(db=None):
     """
     Ensures all 23 default seed persona accounts across 7 CPSEs exist in the PostgreSQL users table.
+
+    Development/test only. AUTH-006 forbids exposing seed credentials in production;
+    startup seeding must not create/reactivate/re-approve accounts there.
     """
+    from backend.app.core.config import settings
     from backend.app.models.tables import User
     from backend.app.core.security import get_password_hash
     from backend.app.schemas.auth import SEED_USERS, DEFAULT_SEED_PASSWORD
+
+    if settings.is_production:
+        logger.info("Seed user provisioning skipped: production deployment.")
+        return
 
     close_db = False
     if db is None:

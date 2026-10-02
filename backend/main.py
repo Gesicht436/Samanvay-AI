@@ -71,12 +71,11 @@ app = FastAPI(
 )
 
 # ── CORS Middleware ────────────────────────────────────────────────────────
+# Cookie-authenticated requests require an explicit Origin allowlist plus
+# credentials. Origins come from configuration only (never from Host headers).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

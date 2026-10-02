@@ -1,7 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, Any
-from backend.app.api.dependencies import get_db_session, verify_cpse_access, PaginationParams, InventoryFilterParams, validate_idempotency_key, require_roles
+from backend.app.api.dependencies import (
+    get_current_user,
+    get_db_session,
+    InventoryFilterParams,
+    PaginationParams,
+    require_csrf,
+    require_permission,
+    validate_idempotency_key,
+    verify_cpse_access,
+)
+from backend.app.core import permissions as perm
 from backend.app.models.tables import User
 from backend.app.services.inventory_service import (
     list_inventory,
@@ -36,7 +46,10 @@ def get_surplus_items(cpse: str = Depends(verify_cpse_access), db: Session = Dep
     return get_surplus_radar(db, cpse)
 
 @router.get("/hitl-queue")
-def get_hitl_items(db: Session = Depends(get_db_session)):
+def get_hitl_items(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
     return get_hitl_queue(db)
 
 @router.get("/{sku_code}")
@@ -45,7 +58,12 @@ def get_inventory_item(sku_code: str, cpse: str = Depends(verify_cpse_access), d
 
 @router.post("")
 @router.post("/")
-def create_inventory_item(payload: Dict[str, Any], db: Session = Depends(get_db_session)):
+def create_inventory_item(
+    payload: Dict[str, Any],
+    current_user: User = Depends(require_permission(perm.INVENTORY_CREATE)),
+    _csrf: User = Depends(require_csrf),
+    db: Session = Depends(get_db_session),
+):
     return create_item(db, payload)
 
 @router.put("/{sku_code}/status")

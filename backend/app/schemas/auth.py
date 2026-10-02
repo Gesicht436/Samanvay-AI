@@ -21,14 +21,27 @@ class UserLogin(BaseModel):
     password: str = Field(..., description="Plain-text password")
 
 
-class UserSignup(BaseModel):
+class UserProvisionRequest(BaseModel):
+    """SUPER_ADMIN account provisioning payload (AUTH-006 Account Provisioning).
+
+    The role/CPSE/depot are assigned through the authorized server-side
+    operation; client-supplied values never establish authorization.
+    No session is created for a provisioned account until it is approved.
+    """
+
     username: str = Field(..., min_length=3, max_length=50, description="Unique username identifier")
-    password: str = Field(..., min_length=6, description="Plain-text password")
+    password: str = Field(..., min_length=8, description="Plain-text password")
     full_name: str = Field(..., min_length=2, max_length=100, description="Full name of personnel")
     email: EmailStr = Field(..., description="Official CPSE email address")
     role: UserRole = Field(..., description="Assigned sovereign functional role")
     cpse: str = Field(..., description="CPSE organization code (OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL)")
     depot_id: str = Field(..., description="Assigned depot code (e.g. DEPOT-OIL-DLJ)")
+
+
+class CsrfTokenResponse(BaseModel):
+    """Session-bound CSRF token response (AUTH-006 Section 4). Never persisted."""
+
+    csrf_token: str
 
 
 
@@ -44,20 +57,6 @@ class UserResponse(BaseModel):
     is_approved: bool
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserResponse
-
-
-class TokenPayload(BaseModel):
-    sub: str  # username
-    role: str
-    cpse: str
-    depot_id: str
-    exp: Optional[int] = None
 
 
 class SeedUserInfo(BaseModel):
