@@ -1,52 +1,48 @@
+"""
+Graph Schema Definitions for Samanvay-AI Neo4j Knowledge Graph.
+
+Architecture conforms to the Dataset 1 Unified Structure:
+(:Item)
+   ↓ HAS_ITEM_TYPE
+(:ItemType)
+   ↓ HAS_ITEM
+(:InventoryItem)
+   ├── HAS_STOCK_INFO ──→ (:StockInfo)
+   ├── STORED_AT ───────→ (:Location) ──IN_STATE──→ (:State)
+   ├── ORDERED_BY ──────→ (:PurchaseOrder) ──PART_OF_TENDER──→ (:CPPPTender)
+   ├── OPERATED_BY ─────→ (:CPSE)
+   └── HAS_SPECIFICATION → (:MaterialSpecification)
+"""
+
 from enum import Enum
 
+
 class NodeTypes(str, Enum):
-    CPSE = "CPSE"
-    DEPOT = "Depot"
+    ITEM = "Item"
+    ITEM_TYPE = "ItemType"
     INVENTORY_ITEM = "InventoryItem"
-    CANONICAL_MATERIAL = "CanonicalMaterial"
-    SIZE = "Size"
-    PRESSURE_CLASS = "PressureClass"
-    PRESSURE_RATING = "PressureRating"
-    MATERIAL_GRADE = "MaterialGrade"
-    PIPE_SCHEDULE = "PipeSchedule"
-    FLANGE_FACING = "FlangeFacing"
-    END_CONNECTION = "EndConnection"
-    VALVE_TRIM = "ValveTrim"
-    PORT_BORE = "PortBore"
-    FIRE_SAFE_RATING = "FireSafeRating"
-    VALVE_OPERATOR = "ValveOperator"
-    PIPE_MFG_METHOD = "PipeMfgMethod"
-    END_PREP = "EndPrep"
-    PIPE_COATING = "PipeCoating"
-    GEM_CATEGORY = "GeMCategory"
-    UNSPSC_COMMODITY = "UNSPSCCommodity"
+    STOCK_INFO = "StockInfo"
+    LOCATION = "Location"
+    STATE = "State"
+    PURCHASE_ORDER = "PurchaseOrder"
+    CPPP_TENDER = "CPPPTender"
+    CPSE = "CPSE"
+    MATERIAL_SPECIFICATION = "MaterialSpecification"
+
 
 class RelTypes(str, Enum):
-    OPERATES = "OPERATES"
-    HOLDS = "HOLDS"
-    HAS_SIZE = "HAS_SIZE"
-    HAS_PRESSURE_CLASS = "HAS_PRESSURE_CLASS"
-    HAS_BODY_METALLURGY = "HAS_BODY_METALLURGY"
-    HAS_TRIM = "HAS_TRIM"
-    HAS_PORT_BORE = "HAS_PORT_BORE"
-    HAS_FACING = "HAS_FACING"
-    HAS_END_CONNECTION = "HAS_END_CONNECTION"
-    HAS_FIRE_SAFE_RATING = "HAS_FIRE_SAFE_RATING"
-    HAS_OPERATOR = "HAS_OPERATOR"
-    HAS_SCHEDULE = "HAS_SCHEDULE"
-    HAS_PRESSURE_RATING = "HAS_PRESSURE_RATING"
-    HAS_MANUFACTURING_METHOD = "HAS_MANUFACTURING_METHOD"
-    HAS_END_PREP = "HAS_END_PREP"
-    HAS_COATING = "HAS_COATING"
-    STANDARDIZED_AS = "STANDARDIZED_AS"
-    CLASSIFIED_UNDER = "CLASSIFIED_UNDER"
-    MAPPED_TO = "MAPPED_TO"
+    HAS_ITEM_TYPE = "HAS_ITEM_TYPE"
+    HAS_ITEM = "HAS_ITEM"
+    HAS_STOCK_INFO = "HAS_STOCK_INFO"
+    STORED_AT = "STORED_AT"
+    IN_STATE = "IN_STATE"
+    ORDERED_BY = "ORDERED_BY"
+    PART_OF_TENDER = "PART_OF_TENDER"
+    OPERATED_BY = "OPERATED_BY"
+    HAS_SPECIFICATION = "HAS_SPECIFICATION"
+
 
 class CompatEdges(str, Enum):
     EXACT_MATCH = "EXACT_MATCH"
     SAFE_UPGRADE_FOR = "SAFE_UPGRADE_FOR"
-    ALLOY_UPGRADE_FOR = "ALLOY_UPGRADE_FOR"
-    TRIM_UPGRADE_FOR = "TRIM_UPGRADE_FOR"
-    PORT_UPGRADE_FOR = "PORT_UPGRADE_FOR"
     COMPATIBLE_WITH = "COMPATIBLE_WITH"

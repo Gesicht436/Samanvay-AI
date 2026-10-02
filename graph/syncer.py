@@ -1,337 +1,298 @@
 """
-Samanvay-AI Neo4j Graph Synchronization Engine.
+Neo4j Graph Synchronization Engine for Samanvay-AI.
 
-Translates PostgreSQL relational change events into Cypher property graph updates
-in real-time, maintaining the Sovereign Multi-CPSE Star Graph and transit corridors.
+Provides real-time transactional synchronization (CDC) and manual property updates
+conforming to the unified Dataset 1 Knowledge Graph structure:
+(:Item) -> [:HAS_ITEM_TYPE] -> (:ItemType) -> [:HAS_ITEM] -> (:InventoryItem)
+    ├── [:HAS_STOCK_INFO]   -> (:StockInfo)
+    ├── [:STORED_AT]        -> (:Location) -> [:IN_STATE] -> (:State)
+    ├── [:ORDERED_BY]       -> (:PurchaseOrder) -> [:PART_OF_TENDER] -> (:CPPPTender)
+    ├── [:OPERATED_BY]      -> (:CPSE)
+    └── [:HAS_SPECIFICATION]-> (:MaterialSpecification)
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
+import os
+from typing import Any, Dict, List, Optional
 
 from neo4j import GraphDatabase
-from graph.logistics import DEPOT_COORDINATES
 
-logger = logging.getLogger("samanvay.graph_syncer")
+from graph.seed_graph import extract_item_type
+
+logger = logging.getLogger("samanvay.graph.syncer")
+
+
+def _get_neo4j_config() -> tuple[str, str, str]:
+    uri = None
+    user = None
+    password = None
+
+    try:
+        from backend.app.core.config import settings
+        uri = getattr(settings, "neo4j_uri", None) or getattr(settings, "NEO4J_URI", None)
+        user = getattr(settings, "neo4j_user", None) or getattr(settings, "NEO4J_USER", None)
+        password = getattr(settings, "neo4j_password", None) or getattr(settings, "NEO4J_PASSWORD", None)
+    except Exception:
+        pass
+
+    if not uri:
+        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    if not user:
+        user = os.getenv("NEO4J_USER", "neo4j")
+    if not password:
+        password = os.getenv("NEO4J_PASSWORD", "samanvay_graph")
+
+    return str(uri), str(user), str(password)
 
 
 class Neo4jSyncer:
-    def __init__(self, uri: Optional[str] = None, user: Optional[str] = None, password: Optional[str] = None):
-        if not uri:
-            try:
-                from backend.app.core.config import settings
-                self.uri = settings.neo4j_uri
-                self.user = settings.neo4j_user
-                self.password = settings.neo4j_password
-            except Exception:
-                self.uri = "bolt://localhost:7687"
-                self.user = "neo4j"
-                self.password = "samanvay_graph"
-        else:
-            self.uri = uri
-            self.user = user or "neo4j"
-            self.password = password or "samanvay_graph"
+    """Synchronizes relational database transactions (CDC) and manual updates into Neo4j."""
 
+    def __init__(self, uri: Optional[str] = None, user: Optional[str] = None, password: Optional[str] = None):
+        c_uri, c_user, c_pwd = _get_neo4j_config()
+        self.uri = uri or c_uri
+        self.user = user or c_user
+        self.password = password or c_pwd
         self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
-        self.ensure_constraints()
 
     def close(self):
         if self.driver:
             self.driver.close()
 
-    def ensure_constraints(self):
-        """Creates unique property constraints and indexes on nodes."""
-        constraints = [
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (c:CPSE) REQUIRE c.name IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (d:Depot) REQUIRE d.id IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (i:InventoryItem) REQUIRE i.sku IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (s:Size) REQUIRE s.value IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (p:PressureClass) REQUIRE p.value IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (m:MaterialGrade) REQUIRE m.value IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (r:Requisition) REQUIRE r.id IS UNIQUE",
-        ]
-        with self.driver.session() as session:
-            for query in constraints:
-                try:
-                    session.run(query)
-                except Exception as e:
-                    logger.debug(f"Constraint notice ({query}): {e}")
+    # ---------------------------------------------------------
+    # 1. Update Existing Item & Stock Info
+    # ---------------------------------------------------------
+    def update_item(
+        self,
+        sku_code: str,
+        quantity: Optional[int] = None,
+        unit_cost_inr: Optional[float] = None,
+        days_idle: Optional[int] = None,
+        heat_no: Optional[str] = None,
+        nominal_bore_mm: Optional[float] = None,
+        pressure_rating_bar: Optional[float] = None,
+        make_in_india_class: Optional[str] = None,
+        local_content_percentage: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Updates specific attributes of an existing InventoryItem and its StockInfo node."""
+        query = """
+        MATCH (item:InventoryItem {sku_code: $sku_code})
+        OPTIONAL MATCH (item)-[:HAS_STOCK_INFO]->(stock:StockInfo)
 
-    def sync_inventory_item(self, item: Dict[str, Any]):
-        """Synchronizes a single inventory item into Neo4j graph nodes and relationships."""
-        sku_code = item.get("sku_code")
-        if not sku_code:
-            return
+        SET item.heat_no = CASE WHEN $heat_no IS NOT NULL THEN $heat_no ELSE item.heat_no END,
+            item.nominal_bore_mm = CASE WHEN $nominal_bore_mm IS NOT NULL THEN $nominal_bore_mm ELSE item.nominal_bore_mm END,
+            item.pressure_rating_bar = CASE WHEN $pressure_rating_bar IS NOT NULL THEN $pressure_rating_bar ELSE item.pressure_rating_bar END,
+            item.make_in_india_class = CASE WHEN $make_in_india_class IS NOT NULL THEN $make_in_india_class ELSE item.make_in_india_class END,
+            item.local_content_percentage = CASE WHEN $local_content_percentage IS NOT NULL THEN $local_content_percentage ELSE item.local_content_percentage END
 
-        cpse = (item.get("cpse") or "IOCL").upper()
-        depot_id = item.get("depot_id") or f"{cpse}_DEPOT"
-        depot_loc = item.get("depot_location") or depot_id
+        SET stock.quantity = CASE WHEN $quantity IS NOT NULL THEN $quantity ELSE stock.quantity END,
+            stock.unit_cost_inr = CASE WHEN $unit_cost_inr IS NOT NULL THEN $unit_cost_inr ELSE stock.unit_cost_inr END,
+            stock.days_idle = CASE WHEN $days_idle IS NOT NULL THEN $days_idle ELSE stock.days_idle END
 
-        # Lookup coordinates
-        matched_coord = None
-        for name, coord in DEPOT_COORDINATES.items():
-            if name.lower() in depot_loc.lower() or name.lower() in depot_id.lower():
-                matched_coord = coord
-                break
-        if not matched_coord:
-            matched_coord = (22.3217, 73.1384)
-
-        lat, lon = matched_coord
-
-        item_type = item.get("item_type") or "EQUIPMENT"
-        size_val = None
-        if item.get("size_nb_mm"):
-            size_val = f"{float(item['size_nb_mm'])} mm"
-
-        pressure_class_val = None
-        if item.get("pressure_class"):
-            pressure_class_val = f"{item['pressure_class']}#"
-
-        metallurgy_val = item.get("metallurgy")
-        facing_val = item.get("facing_end")
-        qty = int(item.get("quantity") or 0)
-        days_idle = int(item.get("days_idle") or 0)
-        unit_cost = float(item.get("unit_cost_inr") or 0.0)
-        total_val = float(item.get("total_value_inr") or (qty * unit_cost))
-        status = item.get("status") or "TO_BE_CONSUMED"
-        desc = item.get("description") or ""
-
-        cypher = """
-        // 1. CPSE and Depot
-        MERGE (c:CPSE {name: $cpse})
-        MERGE (d:Depot {id: $depot_id})
-        ON CREATE SET d.name = $depot_loc, d.lat = $lat, d.lon = $lon
-        ON MATCH SET d.name = $depot_loc, d.lat = $lat, d.lon = $lon
-        MERGE (c)-[:OPERATES]->(d)
-
-        // 2. Inventory Item
-        MERGE (i:InventoryItem {sku: $sku_code})
-        SET i.description = $desc,
-            i.item_type = $item_type,
-            i.qty = $qty,
-            i.days_idle = $days_idle,
-            i.status = $status,
-            i.unit_cost_inr = $unit_cost,
-            i.total_value_inr = $total_val,
-            i.is_broadcasted_surplus = $is_broadcast,
-            i.updated_at = datetime()
-
-        // 3. Depot Holds Item & Item belongs to CPSE
-        MERGE (d)-[:HOLDS]->(i)
-        MERGE (i)-[:BELONGS_TO_CPSE]->(c)
-
-        WITH i
-        // 4. Property Star Relationships
-        FOREACH (_ IN CASE WHEN $size_val IS NOT NULL THEN [1] ELSE [] END |
-            MERGE (sz:Size {value: $size_val})
-            MERGE (i)-[:HAS_SIZE]->(sz)
-        )
-        FOREACH (_ IN CASE WHEN $pressure_class_val IS NOT NULL THEN [1] ELSE [] END |
-            MERGE (pc:PressureClass {value: $pressure_class_val})
-            MERGE (i)-[:HAS_PRESSURE_CLASS]->(pc)
-        )
-        FOREACH (_ IN CASE WHEN $metallurgy_val IS NOT NULL THEN [1] ELSE [] END |
-            MERGE (mg:MaterialGrade {value: $metallurgy_val})
-            MERGE (i)-[:HAS_BODY_METALLURGY]->(mg)
-        )
+        RETURN properties(item) AS item, properties(stock) AS stock
         """
 
+        params = {
+            "sku_code": sku_code,
+            "quantity": quantity,
+            "unit_cost_inr": unit_cost_inr,
+            "days_idle": days_idle,
+            "heat_no": heat_no,
+            "nominal_bore_mm": nominal_bore_mm,
+            "pressure_rating_bar": pressure_rating_bar,
+            "make_in_india_class": make_in_india_class,
+            "local_content_percentage": local_content_percentage,
+        }
+
         with self.driver.session() as session:
-            session.run(
-                cypher,
-                cpse=cpse,
-                depot_id=depot_id,
-                depot_loc=depot_loc,
-                lat=lat,
-                lon=lon,
-                sku_code=sku_code,
-                desc=desc,
-                item_type=item_type,
-                qty=qty,
-                days_idle=days_idle,
-                status=status,
-                unit_cost=unit_cost,
-                total_val=total_val,
-                is_broadcast=bool(item.get("is_broadcasted_surplus")),
-                size_val=size_val,
-                pressure_class_val=pressure_class_val,
-                metallurgy_val=metallurgy_val,
-            )
+            result = session.run(query, params)
+            rec = result.single()
+            if rec is None:
+                raise ValueError(f"InventoryItem with SKU '{sku_code}' not found.")
+            return dict(rec)
 
-    def batch_sync_inventory(self, items: List[Dict[str, Any]], batch_size: int = 500):
-        """High-throughput bulk ingestion using UNWIND Cypher batching."""
-        for i in range(0, len(items), batch_size):
-            chunk = items[i : i + batch_size]
-            prepared = []
-            for item in chunk:
-                sku_code = item.get("sku_code")
-                if not sku_code:
-                    continue
-                cpse = (item.get("cpse") or "IOCL").upper()
-                depot_id = item.get("depot_id") or f"{cpse}_DEPOT"
-                depot_loc = item.get("depot_location") or depot_id
+    # ---------------------------------------------------------
+    # 2. Batch Sync Inventory (used by CDC Manager)
+    # ---------------------------------------------------------
+    def batch_sync_inventory(self, items: List[Dict[str, Any]], batch_size: int = 500) -> int:
+        """Upserts a list of inventory items into the unified graph."""
+        if not items:
+            return 0
 
-                matched_coord = None
-                for name, coord in DEPOT_COORDINATES.items():
-                    if name.lower() in depot_loc.lower() or name.lower() in depot_id.lower():
-                        matched_coord = coord
-                        break
-                if not matched_coord:
-                    matched_coord = (22.3217, 73.1384)
+        query = """
+        UNWIND $rows AS row
 
-                size_val = f"{float(item['size_nb_mm'])} mm" if item.get("size_nb_mm") else None
-                pc_val = f"{item['pressure_class']}#" if item.get("pressure_class") else None
-                qty = int(item.get("quantity") or 0)
-                unit_cost = float(item.get("unit_cost_inr") or 0.0)
+        MERGE (root:Item {name: "Item"})
 
-                prepared.append({
-                    "sku_code": sku_code,
-                    "cpse": cpse,
-                    "depot_id": depot_id,
-                    "depot_loc": depot_loc,
-                    "lat": matched_coord[0],
-                    "lon": matched_coord[1],
-                    "desc": item.get("description") or "",
-                    "item_type": item.get("item_type") or "EQUIPMENT",
-                    "qty": qty,
-                    "days_idle": int(item.get("days_idle") or 0),
-                    "status": item.get("status") or "TO_BE_CONSUMED",
-                    "unit_cost": unit_cost,
-                    "total_val": float(item.get("total_value_inr") or (qty * unit_cost)),
-                    "is_broadcast": bool(item.get("is_broadcasted_surplus")),
-                    "size_val": size_val,
-                    "pressure_class_val": pc_val,
-                    "metallurgy_val": item.get("metallurgy"),
-                })
+        MERGE (item_type:ItemType {name: row.item_type})
+        MERGE (root)-[:HAS_ITEM_TYPE]->(item_type)
 
-            cypher = """
-            UNWIND $batch AS row
-            MERGE (c:CPSE {name: row.cpse})
-            MERGE (d:Depot {id: row.depot_id})
-            ON CREATE SET d.name = row.depot_loc, d.lat = row.lat, d.lon = row.lon
-            MERGE (c)-[:OPERATES]->(d)
+        MERGE (item:InventoryItem {sku_code: row.sku_code})
+        SET item.heat_no = row.heat_no,
+            item.nominal_bore_mm = row.nominal_bore_mm,
+            item.pressure_rating_bar = row.pressure_rating_bar,
+            item.make_in_india_class = row.make_in_india_class,
+            item.local_content_percentage = row.local_content_percentage
 
-            MERGE (i:InventoryItem {sku: row.sku_code})
-            SET i.description = row.desc,
-                i.item_type = row.item_type,
-                i.qty = row.qty,
-                i.days_idle = row.days_idle,
-                i.status = row.status,
-                i.unit_cost_inr = row.unit_cost,
-                i.total_value_inr = row.total_val,
-                i.is_broadcasted_surplus = row.is_broadcast,
-                i.updated_at = datetime()
+        MERGE (item_type)-[:HAS_ITEM]->(item)
 
-            MERGE (d)-[:HOLDS]->(i)
-            MERGE (i)-[:BELONGS_TO_CPSE]->(c)
+        MERGE (stock:StockInfo {sku_code: row.sku_code})
+        SET stock.quantity = row.quantity,
+            stock.unit_cost_inr = row.unit_cost_inr,
+            stock.days_idle = row.days_idle
 
-            WITH i, row
-            FOREACH (_ IN CASE WHEN row.size_val IS NOT NULL THEN [1] ELSE [] END |
-                MERGE (sz:Size {value: row.size_val})
-                MERGE (i)-[:HAS_SIZE]->(sz)
-            )
-            FOREACH (_ IN CASE WHEN row.pressure_class_val IS NOT NULL THEN [1] ELSE [] END |
-                MERGE (pc:PressureClass {value: row.pressure_class_val})
-                MERGE (i)-[:HAS_PRESSURE_CLASS]->(pc)
-            )
-            FOREACH (_ IN CASE WHEN row.metallurgy_val IS NOT NULL THEN [1] ELSE [] END |
-                MERGE (mg:MaterialGrade {value: row.metallurgy_val})
-                MERGE (i)-[:HAS_BODY_METALLURGY]->(mg)
-            )
-            """
+        MERGE (item)-[:HAS_STOCK_INFO]->(stock)
 
-            with self.driver.session() as session:
-                session.run(cypher, batch=prepared)
+        MERGE (location:Location {name: row.depot_location})
+        MERGE (state:State {name: row.location_state})
+        MERGE (item)-[:STORED_AT]->(location)
+        MERGE (location)-[:IN_STATE]->(state)
 
+        MERGE (po:PurchaseOrder {po_no: row.po_no})
+        MERGE (item)-[:ORDERED_BY]->(po)
+
+        FOREACH (_ IN CASE WHEN row.cppp_tender_id IS NOT NULL AND trim(row.cppp_tender_id) <> '' THEN [1] ELSE [] END |
+            MERGE (tender:CPPPTender {tender_id: row.cppp_tender_id})
+            SET tender.tender_ref = row.cppp_tender_ref
+            MERGE (po)-[:PART_OF_TENDER]->(tender)
+        )
+
+        MERGE (cpse:CPSE {name: row.cpse_name})
+        MERGE (item)-[:OPERATED_BY]->(cpse)
+
+        MERGE (spec:MaterialSpecification {sku_code: row.sku_code})
+        SET spec.raw_description = row.raw_description,
+            spec.standard = row.standard,
+            spec.hsn_code = row.hsn_code,
+            spec.mesc_code = row.mesc_code,
+            spec.gem_category = row.gem_category,
+            spec.gem_category_id = row.gem_category_id,
+            spec.indian_standard = row.indian_standard,
+            spec.oil_std_spec = row.oil_std_spec,
+            spec.oil_material_code = row.oil_material_code
+
+        MERGE (item)-[:HAS_SPECIFICATION]->(spec)
+        """
+
+        prepared = []
+        for i in items:
+            raw_desc = i.get("raw_description") or i.get("description") or ""
+            it = i.get("item_type") or extract_item_type(raw_desc)
+            loc = i.get("depot_location") or i.get("depot_id") or "Main Depot"
+            state = i.get("location_state") or i.get("state") or "Assam"
+            cpse = i.get("cpse_name") or i.get("cpse") or "OIL"
+            po = i.get("po_no") or "PO-GENERIC"
+
+            prepared.append({
+                "sku_code": i.get("sku_code", ""),
+                "item_type": it,
+                "heat_no": i.get("heat_no"),
+                "nominal_bore_mm": float(i.get("nominal_bore_mm") or i.get("size_nb_mm") or 0.0),
+                "pressure_rating_bar": float(i.get("pressure_rating_bar") or 0.0),
+                "make_in_india_class": i.get("make_in_india_class", "Class-I"),
+                "local_content_percentage": float(i.get("local_content_percentage") or 75.0),
+                "quantity": int(i.get("quantity") or 0),
+                "unit_cost_inr": float(i.get("unit_cost_inr") or 0.0),
+                "days_idle": int(i.get("days_idle") or 0),
+                "depot_location": loc,
+                "location_state": state,
+                "po_no": po,
+                "cppp_tender_id": i.get("cppp_tender_id"),
+                "cppp_tender_ref": i.get("cppp_tender_ref"),
+                "cpse_name": cpse,
+                "raw_description": raw_desc,
+                "standard": i.get("standard"),
+                "hsn_code": i.get("hsn_code"),
+                "mesc_code": i.get("mesc_code"),
+                "gem_category": i.get("gem_category"),
+                "gem_category_id": i.get("gem_category_id"),
+                "indian_standard": i.get("indian_standard"),
+                "oil_std_spec": i.get("oil_std_spec"),
+                "oil_material_code": i.get("oil_material_code"),
+            })
+
+        total = len(prepared)
+        with self.driver.session() as session:
+            for start in range(0, total, batch_size):
+                chunk = prepared[start:start + batch_size]
+                session.run(query, rows=chunk).consume()
+
+        return total
+
+    # ---------------------------------------------------------
+    # 3. Sync Requisition Node
+    # ---------------------------------------------------------
     def sync_requisition(self, req: Dict[str, Any]):
-        """Synchronizes an inter-CPSE requisition into Neo4j graph nodes and logistics flows."""
-        req_id = req.get("requisition_id")
-        if not req_id:
-            return
-
-        cypher = """
-        MERGE (r:Requisition {id: $req_id})
-        SET r.source_cpse = $src_cpse,
-            r.target_cpse = $tgt_cpse,
-            r.required_qty = $qty,
-            r.unit_cost_inr = $unit_cost,
-            r.total_value_inr = $total_val,
+        """Persists or updates an inter-CPSE requisition node."""
+        query = """
+        MERGE (r:Requisition {requisition_id: $requisition_id})
+        SET r.source_cpse = $source_cpse,
+            r.target_cpse = $target_cpse,
+            r.source_depot = $source_depot,
+            r.target_depot = $target_depot,
+            r.sku_code = $sku_code,
+            r.required_qty = $required_qty,
+            r.unit_cost_inr = $unit_cost_inr,
+            r.total_value_inr = $total_value_inr,
             r.status = $status,
-            r.urgency_level = $urgency,
+            r.urgency_level = $urgency_level,
             r.justification = $justification,
             r.requested_by = $requested_by,
             r.approved_by = $approved_by,
-            r.audit_hash = $audit_hash,
-            r.updated_at = datetime()
-
-        // Link with requested item
-        WITH r
-        OPTIONAL MATCH (i:InventoryItem {sku: $sku_code})
-        FOREACH (_ IN CASE WHEN i IS NOT NULL THEN [1] ELSE [] END |
-            MERGE (r)-[:REQUESTS_ITEM]->(i)
-        )
-
-        // Link with source & target depots
-        WITH r
-        OPTIONAL MATCH (src_d:Depot)
-        WHERE src_d.id = $src_depot
-           OR toLower($src_depot) CONTAINS toLower(src_d.name)
-           OR toLower(src_d.name) CONTAINS toLower($src_depot)
-           OR toLower($src_depot) CONTAINS toLower(split(src_d.name, ',')[0])
-           OR toLower(src_d.name) CONTAINS toLower(split($src_depot, ',')[0])
-        WITH r, src_d LIMIT 1
-        FOREACH (_ IN CASE WHEN src_d IS NOT NULL THEN [1] ELSE [] END |
-            MERGE (src_d)-[:DISPATCHES_REQUISITION]->(r)
-        )
+            r.audit_hash = $audit_hash
 
         WITH r
-        OPTIONAL MATCH (tgt_d:Depot)
-        WHERE tgt_d.id = $tgt_depot
-           OR toLower($tgt_depot) CONTAINS toLower(tgt_d.name)
-           OR toLower(tgt_d.name) CONTAINS toLower($tgt_depot)
-           OR toLower($tgt_depot) CONTAINS toLower(split(tgt_d.name, ',')[0])
-           OR toLower(tgt_d.name) CONTAINS toLower(split($tgt_depot, ',')[0])
-        WITH r, tgt_d LIMIT 1
-        FOREACH (_ IN CASE WHEN tgt_d IS NOT NULL THEN [1] ELSE [] END |
-            MERGE (r)-[:DESTINED_FOR]->(tgt_d)
+        OPTIONAL MATCH (item:InventoryItem {sku_code: r.sku_code})
+        FOREACH (_ IN CASE WHEN item IS NOT NULL THEN [1] ELSE [] END |
+            MERGE (r)-[:REQUESTS_ITEM]->(item)
         )
         """
-
         with self.driver.session() as session:
-            session.run(
-                cypher,
-                req_id=req_id,
-                src_cpse=req.get("source_cpse") or "IOCL",
-                tgt_cpse=req.get("target_cpse") or "ONGC",
-                src_depot=req.get("source_depot") or "",
-                tgt_depot=req.get("target_depot") or "",
-                sku_code=req.get("sku_code") or "",
-                qty=int(req.get("required_qty") or req.get("quantity") or 1),
-                unit_cost=float(req.get("unit_cost_inr") or 0.0),
-                total_val=float(req.get("total_value_inr") or 0.0),
-                status=req.get("status") or "PENDING_APPROVAL",
-                urgency=req.get("urgency_level") or "EMERGENCY",
-                justification=req.get("justification") or "",
-                requested_by=req.get("requested_by") or "",
-                approved_by=req.get("approved_by") or "",
-                audit_hash=req.get("audit_hash") or "",
-            )
+            session.run(query, **req).consume()
 
-    def sync_event(self, table_name: str, op: str, payload: Dict[str, Any]):
-        """Dispatches an outbox change event to the appropriate graph syncer handler."""
-        if table_name == "inventory_items":
-            if op in ("INSERT", "UPDATE"):
-                self.sync_inventory_item(payload)
-            elif op == "DELETE":
-                sku = payload.get("sku_code")
-                if sku:
-                    with self.driver.session() as session:
-                        session.run("MATCH (i:InventoryItem {sku: $sku}) DETACH DELETE i", sku=sku)
-        elif table_name == "requisitions":
-            if op in ("INSERT", "UPDATE"):
-                self.sync_requisition(payload)
-            elif op == "DELETE":
+    # ---------------------------------------------------------
+    # 4. Outbox CDC Event Dispatcher
+    # ---------------------------------------------------------
+    def sync_event(self, table_name: str, operation: str, payload: Dict[str, Any]):
+        """Dispatches PostgreSQL transactional CDC events to Neo4j."""
+        if table_name.lower() in ("inventory_items", "inventoryitem"):
+            sku = payload.get("sku_code")
+            if not sku:
+                return
+
+            if operation.upper() == "DELETE":
+                with self.driver.session() as session:
+                    session.run(
+                        """
+                        MATCH (item:InventoryItem {sku_code: $sku})
+                        OPTIONAL MATCH (item)-[:HAS_STOCK_INFO]->(stock:StockInfo)
+                        OPTIONAL MATCH (item)-[:HAS_SPECIFICATION]->(spec:MaterialSpecification)
+                        DETACH DELETE item, stock, spec
+                        """,
+                        sku=sku,
+                    ).consume()
+            else:
+                self.batch_sync_inventory([payload])
+
+        elif table_name.lower() in ("requisitions", "requisition"):
+            if operation.upper() == "DELETE":
                 req_id = payload.get("requisition_id")
-                if req_id:
-                    with self.driver.session() as session:
-                        session.run("MATCH (r:Requisition {id: $req_id}) DETACH DELETE r", req_id=req_id)
+                with self.driver.session() as session:
+                    session.run("MATCH (r:Requisition {requisition_id: $id}) DETACH DELETE r", id=req_id).consume()
+            else:
+                self.sync_requisition(payload)
+
+
+# Backward-compatible alias
+GraphSyncer = Neo4jSyncer
+
+
+if __name__ == "__main__":
+    syncer = Neo4jSyncer()
+    try:
+        res = syncer.update_item(sku_code="OIL-STU-00001", days_idle=75)
+        print("Updated:", res)
+    finally:
+        syncer.close()

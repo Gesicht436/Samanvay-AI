@@ -1,163 +1,495 @@
+"""
+Samanvay-AI Neo4j Knowledge Graph Seeder (Dataset 1).
+
+Implements the unified architecture:
+(:Item)
+   ↓ HAS_ITEM_TYPE
+(:ItemType)
+   ↓ HAS_ITEM
+(:InventoryItem)
+   ├── HAS_STOCK_INFO ──→ (:StockInfo)
+   ├── STORED_AT ───────→ (:Location) ──IN_STATE──→ (:State)
+   ├── ORDERED_BY ──────→ (:PurchaseOrder) ──PART_OF_TENDER──→ (:CPPPTender)
+   ├── OPERATED_BY ─────→ (:CPSE)
+   └── HAS_SPECIFICATION → (:MaterialSpecification)
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
 import logging
+import os
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from neo4j import GraphDatabase
 
-logger = logging.getLogger(__name__)
+from graph.schema import NodeTypes, RelTypes
+
+logger = logging.getLogger("samanvay.graph.seeder")
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_DATASET_PATH = PROJECT_ROOT / "datasets" / "inventory_catalog.csv"
+
+
+# ============================================================
+# 1. SETTINGS HELPER
+# ============================================================
+
+def get_neo4j_config() -> tuple[str, str, str]:
+    """Retrieve Neo4j connection parameters with graceful fallbacks."""
+    uri = None
+    user = None
+    password = None
+
+    try:
+        from backend.app.core.config import settings
+        uri = getattr(settings, "neo4j_uri", None) or getattr(settings, "NEO4J_URI", None)
+        user = getattr(settings, "neo4j_user", None) or getattr(settings, "NEO4J_USER", None)
+        password = getattr(settings, "neo4j_password", None) or getattr(settings, "NEO4J_PASSWORD", None)
+    except Exception:
+        pass
+
+    if not uri:
+        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    if not user:
+        user = os.getenv("NEO4J_USER", "neo4j")
+    if not password:
+        password = os.getenv("NEO4J_PASSWORD", "samanvay_graph")
+
+    return str(uri), str(user), str(password)
+
+
+# ============================================================
+# 2. ITEM TYPE EXTRACTION
+# ============================================================
+
+def extract_item_type(raw_description: str) -> str:
+    """
+    Extracts high-level ItemType category from raw_description.
+    Supports standard abbreviations, hyphenated dialect forms, and keyword patterns.
+    """
+    if not raw_description:
+        return "General Material"
+
+    text = " ".join(str(raw_description).upper().split())
+
+    # 1. Valves (check specific valve types first)
+    if any(k in text for k in ["BFV", "BUTTERFLY", "VLV-BFV", "VLV BFV"]):
+        return "Butterfly Valve"
+    if any(k in text for k in ["PSV", "SAFETY RELIEF", "RELIEF VALVE", "VLV-PSV", "VLV PSV"]):
+        return "Safety Relief Valve"
+    if any(k in text for k in ["VLV BL", "VLV-BL", "BALL VALVE", "BALL-VALVE"]):
+        return "Ball Valve"
+    if any(k in text for k in ["VLV GT", "VLV-GT", "GATE VALVE", "GATE-VALVE"]):
+        return "Gate Valve"
+    if any(k in text for k in ["VLV GL", "VLV-GL", "GLOBE VALVE", "GLOBE-VALVE"]):
+        return "Globe Valve"
+    if any(k in text for k in ["VLV CHK", "VLV-CHK", "CHECK VALVE", "CHECK-VALVE"]):
+        return "Check Valve"
+    if any(k in text for k in ["PLUG VALVE", "VLV PLG", "VLV-PLG"]):
+        return "Plug Valve"
+    if any(k in text for k in ["CONTROL VALVE", "VLV CTL", "VLV-CTL"]):
+        return "Control Valve"
+    if any(k in text for k in ["NEEDLE VALVE", "VLV NDL", "VLV-NDL"]):
+        return "Needle Valve"
+
+    # 2. Pipe Fittings
+    if re.search(r"\bELB\b", text) or "ELBOW" in text or "ELB-90" in text:
+        return "Elbow"
+    if re.search(r"\bTEE\b", text) or "EQUAL TEE" in text or "REDUCING TEE" in text or "TEE-EQ" in text:
+        return "Tee"
+    if any(k in text for k in ["RED CONC", "RED-CONC", "CONCENTRIC REDUCER", "ECCENTRIC REDUCER", "RED ECC", "RED-ECC"]):
+        return "Reducer"
+    if "NIPPLE" in text or "NIP" in text:
+        return "Nipple"
+    if "COUPLING" in text or "CPLG" in text:
+        return "Coupling"
+    if "UNION" in text:
+        return "Union"
+    if "CAP" in text and "FITTING" in text:
+        return "Cap"
+    if "BUTTWELD FITTING" in text or "BW FITTING" in text:
+        return "Butt Weld Fitting"
+
+    # 3. Gaskets & Seals
+    if any(k in text for k in ["GSKT SWG", "GSKT-SWG", "SPIRAL WOUND GASKET"]):
+        return "Spiral Wound Gasket"
+    if any(k in text for k in ["GSKT RTJ", "GSKT-RTJ", "RING TYPE JOINT", "RTJ GASKET"]):
+        return "Ring Type Joint Gasket"
+    if "GSKT" in text or "GASKET" in text:
+        return "Gasket"
+    if any(k in text for k in ["MECH SEAL", "MECHANICAL SEAL", "MECH-SEAL"]):
+        return "Mechanical Seal"
+    if "O-RING" in text or "ORING" in text:
+        return "O-Ring"
+
+    # 4. Flanges
+    if any(k in text for k in ["FLG WN", "FLG-WN", "WELD NECK"]):
+        return "Weld Neck Flange"
+    if any(k in text for k in ["FLG BL", "FLG-BL", "BLIND FLANGE"]):
+        return "Blind Flange"
+    if any(k in text for k in ["FLG SO", "FLG-SO", "SLIP ON"]):
+        return "Slip-On Flange"
+    if "FLG" in text or re.search(r"\bFLANGE\b", text):
+        return "Flange"
+
+    # 5. Pipes & Tubes
+    if any(k in text for k in ["PIPE SMLS", "PIPE-SMLS", "LINE PIPE, SEAMLESS"]) or ("SEAMLESS" in text and "PIPE" in text):
+        return "Seamless Pipe"
+    if any(k in text for k in ["PIPE ERW", "PIPE-ERW", "LINE PIPE, ELECTRIC"]) or ("ERW" in text and "PIPE" in text):
+        return "ERW Pipe"
+    if "PIPE" in text or "LINE PIPE" in text:
+        return "Pipe"
+    if "TUBING" in text or "TUBE" in text:
+        return "Tube"
+
+    # 6. Pumps & Spares
+    if "PUMP SHAFT SLEEVE" in text or "SHAFT SLEEVE" in text:
+        return "Pump Shaft Sleeve"
+    if "PUMP IMPELLER" in text or "IMPELLER" in text:
+        return "Pump Impeller"
+    if "PUMP CASING" in text:
+        return "Pump Casing"
+    if "PUMP" in text or "CENTRIFUGAL" in text:
+        return "Centrifugal Pump"
+
+    # 7. Fasteners
+    if any(k in text for k in ["STUD BLT", "STUD-BLT", "STUD BOLT", "STUD"]):
+        return "Stud Bolt"
+    if re.search(r"\bBOLT\b", text) or "HEX BOLT" in text:
+        return "Bolt"
+    if re.search(r"\bNUTS?\b", text):
+        return "Nut"
+
+    # 8. Mechanical Parts
+    if "SLEEVE" in text:
+        return "Shaft Sleeve"
+    if re.search(r"\bRING\b", text):
+        return "Ring"
+    if "BEARING" in text:
+        return "Bearing"
+
+    # 9. Generic fallbacks
+    if "VLV" in text or re.search(r"\bVALVE\b", text):
+        return "Valve"
+    if "FITTING" in text:
+        return "Fitting"
+
+    return "General Material"
+
+
+# ============================================================
+# 3. CSV RECORD PARSER
+# ============================================================
+
+def parse_csv_row(row: dict[str, str]) -> dict[str, Any]:
+    """Cleans and converts raw CSV string fields into structured dictionary for Cypher."""
+    raw_desc = (row.get("raw_description") or "").strip()
+    item_type = extract_item_type(raw_desc)
+
+    def to_float(val: Optional[str], default: float = 0.0) -> float:
+        if not val or not val.strip():
+            return default
+        try:
+            return float(val.strip())
+        except ValueError:
+            return default
+
+    def to_int(val: Optional[str], default: int = 0) -> int:
+        if not val or not val.strip():
+            return default
+        try:
+            return int(float(val.strip()))
+        except ValueError:
+            return default
+
+    def clean_str(val: Optional[str]) -> Optional[str]:
+        if val is None:
+            return None
+        v = val.strip()
+        return v if v else None
+
+    return {
+        # ItemType & Root
+        "item_type": item_type,
+
+        # InventoryItem
+        "sku_code": (row.get("sku_code") or "").strip(),
+        "heat_no": clean_str(row.get("heat_no")),
+        "nominal_bore_mm": to_float(row.get("nominal_bore_mm")),
+        "pressure_rating_bar": to_float(row.get("pressure_rating_bar")),
+        "make_in_india_class": clean_str(row.get("make_in_india_class")),
+        "local_content_percentage": to_float(row.get("local_content_percentage")),
+
+        # StockInfo
+        "quantity": to_int(row.get("quantity")),
+        "unit_cost_inr": to_float(row.get("unit_cost_inr")),
+        "days_idle": to_int(row.get("days_idle")),
+
+        # Location / State
+        "depot_location": (row.get("depot_location") or "Main Depot").strip(),
+        "location_state": (row.get("location_state") or "Assam").strip(),
+
+        # PurchaseOrder & Tender
+        "po_no": (row.get("po_no") or "PO-UNKNOWN").strip(),
+        "cppp_tender_id": clean_str(row.get("cppp_tender_id")),
+        "cppp_tender_ref": clean_str(row.get("cppp_tender_ref")),
+
+        # CPSE
+        "cpse_name": (row.get("cpse_name") or "OIL").strip(),
+
+        # MaterialSpecification
+        "raw_description": raw_desc,
+        "standard": clean_str(row.get("standard")),
+        "hsn_code": clean_str(row.get("hsn_code")),
+        "mesc_code": clean_str(row.get("mesc_code")),
+        "gem_category": clean_str(row.get("gem_category")),
+        "gem_category_id": clean_str(row.get("gem_category_id")),
+        "indian_standard": clean_str(row.get("indian_standard")),
+        "oil_std_spec": clean_str(row.get("oil_std_spec")),
+        "oil_material_code": clean_str(row.get("oil_material_code")),
+    }
+
+
+# ============================================================
+# 4. CYPHER CONSTRAINTS & SEED QUERY
+# ============================================================
+
+CONSTRAINTS = [
+    """
+    CREATE CONSTRAINT item_root_name_unique IF NOT EXISTS
+    FOR (n:Item) REQUIRE n.name IS UNIQUE
+    """,
+    """
+    CREATE CONSTRAINT item_type_name_unique IF NOT EXISTS
+    FOR (n:ItemType) REQUIRE n.name IS UNIQUE
+    """,
+    """
+    CREATE CONSTRAINT inventory_item_sku_unique IF NOT EXISTS
+    FOR (n:InventoryItem) REQUIRE n.sku_code IS UNIQUE
+    """,
+    """
+    CREATE CONSTRAINT stock_info_sku_unique IF NOT EXISTS
+    FOR (n:StockInfo) REQUIRE n.sku_code IS UNIQUE
+    """,
+    """
+    CREATE CONSTRAINT location_name_unique IF NOT EXISTS
+    FOR (n:Location) REQUIRE n.name IS UNIQUE
+    """,
+    """
+    CREATE CONSTRAINT state_name_unique IF NOT EXISTS
+    FOR (n:State) REQUIRE n.name IS UNIQUE
+    """,
+    """
+    CREATE CONSTRAINT purchase_order_no_unique IF NOT EXISTS
+    FOR (n:PurchaseOrder) REQUIRE n.po_no IS UNIQUE
+    """,
+    """
+    CREATE CONSTRAINT cppp_tender_id_unique IF NOT EXISTS
+    FOR (n:CPPPTender) REQUIRE n.tender_id IS UNIQUE
+    """,
+    """
+    CREATE CONSTRAINT cpse_name_unique IF NOT EXISTS
+    FOR (n:CPSE) REQUIRE n.name IS UNIQUE
+    """,
+    """
+    CREATE CONSTRAINT material_specification_sku_unique IF NOT EXISTS
+    FOR (n:MaterialSpecification) REQUIRE n.sku_code IS UNIQUE
+    """,
+]
+
+SEED_BATCH_QUERY = """
+UNWIND $rows AS row
+
+// 1. Single Root Node
+MERGE (root:Item {name: "Item"})
+
+// 2. ItemType Node (pointing downward from Item)
+MERGE (item_type:ItemType {name: row.item_type})
+MERGE (root)-[:HAS_ITEM_TYPE]->(item_type)
+
+// 3. InventoryItem Node (pointing downward from ItemType)
+MERGE (item:InventoryItem {sku_code: row.sku_code})
+SET item.heat_no = row.heat_no,
+    item.nominal_bore_mm = row.nominal_bore_mm,
+    item.pressure_rating_bar = row.pressure_rating_bar,
+    item.make_in_india_class = row.make_in_india_class,
+    item.local_content_percentage = row.local_content_percentage
+
+MERGE (item_type)-[:HAS_ITEM]->(item)
+
+// 4. StockInfo Node
+MERGE (stock:StockInfo {sku_code: row.sku_code})
+SET stock.quantity = row.quantity,
+    stock.unit_cost_inr = row.unit_cost_inr,
+    stock.days_idle = row.days_idle
+
+MERGE (item)-[:HAS_STOCK_INFO]->(stock)
+
+// 5. Location & State Nodes
+MERGE (location:Location {name: row.depot_location})
+MERGE (state:State {name: row.location_state})
+
+MERGE (item)-[:STORED_AT]->(location)
+MERGE (location)-[:IN_STATE]->(state)
+
+// 6. PurchaseOrder & CPPPTender Nodes
+MERGE (po:PurchaseOrder {po_no: row.po_no})
+MERGE (item)-[:ORDERED_BY]->(po)
+
+FOREACH (_ IN CASE
+    WHEN row.cppp_tender_id IS NOT NULL AND trim(row.cppp_tender_id) <> ''
+    THEN [1]
+    ELSE []
+END |
+    MERGE (tender:CPPPTender {tender_id: row.cppp_tender_id})
+    SET tender.tender_ref = row.cppp_tender_ref
+    MERGE (po)-[:PART_OF_TENDER]->(tender)
+)
+
+// 7. CPSE Node
+MERGE (cpse:CPSE {name: row.cpse_name})
+MERGE (item)-[:OPERATED_BY]->(cpse)
+
+// 8. Consolidated MaterialSpecification Node
+MERGE (spec:MaterialSpecification {sku_code: row.sku_code})
+SET spec.raw_description = row.raw_description,
+    spec.standard = row.standard,
+    spec.hsn_code = row.hsn_code,
+    spec.mesc_code = row.mesc_code,
+    spec.gem_category = row.gem_category,
+    spec.gem_category_id = row.gem_category_id,
+    spec.indian_standard = row.indian_standard,
+    spec.oil_std_spec = row.oil_std_spec,
+    spec.oil_material_code = row.oil_material_code
+
+MERGE (item)-[:HAS_SPECIFICATION]->(spec)
+"""
+
+
+# ============================================================
+# 5. GRAPH SEEDER CLASS
+# ============================================================
 
 class GraphSeeder:
-    def __init__(self):
-        # Graceful fallback if settings not fully available
-        try:
-            from backend.app.core.config import settings
-            self.uri = settings.NEO4J_URI if hasattr(settings, "NEO4J_URI") else "bolt://localhost:7687"
-            self.user = settings.NEO4J_USER if hasattr(settings, "NEO4J_USER") else "neo4j"
-            self.password = settings.NEO4J_PASSWORD if hasattr(settings, "NEO4J_PASSWORD") else "password"
-        except ImportError:
-            self.uri = "bolt://localhost:7687"
-            self.user = "neo4j"
-            self.password = "password"
-            
+    """Manages database connection, schema setup, CSV parsing, and batch ingestion."""
+
+    def __init__(self, uri: Optional[str] = None, user: Optional[str] = None, password: Optional[str] = None):
+        c_uri, c_user, c_pwd = get_neo4j_config()
+        self.uri = uri or c_uri
+        self.user = user or c_user
+        self.password = password or c_pwd
         self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
 
     def close(self):
-        self.driver.close()
+        if self.driver:
+            self.driver.close()
 
-    def clear_graph(self):
+    def create_constraints(self):
+        """Initializes unique index constraints across all node types."""
         with self.driver.session() as session:
-            session.run("MATCH (n) DETACH DELETE n")
+            for c_query in CONSTRAINTS:
+                try:
+                    session.run(c_query).consume()
+                except Exception as e:
+                    logger.warning(f"Constraint notice: {e}")
 
-    def seed_cpses(self):
-        cpses = ["OIL", "NRL", "IOCL", "ONGC", "BPCL", "HPCL", "GAIL"]
+    def clear_database(self):
+        """Removes existing graph elements and cleans deprecated schema constraints."""
         with self.driver.session() as session:
-            for cpse in cpses:
-                session.run("MERGE (c:CPSE {name: $name})", name=cpse)
-
-    def seed_depots(self):
-        depots = [
-            {"cpse": "OIL", "name": "OIL Duliajan", "lat": 27.3575, "lon": 95.3188},
-            {"cpse": "OIL", "name": "OIL Moran", "lat": 27.1856, "lon": 94.9282},
-            {"cpse": "OIL", "name": "OIL Digboi", "lat": 27.3826, "lon": 95.6262},
-            {"cpse": "OIL", "name": "OIL Guwahati", "lat": 26.1855, "lon": 91.8214},
-            {"cpse": "OIL", "name": "OIL Jorhat", "lat": 26.7509, "lon": 94.2037},
-            {"cpse": "OIL", "name": "OIL Jodhpur", "lat": 26.2389, "lon": 73.0243},
-            {"cpse": "OIL", "name": "OIL Kakinada", "lat": 16.9891, "lon": 82.2475},
-            {"cpse": "NRL", "name": "NRL Numaligarh", "lat": 26.5982, "lon": 93.7543},
-            {"cpse": "ONGC", "name": "ONGC Nazira", "lat": 26.9183, "lon": 94.7342},
-            {"cpse": "IOCL", "name": "Panipat", "lat": 29.3909, "lon": 76.9635},
-            {"cpse": "IOCL", "name": "Mathura", "lat": 27.4924, "lon": 77.6737},
-            {"cpse": "IOCL", "name": "Koyali", "lat": 22.3217, "lon": 73.1384},
-            {"cpse": "IOCL", "name": "Paradip", "lat": 20.3164, "lon": 86.6085},
-            {"cpse": "IOCL", "name": "Barauni", "lat": 25.4714, "lon": 85.9990},
-            {"cpse": "IOCL", "name": "Guwahati", "lat": 26.1445, "lon": 91.7362},
-            {"cpse": "IOCL", "name": "Digboi", "lat": 27.3834, "lon": 95.6228},
-            {"cpse": "ONGC", "name": "Hazira", "lat": 21.1000, "lon": 72.6500},
-            {"cpse": "ONGC", "name": "Ankleshwar", "lat": 21.6263, "lon": 73.0025},
-            {"cpse": "ONGC", "name": "Uran", "lat": 18.8789, "lon": 72.9341},
-            {"cpse": "ONGC", "name": "Mumbai High", "lat": 19.3700, "lon": 71.3800},
-            {"cpse": "ONGC", "name": "Rajahmundry", "lat": 17.0005, "lon": 81.8040},
-            {"cpse": "BPCL", "name": "Mumbai Mahul", "lat": 19.0252, "lon": 72.8890},
-            {"cpse": "BPCL", "name": "Kochi", "lat": 9.9312, "lon": 76.2673},
-            {"cpse": "BPCL", "name": "Bina", "lat": 24.1814, "lon": 78.1292},
-            {"cpse": "HPCL", "name": "Mumbai", "lat": 19.0176, "lon": 72.8562},
-            {"cpse": "HPCL", "name": "Visakh", "lat": 17.6868, "lon": 83.2185},
-            {"cpse": "GAIL", "name": "Pata", "lat": 26.4600, "lon": 80.5400},
-            {"cpse": "GAIL", "name": "Vijaipur", "lat": 24.1084, "lon": 77.2905}
-        ]
-        with self.driver.session() as session:
-            for depot in depots:
-                session.run(
-                    """
-                    MATCH (c:CPSE {name: $cpse})
-                    MERGE (d:Depot {id: $name})
-                    SET d.name = $name, d.lat = $lat, d.lon = $lon
-                    MERGE (c)-[:OPERATES]->(d)
-                    """,
-                    cpse=depot["cpse"], name=depot["name"], lat=depot["lat"], lon=depot["lon"]
-                )
-
-    def seed_properties_and_upgrades(self):
-        with self.driver.session() as session:
-            # Pressure Classes and SAFE_UPGRADE_FOR (higher class can substitute lower)
-            classes = ["150#", "300#", "600#", "900#", "1500#"]
-            for c in classes:
-                session.run("MERGE (p:PressureClass {value: $value})", value=c)
-            session.run("MATCH (p1:PressureClass {value: '300#'}), (p2:PressureClass {value: '150#'}) MERGE (p1)-[:SAFE_UPGRADE_FOR]->(p2)")
-            session.run("MATCH (p1:PressureClass {value: '600#'}), (p2:PressureClass {value: '300#'}) MERGE (p1)-[:SAFE_UPGRADE_FOR]->(p2)")
-
-            # Material Grades and ALLOY_UPGRADE_FOR
-            session.run("MERGE (m1:MaterialGrade {value: 'WCB'})")
-            session.run("MERGE (m2:MaterialGrade {value: 'CF8M'})")
-            session.run("MATCH (m1:MaterialGrade {value: 'CF8M'}), (m2:MaterialGrade {value: 'WCB'}) MERGE (m1)-[:ALLOY_UPGRADE_FOR]->(m2)")
-
-            # Valve Trims and TRIM_UPGRADE_FOR
-            session.run("MERGE (t1:ValveTrim {value: 'Trim 1'})")
-            session.run("MERGE (t8:ValveTrim {value: 'Trim 8'})")
-            session.run("MERGE (t5:ValveTrim {value: 'Trim 5'})")
-            session.run("MATCH (t5:ValveTrim {value: 'Trim 5'}), (t8:ValveTrim {value: 'Trim 8'}) MERGE (t5)-[:TRIM_UPGRADE_FOR]->(t8)")
-            session.run("MATCH (t8:ValveTrim {value: 'Trim 8'}), (t1:ValveTrim {value: 'Trim 1'}) MERGE (t8)-[:TRIM_UPGRADE_FOR]->(t1)")
-
-            # Port Bore and PORT_UPGRADE_FOR
-            session.run("MERGE (pb1:PortBore {value: 'Full Bore'})")
-            session.run("MERGE (pb2:PortBore {value: 'Reduced Bore'})")
-            session.run("MATCH (pb1:PortBore {value: 'Full Bore'}), (pb2:PortBore {value: 'Reduced Bore'}) MERGE (pb1)-[:PORT_UPGRADE_FOR]->(pb2)")
-
-            # Sizes
-            sizes = ["2 inch", "4 inch", "6 inch", "8 inch"]
-            for s in sizes:
-                session.run("MERGE (sz:Size {value: $value})", value=s)
-
-    def seed_sample_inventory(self):
-        with self.driver.session() as session:
-            # Example item 1: 4 inch, 150#, WCB, Trim 1, Reduced Bore
-            session.run(
-                """
-                MATCH (d:Depot {name: 'Panipat'})
-                MERGE (i:InventoryItem {sku: 'SKU-001'})
-                SET i.qty = 10, i.days_idle = 150, i.item_type = 'Gate Valve'
-                MERGE (d)-[:HOLDS]->(i)
-                WITH i
-                MATCH (s:Size {value: '4 inch'})
-                MATCH (pc:PressureClass {value: '150#'})
-                MATCH (mg:MaterialGrade {value: 'WCB'})
-                MATCH (vt:ValveTrim {value: 'Trim 1'})
-                MATCH (pb:PortBore {value: 'Reduced Bore'})
-                MERGE (i)-[:HAS_SIZE]->(s)
-                MERGE (i)-[:HAS_PRESSURE_CLASS]->(pc)
-                MERGE (i)-[:HAS_BODY_METALLURGY]->(mg)
-                MERGE (i)-[:HAS_TRIM]->(vt)
-                MERGE (i)-[:HAS_PORT_BORE]->(pb)
-                """
-            )
+            session.run("MATCH (n) DETACH DELETE n").consume()
             
-            # Example item 2 (Upgrade candidate): 4 inch, 300#, CF8M, Trim 8, Full Bore
-            session.run(
-                """
-                MATCH (d:Depot {name: 'Hazira'})
-                MERGE (i:InventoryItem {sku: 'SKU-002'})
-                SET i.qty = 5, i.days_idle = 400, i.item_type = 'Gate Valve'
-                MERGE (d)-[:HOLDS]->(i)
-                WITH i
-                MATCH (s:Size {value: '4 inch'})
-                MATCH (pc:PressureClass {value: '300#'})
-                MATCH (mg:MaterialGrade {value: 'CF8M'})
-                MATCH (vt:ValveTrim {value: 'Trim 8'})
-                MATCH (pb:PortBore {value: 'Full Bore'})
-                MERGE (i)-[:HAS_SIZE]->(s)
-                MERGE (i)-[:HAS_PRESSURE_CLASS]->(pc)
-                MERGE (i)-[:HAS_BODY_METALLURGY]->(mg)
-                MERGE (i)-[:HAS_TRIM]->(vt)
-                MERGE (i)-[:HAS_PORT_BORE]->(pb)
-                """
-            )
+            # Drop any legacy constraints on forbidden/deprecated node types
+            deprecated_labels = {
+                "Depot", "Size", "PressureClass", "MaterialGrade",
+                "RawDescription", "Standard", "HSNCode", "MESCCode",
+                "GeMCategory", "IndianStandard", "OilSpecification", "OilMaterialCode"
+            }
+            try:
+                constraints = session.run("SHOW CONSTRAINTS").data()
+                for c in constraints:
+                    labels = set(c.get("labelsOrTypes", []))
+                    if labels & deprecated_labels:
+                        c_name = c.get("name")
+                        session.run(f"DROP CONSTRAINT `{c_name}` IF EXISTS").consume()
+            except Exception as e:
+                logger.warning(f"Notice while dropping deprecated constraints: {e}")
 
-    def run_all(self):
-        self.clear_graph()
-        self.seed_cpses()
-        self.seed_depots()
-        self.seed_properties_and_upgrades()
-        self.seed_sample_inventory()
-        self.close()
+    def seed_from_csv(
+        self,
+        csv_path: Optional[Path] = None,
+        max_rows: Optional[int] = None,
+        batch_size: int = 250,
+        reset: bool = False,
+    ) -> int:
+        """
+        Loads CSV dataset and ingests into Neo4j in high-throughput batches.
+        Returns total number of items inserted.
+        """
+        path = csv_path or DEFAULT_DATASET_PATH
+        if not path.exists():
+            raise FileNotFoundError(f"Inventory dataset not found at: {path}")
+
+        if reset:
+            print("[GraphSeeder] Resetting database for clean Unified Architecture...")
+            self.clear_database()
+
+        print("[GraphSeeder] Applying uniqueness constraints...")
+        self.create_constraints()
+
+        rows: List[Dict[str, Any]] = []
+        with open(path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for idx, r in enumerate(reader, start=1):
+                try:
+                    rows.append(parse_csv_row(r))
+                except Exception as e:
+                    logger.error(f"Row {idx} parse failure: {e}")
+
+                if max_rows and len(rows) >= max_rows:
+                    break
+
+        total = len(rows)
+        print(f"[GraphSeeder] Prepared {total} rows for ingestion.")
+
+        with self.driver.session() as session:
+            for start in range(0, total, batch_size):
+                batch = rows[start:start + batch_size]
+                session.run(SEED_BATCH_QUERY, rows=batch).consume()
+                print(f"  Inserted rows {start + 1}-{min(start + batch_size, total)} of {total}...")
+
+        print(f"[GraphSeeder] Successfully seeded {total} inventory items.")
+        return total
+
+
+# ============================================================
+# 6. MAIN CLI ENTRY POINT
+# ============================================================
+
+def main():
+    parser = argparse.ArgumentParser(description="Samanvay-AI Neo4j Knowledge Graph Seeder")
+    parser.add_argument("--dataset", type=str, default=str(DEFAULT_DATASET_PATH), help="Path to inventory_catalog.csv")
+    parser.add_argument("--rows", type=int, default=None, help="Limit number of rows (e.g. 1 for testing)")
+    parser.add_argument("--batch-size", type=int, default=250, help="Ingestion batch size")
+    parser.add_argument("--reset", action="store_true", help="Clear existing graph nodes before seeding")
+    args = parser.parse_args()
+
+    seeder = GraphSeeder()
+    try:
+        seeder.driver.verify_connectivity()
+        print(f"Connected to Neo4j at {seeder.uri}")
+        seeder.seed_from_csv(
+            csv_path=Path(args.dataset),
+            max_rows=args.rows,
+            batch_size=args.batch_size,
+            reset=args.reset,
+        )
+    finally:
+        seeder.close()
+
 
 if __name__ == "__main__":
-    seeder = GraphSeeder()
-    seeder.run_all()
-    print("Graph seeding complete.")
+    main()
