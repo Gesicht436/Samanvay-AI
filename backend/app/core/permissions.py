@@ -105,6 +105,8 @@ VALID_ROLES: FrozenSet[str] = frozenset(
         CISF_SECURITY,
         VIGILANCE_AUDITOR,
         SUPER_ADMIN,
+    }
+)
 # ── Frozen role -> permission grants (AUTH-007 Section 3) ──────────────
 #
 # AUDIT_FINDING_MANAGE is intentionally absent from every grant set.
@@ -224,5 +226,3 @@ def role_has_permission(role: str, permission: str) -> bool:
     SUPER_ADMIN receives no implicit bypass: it holds exactly its frozen grants.
     """
     return permission in ROLE_PERMISSIONS.get(role, frozenset())
-    }
-)

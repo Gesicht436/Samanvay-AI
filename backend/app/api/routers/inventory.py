@@ -12,7 +12,7 @@ from backend.app.api.dependencies import (
     verify_cpse_access,
 )
 from backend.app.core import permissions as perm
-from backend.app.models.tables import User
+from backend.app.models.tables import AuthSession, User
 from backend.app.services.inventory_service import (
     list_inventory,
     get_item,
@@ -70,7 +70,8 @@ def create_inventory_item(
 def update_item_status(
     sku_code: str, 
     payload: Dict[str, Any], 
-    current_user: User = Depends(require_roles(["MATERIALS_MANAGER", "SUPER_ADMIN"])),
+    current_user: User = Depends(require_permission(perm.INVENTORY_STATUS_CHANGE)),
+    _csrf: AuthSession = Depends(require_csrf),
     idempotency_key: str = Depends(validate_idempotency_key),
     db: Session = Depends(get_db_session)
 ):

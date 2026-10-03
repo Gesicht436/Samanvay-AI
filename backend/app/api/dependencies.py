@@ -148,6 +148,59 @@ def require_permission(permission: str, resource_type: Optional[str] = None):
     return checker
 
 
+def require_any_permission(*permissions: str, resource_type: Optional[str] = None):
+    """Canonical AUTH-007 gate for a route guarded by more than one permission.
+
+    Identical evaluation, fail-closed behaviour, security-event recording and 403
+    contract as ``require_permission``; it only allows the request when the
+    centralized policy grants **any one** of the supplied frozen permissions.
+
+    This grants no permission of its own and adds no role grant: a caller must
+    still hold one of ``permissions`` through the frozen AUTH-007 mapping, so a
+    role absent from AUTH-007 (including SUPER_ADMIN) can never pass.
+    """
+    if not permissions:
+        raise ValueError("require_any_permission requires at least one permission")
+
+    def checker(
+        request: Request,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db_session),
+    ) -> User:
+        ip, _ua = _client_meta(request)
+        subject = build_subject(current_user)
+        context = AuthorizationContext(
+            request_id=request.headers.get("x-request-id"),
+            ip_address=ip,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+        for permission in permissions:
+            decision = evaluate(
+                AuthorizationRequest(
+                    subject=subject,
+                    action=Action(permission=permission),
+                    resource=Resource(resource_type=resource_type),
+                    context=context,
+                )
+            )
+            if decision.decision == ALLOW:
+                return current_user
+            last_reason_code = decision.reason_code
+        _record_authorization_failure(
+            db, current_user, ",".join(permissions), last_reason_code
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "AUTHORIZATION_DENIED",
+                "reason": last_reason_code,
+                "required_any_of": list(permissions),
+            },
+        )
+
+    return checker
+
+
 def require_csrf(
     request: Request,
     session: AuthSession = Depends(get_current_session),
@@ -205,6 +258,27 @@ def verify_cpse_access(
     authority (AUTH-003 / AUTH-007 CPSE isolation).
     """
     return current_user.cpse
+
+
+def require_roles(allowed_roles: List[str]):
+    """
+    Legacy role-based compatibility dependency.
+
+    Uses the current session-based authentication flow. This exists only
+    for routes that have not yet migrated to the canonical AUTH-007
+    permission dependency.
+    """
+    def role_checker(
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient role permissions",
+            )
+        return current_user
+
+    return role_checker
 
 
 class PaginationParams:
