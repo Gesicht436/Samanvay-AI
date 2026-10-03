@@ -18,8 +18,14 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 from sqlalchemy.orm import Session
 import pandas as pd
 
-from backend.app.api.dependencies import get_db_session
-from backend.app.models.tables import IngestedDocument, InventoryItem
+from backend.app.api.dependencies import (
+    get_db_session,
+    require_csrf,
+    require_permission,
+    verify_cpse_access,
+)
+from backend.app.core import permissions as perm
+from backend.app.models.tables import AuthSession, IngestedDocument, InventoryItem, User
 from backend.app.schemas.material import ExtractedMaterialAttributes
 from ml.vision.ocr_engine import OCREngine
 from ml.vision.mtc_parser import MTCParser
@@ -35,12 +41,19 @@ mtc_parser = MTCParser()
 @router.post("/document")
 async def upload_document(
     file: UploadFile = File(...),
+    current_user: User = Depends(require_permission(perm.INGEST_DOCUMENT)),
+    _csrf: AuthSession = Depends(require_csrf),
     db: Session = Depends(get_db_session),
 ):
     """
     Ingests procurement invoices, delivery challans, and EN 10204 3.1 MTC certificates.
     Performs dual-path PDF vector stream or raster OCR extraction, extracts chemical
     and mechanical properties, and verifies ASTM conformance.
+
+    Requires ``INGEST_DOCUMENT`` and a CSRF-verified session (AUTH-007/AUTH-006).
+    ``IngestedDocument`` has no CPSE/depot ownership column, so this write is
+    authenticated and permissioned but not tenant-scoped; document ownership
+    remains an unresolved decision and is deliberately not invented here.
     """
     if not file.filename:
         raise HTTPException(
@@ -133,10 +146,18 @@ async def upload_document(
 @router.post("/catalog")
 async def upload_catalog(
     file: UploadFile = File(...),
+    current_user: User = Depends(require_permission(perm.INGEST_CATALOG)),
+    _csrf: AuthSession = Depends(require_csrf),
+    session_cpse: str = Depends(verify_cpse_access),
     db: Session = Depends(get_db_session),
 ):
     """
     Batch imports ERP inventory catalog CSV or Excel spreadsheet into plant stock ledger.
+
+    Requires ``INGEST_CATALOG`` and a CSRF-verified session. The authenticated
+    session CPSE is the only accepted tenant: a file that declares a different
+    CPSE is rejected outright rather than imported into another tenant, and an
+    absent CPSE column/blank cell falls back to the session CPSE.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Invalid filename.")
@@ -161,6 +182,26 @@ async def upload_catalog(
     col_map = {c: c.lower().strip() for c in df.columns}
     df.rename(columns=col_map, inplace=True)
 
+    # Tenant boundary: the authenticated session CPSE is authoritative. A file
+    # that declares any other CPSE is rejected in full so no row can be inserted
+    # into a foreign tenant (AUTH-007 Sections 15 and 18).
+    effective_cpse = session_cpse.strip().upper()
+    if "cpse" in df.columns:
+        declared = {
+            str(value).strip().upper()
+            for value in df["cpse"].tolist()
+            if pd.notna(value) and str(value).strip()
+        }
+        foreign = sorted(value for value in declared if value != effective_cpse)
+        if foreign:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Catalog declares CPSE values outside the authenticated session "
+                    f"tenant ({foreign}). Ingestion is restricted to {session_cpse}."
+                ),
+            )
+
     imported_count = 0
     errors = []
 
@@ -176,7 +217,7 @@ async def upload_catalog(
 
             item = InventoryItem(
                 sku_code=sku,
-                cpse=str(row.get("cpse", "IOCL")).strip(),
+                cpse=effective_cpse,
                 depot_id=str(row.get("depot_id", "DEFAULT_DEPOT")).strip(),
                 depot_location=str(row.get("depot_location", "Main Plant")).strip(),
                 description=str(row.get("description", "")).strip(),
@@ -187,7 +228,9 @@ async def upload_catalog(
                 metallurgy=str(row.get("metallurgy")) if pd.notna(row.get("metallurgy")) else None,
                 facing_end=str(row.get("facing_end")) if pd.notna(row.get("facing_end")) else None,
                 standard=str(row.get("standard")) if pd.notna(row.get("standard")) else None,
-                available_qty=int(row.get("available_qty", row.get("quantity", 1))),
+                # The model column is ``quantity``; ``available_qty`` is the
+                # ERP export header and is mapped onto it here.
+                quantity=int(row.get("available_qty", row.get("quantity", 1))),
                 days_idle=int(row.get("days_idle", 0)),
                 unit_cost_inr=float(row.get("unit_cost_inr", 0.0)) if pd.notna(row.get("unit_cost_inr")) else 0.0,
                 status="SURPLUS" if int(row.get("days_idle", 0)) >= 90 else "ACTIVE",
