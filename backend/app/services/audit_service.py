@@ -124,8 +124,20 @@ def list_audit_entries(
     }
 
 
-def get_audit_entry_by_id(db: Session, log_id: str) -> Optional[SovereignAuditLedger]:
-    return db.query(SovereignAuditLedger).filter(SovereignAuditLedger.log_id == log_id).first()
+def get_audit_entry_by_id(
+    db: Session,
+    log_id: str,
+    cpse: Optional[str] = None,
+) -> Optional[SovereignAuditLedger]:
+    """Return one ledger record, optionally scoped to a single CPSE.
+
+    When ``cpse`` is supplied the CPSE restriction is applied in the query, so
+    an out-of-scope record is indistinguishable from a nonexistent one.
+    """
+    query = db.query(SovereignAuditLedger).filter(SovereignAuditLedger.log_id == log_id)
+    if cpse:
+        query = query.filter(SovereignAuditLedger.cpse == cpse)
+    return query.first()
 
 
 def verify_chain(db: Session) -> AuditVerificationResponse:
