@@ -162,10 +162,16 @@ def seed_database_if_empty():
 
 def seed_users_if_empty(db=None):
     """
-    Ensures all 23 default seed persona accounts across 7 CPSEs exist in the PostgreSQL users table.
+    Ensures all 25 default seed persona accounts across 7 CPSEs exist in the PostgreSQL users table.
+
+    Purely additive: only missing personas are created. An existing seed account
+    is never reactivated, reapproved, re-roled or re-hashed, so seed data is not
+    treated as the authority for current administrative account state
+    (AUTH-005 Section "Seed/deployment interaction"; frozen invariant that startup
+    seeding must not silently undo administrative account-state changes).
 
     Development/test only. AUTH-006 forbids exposing seed credentials in production;
-    startup seeding must not create/reactivate/re-approve accounts there.
+    startup seeding does not run in a production deployment.
     """
     from backend.app.core.config import settings
     from backend.app.models.tables import User
@@ -185,46 +191,33 @@ def seed_users_if_empty(db=None):
     try:
         hashed = get_password_hash(DEFAULT_SEED_PASSWORD)
         created_count = 0
-        updated_count = 0
         for seed_info in SEED_USERS:
             existing = db.query(User).filter(
                 (User.username == seed_info.username) | (User.email == seed_info.email)
             ).first()
-            if not existing:
-                user = User(
-                    username=seed_info.username,
-                    email=seed_info.email,
-                    hashed_password=hashed,
-                    full_name=seed_info.full_name,
-                    role=seed_info.role,
-                    cpse=seed_info.cpse,
-                    depot_id=seed_info.depot_id,
-                    is_active=True,
-                    is_approved=True,
-                )
-                db.add(user)
-                try:
-                    db.commit()
-                    created_count += 1
-                except Exception as inner_e:
-                    db.rollback()
-                    logger.warning(f"Skipping seed user {seed_info.username}: {inner_e}")
-            else:
-                needs_update = False
-                if not existing.is_approved or not existing.is_active:
-                    existing.is_approved = True
-                    existing.is_active = True
-                    needs_update = True
-                if existing.role != seed_info.role:
-                    existing.role = seed_info.role
-                    needs_update = True
-                if needs_update:
-                    try:
-                        db.commit()
-                        updated_count += 1
-                    except Exception:
-                        db.rollback()
-        logger.info(f"Seed users status: {created_count} created, {updated_count} updated.")
+            if existing:
+                # Existing account state is authoritative: never reactivate,
+                # reapprove, re-role or re-hash an existing account.
+                continue
+            user = User(
+                username=seed_info.username,
+                email=seed_info.email,
+                hashed_password=hashed,
+                full_name=seed_info.full_name,
+                role=seed_info.role,
+                cpse=seed_info.cpse,
+                depot_id=seed_info.depot_id,
+                is_active=True,
+                is_approved=True,
+            )
+            db.add(user)
+            try:
+                db.commit()
+                created_count += 1
+            except Exception as inner_e:
+                db.rollback()
+                logger.warning(f"Skipping seed user {seed_info.username}: {inner_e}")
+        logger.info(f"Seed users status: {created_count} created, existing accounts left unchanged.")
     except Exception as e:
         db.rollback()
         logger.error(f"Error seeding default users: {e}")

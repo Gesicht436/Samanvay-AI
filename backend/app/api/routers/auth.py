@@ -30,7 +30,6 @@ from backend.app.core.security import (
 from backend.app.models.tables import AuthSession, User
 from backend.app.schemas.auth import (
     CsrfTokenResponse,
-    DEFAULT_SEED_PASSWORD,
     SEED_USERS,
     UserLogin,
     UserProvisionRequest,
@@ -38,7 +37,6 @@ from backend.app.schemas.auth import (
 )
 from backend.app.services import auth_rate_limit as rate_limit
 from backend.app.services import auth_session_service as session_service
-from backend.app.services.seeder import seed_users_if_empty
 
 logger = logging.getLogger("samanvay.auth")
 
@@ -236,31 +234,18 @@ def get_current_user_profile(
     "/seed-users",
     summary="List default seed persona accounts (development/test only)",
 )
-def get_seed_users(
-    db: Session = Depends(get_db_session),
-):
-    """Development/test only. Not available in production deployments."""
+def get_seed_users():
+    """Development/test only. Not available in production deployments.
+
+    Strictly read-only: the persona list is served from the static seed
+    definition. It performs no database access or mutation, creates no session
+    and never discloses a seed credential.
+    """
     if settings.is_production:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    seed_users_if_empty(db)
     return {
-        "default_password": DEFAULT_SEED_PASSWORD,
         "users": [user.model_dump() for user in SEED_USERS],
     }
-
-
-@router.post(
-    "/seed",
-    summary="Idempotently ensure seed accounts exist (development/test only)",
-)
-def trigger_seed_users(
-    db: Session = Depends(get_db_session),
-):
-    """Development/test only. Not available in production deployments."""
-    if settings.is_production:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    seed_users_if_empty(db)
-    return {"status": "SUCCESS", "total_users": db.query(User).count()}
 
 
 @router.get(
