@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
-from backend.app.api.dependencies import get_db_session
-from backend.app.models.tables import InventoryItem
+from backend.app.api.dependencies import get_db_session, require_permission
+from backend.app.core import permissions as perm
+from backend.app.models.tables import InventoryItem, User
 from graph.logistics import (
     road_distance,
     estimate_transit_hours,
@@ -14,19 +15,46 @@ from graph.logistics import (
 router = APIRouter(prefix="/graph", tags=["Graph"])
 
 
+def _session_cpse(
+    current_user: User = Depends(require_permission(perm.GRAPH_READ)),
+) -> str:
+    """Return the authenticated session's CPSE for read-only graph access.
+
+    Authentication and authorization are delegated to the centralized AUTH-007
+    dependency (``GRAPH_READ``). The tenant context is taken ONLY from the
+    authenticated session user; a client-controlled ``X-CPSE-ID`` (or any other
+    caller-supplied CPSE selector) is never consulted. If the account carries no
+    CPSE, the request fails closed instead of defaulting to a fallback tenant.
+    """
+    cpse = current_user.cpse
+    if not cpse:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "AUTHORIZATION_DENIED",
+                "reason": "MISSING_RESOURCE_ATTRIBUTES",
+            },
+        )
+    return cpse
+
+
 @router.get("/discover")
 def discover_surplus(
     item_type: Optional[str] = Query(default=None),
     max_distance_km: Optional[float] = Query(default=None),
-    x_cpse: Optional[str] = Header(default="IOCL", alias="X-CPSE-ID"),
+    session_cpse: str = Depends(_session_cpse),
     db: Session = Depends(get_db_session),
 ):
     """
-    Pre-Purchase Radar: Cross-CPSE surplus discovery with strict Attribute-Level Privacy.
-    Commercial prices are strictly stripped across enterprises.
+    Pre-Purchase Radar: surplus discovery with strict Attribute-Level Privacy.
+
+    The tenant boundary comes ONLY from the authenticated session: the query is
+    explicitly scoped to the caller's CPSE and commercial prices are never
+    exposed across enterprises. ``X-CPSE-ID`` is not read.
     """
     query = db.query(InventoryItem).filter(
-        (InventoryItem.status == "IDLE_SURPLUS") | (InventoryItem.is_broadcasted_surplus == True)
+        InventoryItem.cpse == session_cpse,
+        (InventoryItem.status == "IDLE_SURPLUS") | (InventoryItem.is_broadcasted_surplus == True),
     )
 
     if item_type and item_type != "ALL":
@@ -77,23 +105,31 @@ def discover_surplus(
             "co2_saved_kg": round(co2_saved, 1),
         }
 
-        # Strict Attribute-Level Privacy: commercial prices shown ONLY if caller is same CPSE
-        if item.cpse == x_cpse:
+        # Strict Attribute-Level Privacy: commercial prices are shown ONLY for
+        # the authenticated caller's own CPSE (never a client-selected tenant).
+        if item.cpse == session_cpse:
             item_dict["unit_cost_inr"] = float(item.unit_cost_inr) if item.unit_cost_inr else 0.0
             item_dict["total_value_inr"] = float(item.total_value_inr) if item.total_value_inr else 0.0
 
         results.append(item_dict)
 
     return {
-        "requesting_cpse": x_cpse,
+        "requesting_cpse": session_cpse,
         "total_discovered": len(results),
         "items": results,
     }
 
 
 @router.get("/item/{sku_code}/properties")
-def get_item_properties(sku_code: str, db: Session = Depends(get_db_session)):
-    item = db.query(InventoryItem).filter(InventoryItem.sku_code == sku_code).first()
+def get_item_properties(
+    sku_code: str,
+    session_cpse: str = Depends(_session_cpse),
+    db: Session = Depends(get_db_session),
+):
+    item = db.query(InventoryItem).filter(
+        InventoryItem.cpse == session_cpse,
+        InventoryItem.sku_code == sku_code,
+    ).first()
     if not item:
         raise HTTPException(status_code=404, detail=f"Part SKU {sku_code} not found")
 
@@ -116,8 +152,13 @@ def get_item_properties(sku_code: str, db: Session = Depends(get_db_session)):
 
 
 @router.get("/depot/{depot_id}/surplus")
-def get_depot_surplus(depot_id: str, db: Session = Depends(get_db_session)):
+def get_depot_surplus(
+    depot_id: str,
+    session_cpse: str = Depends(_session_cpse),
+    db: Session = Depends(get_db_session),
+):
     items = db.query(InventoryItem).filter(
+        InventoryItem.cpse == session_cpse,
         InventoryItem.depot_id == depot_id,
         (InventoryItem.status == "IDLE_SURPLUS") | (InventoryItem.is_broadcasted_surplus == True),
     ).all()
@@ -138,7 +179,11 @@ def get_depot_surplus(depot_id: str, db: Session = Depends(get_db_session)):
 
 
 @router.get("/logistics/{source_depot}/{target_depot}")
-def get_route_logistics(source_depot: str, target_depot: str):
+def get_route_logistics(
+    source_depot: str,
+    target_depot: str,
+    _user: User = Depends(require_permission(perm.GRAPH_READ)),
+):
     # Lookup coordinates
     coord1 = None
     coord2 = None
@@ -170,14 +215,20 @@ def get_route_logistics(source_depot: str, target_depot: str):
 
 
 @router.get("/topology")
-def get_network_topology(db: Session = Depends(get_db_session)):
+def get_network_topology(
+    session_cpse: str = Depends(_session_cpse),
+    db: Session = Depends(get_db_session),
+):
     """
-    Returns the sovereign multi-CPSE logistics topology including depot coordinates,
-    real inventory counts, surplus value, and active inter-CPSE corridors.
+    Returns the caller CPSE's logistics topology including depot coordinates,
+    own-CPSE inventory counts, surplus value, and active static corridors.
+
+    The inventory aggregation is scoped at SQL level to the authenticated
+    session's CPSE; no other CPSE's counts or commercial aggregates are exposed.
     """
     from sqlalchemy import func
 
-    # 1. CPSE breakdown
+    # 1. Own-CPSE breakdown (session-scoped at query level)
     cpse_stats = db.query(
         InventoryItem.cpse,
         func.count(InventoryItem.id).label("total_items"),
@@ -188,9 +239,9 @@ def get_network_topology(db: Session = Depends(get_db_session)):
             | (InventoryItem.is_broadcasted_surplus == True)
         ).label("surplus_items"),
         func.coalesce(func.sum(InventoryItem.total_value_inr), 0).label("total_value"),
-    ).group_by(InventoryItem.cpse).all()
+    ).filter(InventoryItem.cpse == session_cpse).group_by(InventoryItem.cpse).all()
 
-    # 2. Depot breakdown
+    # 2. Own-CPSE depot breakdown (session-scoped at query level)
     depot_rows = db.query(
         InventoryItem.depot_id,
         InventoryItem.depot_location,
@@ -203,7 +254,9 @@ def get_network_topology(db: Session = Depends(get_db_session)):
             | (InventoryItem.is_broadcasted_surplus == True)
         ).label("surplus_items"),
         func.coalesce(func.sum(InventoryItem.total_value_inr), 0).label("total_value"),
-    ).group_by(InventoryItem.depot_id, InventoryItem.depot_location, InventoryItem.cpse).all()
+    ).filter(InventoryItem.cpse == session_cpse).group_by(
+        InventoryItem.depot_id, InventoryItem.depot_location, InventoryItem.cpse
+    ).all()
 
     # Build node models
     depot_nodes = []
