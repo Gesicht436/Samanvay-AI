@@ -72,8 +72,17 @@ def get_item(db: Session, sku_code: str, requesting_cpse: str) -> Dict[str, Any]
     return item_dict
 
 
-def create_item(db: Session, request: Dict[str, Any]) -> InventoryItem:
-    item = InventoryItem(**request)
+def create_item(
+    db: Session,
+    request: Dict[str, Any],
+    requesting_cpse: str,
+    actor: str,
+) -> InventoryItem:
+    # Tenant boundary (AUTH-007): the authenticated session CPSE is authoritative.
+    # A client-supplied ``cpse`` can neither select nor broaden the stored tenant,
+    # so it is overwritten unconditionally rather than rejected.
+    effective_cpse = requesting_cpse.strip().upper()
+    item = InventoryItem(**{**request, "cpse": effective_cpse})
     db.add(item)
     try:
         db.commit()
@@ -81,7 +90,7 @@ def create_item(db: Session, request: Dict[str, Any]) -> InventoryItem:
         create_audit_entry(db, {
             "action_category": "STATUS_CHANGE",
             "action": "CREATE_INVENTORY",
-            "actor": "SYSTEM",
+            "actor": actor,
             "cpse": item.cpse,
             "depot": item.depot_id,
             "reference_id": item.sku_code,
@@ -99,8 +108,14 @@ def transition_status(
     new_status: str,
     reason: str,
     officer: str,
+    requesting_cpse: str,
 ) -> InventoryItem:
-    item = db.query(InventoryItem).filter(InventoryItem.sku_code == sku_code).first()
+    # Tenant isolation is part of the lookup predicate: a SKU owned by another
+    # CPSE is indistinguishable from a nonexistent SKU (ResourceNotFoundError).
+    item = db.query(InventoryItem).filter(
+        InventoryItem.sku_code == sku_code,
+        InventoryItem.cpse == requesting_cpse,
+    ).first()
     if not item:
         raise ResourceNotFoundError(f"Item with SKU {sku_code} not found")
 

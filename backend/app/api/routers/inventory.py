@@ -80,21 +80,48 @@ def get_hitl_items(
 def get_inventory_item(sku_code: str, session_cpse: str = Depends(_inventory_session_cpse), db: Session = Depends(get_db_session)):
     return get_item(db, sku_code, session_cpse)
 
+
+def _inventory_mutation_identity(permission: str):
+    """Return the authenticated actor for an inventory mutation route.
+
+    Authentication and authorization are delegated to the centralized AUTH-007
+    dependency for ``permission`` (``INVENTORY_CREATE`` /
+    ``INVENTORY_STATUS_CHANGE``). Both the tenant context and the actor identity
+    used by the mutation come ONLY from the authenticated session: a client-
+    supplied ``cpse``, ``officer``/``actor`` body field or ``X-CPSE-ID`` header is
+    never consulted. If the account carries no CPSE the request fails closed
+    rather than defaulting to a fallback tenant.
+    """
+
+    def dependency(current_user: User = Depends(require_permission(permission))) -> User:
+        if not current_user.cpse:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "AUTHORIZATION_DENIED",
+                    "reason": "MISSING_RESOURCE_ATTRIBUTES",
+                },
+            )
+        return current_user
+
+    return dependency
+
+
 @router.post("")
 @router.post("/")
 def create_inventory_item(
     payload: Dict[str, Any],
-    current_user: User = Depends(require_permission(perm.INVENTORY_CREATE)),
-    _csrf: User = Depends(require_csrf),
+    current_user: User = Depends(_inventory_mutation_identity(perm.INVENTORY_CREATE)),
+    _csrf: AuthSession = Depends(require_csrf),
     db: Session = Depends(get_db_session),
 ):
-    return create_item(db, payload)
+    return create_item(db, payload, current_user.cpse, current_user.username)
 
 @router.put("/{sku_code}/status")
 def update_item_status(
     sku_code: str, 
     payload: Dict[str, Any], 
-    current_user: User = Depends(require_permission(perm.INVENTORY_STATUS_CHANGE)),
+    current_user: User = Depends(_inventory_mutation_identity(perm.INVENTORY_STATUS_CHANGE)),
     _csrf: AuthSession = Depends(require_csrf),
     idempotency_key: str = Depends(validate_idempotency_key),
     db: Session = Depends(get_db_session)
@@ -105,4 +132,4 @@ def update_item_status(
     new_status = payload.get("status")
     reason = payload.get("reason", "")
     officer = current_user.username
-    return transition_status(db, sku_code, new_status, reason, officer)
+    return transition_status(db, sku_code, new_status, reason, officer, current_user.cpse)
