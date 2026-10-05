@@ -12,9 +12,11 @@ def list_inventory(
     pagination: Dict[str, int],
     requesting_cpse: str,
 ) -> Dict[str, Any]:
-    query = db.query(InventoryItem)
-    if "cpse" in filters and filters["cpse"] and filters["cpse"] != "ALL":
-        query = query.filter(InventoryItem.cpse == filters["cpse"])
+    # Tenant boundary is applied at query level and comes ONLY from the
+    # authenticated session. A client-supplied ``cpse`` filter is deliberately
+    # NOT honoured as a tenant selector: it can neither broaden nor switch the
+    # caller's CPSE. ``depot``/``status``/``item_type`` may only narrow within it.
+    query = db.query(InventoryItem).filter(InventoryItem.cpse == requesting_cpse)
     if "depot" in filters and filters["depot"] and filters["depot"] != "ALL":
         query = query.filter(InventoryItem.depot_id == filters["depot"])
     if "status" in filters and filters["status"] and filters["status"] != "ALL":
@@ -48,7 +50,12 @@ def list_inventory(
 
 
 def get_item(db: Session, sku_code: str, requesting_cpse: str) -> Dict[str, Any]:
-    item = db.query(InventoryItem).filter(InventoryItem.sku_code == sku_code).first()
+    # Tenant isolation is part of the lookup predicate: a SKU owned by another
+    # CPSE is indistinguishable from a nonexistent SKU (ResourceNotFoundError).
+    item = db.query(InventoryItem).filter(
+        InventoryItem.sku_code == sku_code,
+        InventoryItem.cpse == requesting_cpse,
+    ).first()
     if not item:
         raise ResourceNotFoundError(f"Item with SKU {sku_code} not found")
 
@@ -153,14 +160,16 @@ def get_surplus_radar(db: Session, requesting_cpse: str) -> List[Dict[str, Any]]
     return result
 
 
-def get_hitl_queue(db: Session) -> List[Dict[str, Any]]:
+def get_hitl_queue(db: Session, requesting_cpse: str) -> List[Dict[str, Any]]:
     """
-    Retrieves items requiring Human-In-The-Loop review (unverified MTCs or conditional tolerance matches).
+    Retrieves items requiring Human-In-The-Loop review (unverified MTCs or conditional
+    tolerance matches) for the authenticated session's CPSE only.
     """
     items = (
         db.query(InventoryItem)
         .filter(
-            (InventoryItem.status == "HITL_REVIEW") | (InventoryItem.days_idle >= 90)
+            InventoryItem.cpse == requesting_cpse,
+            (InventoryItem.status == "HITL_REVIEW") | (InventoryItem.days_idle >= 90),
         )
         .all()
     )
@@ -174,20 +183,35 @@ def get_inventory_stats(db: Session, requesting_cpse: str) -> Dict[str, Any]:
     """
     Computes aggregate metrics across the sovereign inventory and requisition ledgers.
     """
-    from sqlalchemy import func
+    from sqlalchemy import func, or_
     from backend.app.models.tables import Requisition
 
-    total_items = db.query(InventoryItem).count()
+    # Every aggregate below is scoped at query level to the authenticated
+    # session's CPSE; no other CPSE's counts, values or categories are exposed.
+    total_items = db.query(InventoryItem).filter(
+        InventoryItem.cpse == requesting_cpse
+    ).count()
     total_surplus = db.query(InventoryItem).filter(
-        (InventoryItem.status == "IDLE_SURPLUS") | (InventoryItem.is_broadcasted_surplus == True)
+        InventoryItem.cpse == requesting_cpse,
+        (InventoryItem.status == "IDLE_SURPLUS") | (InventoryItem.is_broadcasted_surplus == True),
     ).count()
     total_hitl = db.query(InventoryItem).filter(
-        (InventoryItem.status == "HITL_REVIEW") | (InventoryItem.days_idle >= 90)
+        InventoryItem.cpse == requesting_cpse,
+        (InventoryItem.status == "HITL_REVIEW") | (InventoryItem.days_idle >= 90),
     ).count()
-    total_requisitions = db.query(Requisition).count()
+    # Requisition exposes both sides of the transfer (``source_cpse`` /
+    # ``target_cpse``); count only those the caller's CPSE participates in, using
+    # the existing columns. No new tenant field is introduced.
+    total_requisitions = db.query(Requisition).filter(
+        or_(
+            Requisition.source_cpse == requesting_cpse,
+            Requisition.target_cpse == requesting_cpse,
+        )
+    ).count()
 
     capital_res = db.query(func.sum(InventoryItem.total_value_inr)).filter(
-        (InventoryItem.status == "IDLE_SURPLUS") | (InventoryItem.is_broadcasted_surplus == True)
+        InventoryItem.cpse == requesting_cpse,
+        (InventoryItem.status == "IDLE_SURPLUS") | (InventoryItem.is_broadcasted_surplus == True),
     ).scalar()
     capital_unlocked_cr = round(float(capital_res or 0.0) / 1e7, 2)
 
@@ -195,6 +219,8 @@ def get_inventory_stats(db: Session, requesting_cpse: str) -> Dict[str, Any]:
         InventoryItem.cpse,
         func.count(InventoryItem.id).label("count"),
         func.sum(InventoryItem.total_value_inr).label("total_val")
+    ).filter(
+        InventoryItem.cpse == requesting_cpse
     ).group_by(InventoryItem.cpse).all()
 
     cpse_breakdown = [
@@ -209,6 +235,8 @@ def get_inventory_stats(db: Session, requesting_cpse: str) -> Dict[str, Any]:
     cat_rows = db.query(
         InventoryItem.item_type,
         func.count(InventoryItem.id).label("count")
+    ).filter(
+        InventoryItem.cpse == requesting_cpse
     ).group_by(InventoryItem.item_type).all()
 
     category_breakdown = [

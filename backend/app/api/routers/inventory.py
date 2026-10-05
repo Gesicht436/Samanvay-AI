@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 from backend.app.api.dependencies import (
-    get_current_user,
     get_db_session,
     InventoryFilterParams,
     PaginationParams,
@@ -25,21 +24,46 @@ from backend.app.services.inventory_service import (
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
+
+def _inventory_session_cpse(
+    current_user: User = Depends(require_permission(perm.INVENTORY_READ)),
+) -> str:
+    """Return the authenticated session's CPSE for inventory read access.
+
+    Authentication and authorization are delegated to the centralized AUTH-007
+    dependency (``INVENTORY_READ``). The tenant context is taken ONLY from the
+    authenticated session user; a client-supplied ``?cpse`` query parameter, a
+    request-body CPSE, or an ``X-CPSE-ID`` header is never consulted as a tenant
+    selector. If the account carries no CPSE, the request fails closed instead of
+    defaulting to a fallback tenant.
+    """
+    cpse = current_user.cpse
+    if not cpse:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "AUTHORIZATION_DENIED",
+                "reason": "MISSING_RESOURCE_ATTRIBUTES",
+            },
+        )
+    return cpse
+
+
 @router.get("")
 @router.get("/")
 def get_inventory_list(
-    filters: InventoryFilterParams = Depends(), 
-    pagination: PaginationParams = Depends(), 
-    cpse: str = Depends(verify_cpse_access),
+    filters: InventoryFilterParams = Depends(),
+    pagination: PaginationParams = Depends(),
+    session_cpse: str = Depends(_inventory_session_cpse),
     db: Session = Depends(get_db_session)
 ):
     filter_dict = {k: v for k, v in filters.__dict__.items() if v is not None}
     pag_dict = {"skip": pagination.skip, "limit": pagination.limit}
-    return list_inventory(db, filter_dict, pag_dict, cpse)
+    return list_inventory(db, filter_dict, pag_dict, session_cpse)
 
 @router.get("/stats")
-def get_stats(cpse: str = Depends(verify_cpse_access), db: Session = Depends(get_db_session)):
-    return get_inventory_stats(db, cpse)
+def get_stats(session_cpse: str = Depends(_inventory_session_cpse), db: Session = Depends(get_db_session)):
+    return get_inventory_stats(db, session_cpse)
 
 @router.get("/surplus")
 def get_surplus_items(cpse: str = Depends(verify_cpse_access), db: Session = Depends(get_db_session)):
@@ -47,14 +71,14 @@ def get_surplus_items(cpse: str = Depends(verify_cpse_access), db: Session = Dep
 
 @router.get("/hitl-queue")
 def get_hitl_items(
-    current_user: User = Depends(get_current_user),
+    session_cpse: str = Depends(_inventory_session_cpse),
     db: Session = Depends(get_db_session),
 ):
-    return get_hitl_queue(db)
+    return get_hitl_queue(db, session_cpse)
 
 @router.get("/{sku_code}")
-def get_inventory_item(sku_code: str, cpse: str = Depends(verify_cpse_access), db: Session = Depends(get_db_session)):
-    return get_item(db, sku_code, cpse)
+def get_inventory_item(sku_code: str, session_cpse: str = Depends(_inventory_session_cpse), db: Session = Depends(get_db_session)):
+    return get_item(db, sku_code, session_cpse)
 
 @router.post("")
 @router.post("/")
