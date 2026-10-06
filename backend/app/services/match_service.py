@@ -175,10 +175,15 @@ def retrieve_candidates(
     query_part: Dict[str, Any],
     query_text: str,
     max_candidates: int = 50,
+    cpse: Optional[str] = None,
 ) -> List[InventoryItem]:
     """
     Multi-strategy candidate retrieval using combined OR query instead of
     sequential N+1 queries. Deduplication is handled at the SQL level.
+
+    The caller's CPSE is applied server-authoritatively so that operational
+    results are never returned across CPSE boundaries. Client-supplied CPSE
+    values (X-CPSE-ID, body fields) are never consulted.
     """
     raw_item_type = query_part.get("item_type")
     size_nb_mm = query_part.get("size_nb_mm")
@@ -187,7 +192,9 @@ def retrieve_candidates(
 
     base_item_type, sub_type_filter = _resolve_item_type(raw_item_type)
 
-    db_query = db.query(InventoryItem)
+    # Server-authoritative CPSE boundary (derived by verify_cpse_access).
+    # Never client-controlled or tenant-derived from the request payload.
+    db_query = db.query(InventoryItem).filter(InventoryItem.cpse == cpse)
 
     if base_item_type:
         db_query = db_query.filter(InventoryItem.item_type == base_item_type)
@@ -481,7 +488,7 @@ def search_matches(
     query_part, normalized_query = parse_query(data)
 
     # 2. Retrieve candidates
-    candidates = retrieve_candidates(db, query_part, query_text)
+    candidates = retrieve_candidates(db, query_part, query_text, cpse=cpse)
 
     # 3-5. Score, compute logistics, and serialize
     source_coord = _resolve_source_coord(cpse)

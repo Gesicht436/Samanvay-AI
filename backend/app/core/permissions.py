@@ -110,8 +110,11 @@ VALID_ROLES: FrozenSet[str] = frozenset(
 # ── Frozen role -> permission grants (AUTH-007 Section 3) ──────────────
 #
 # AUDIT_FINDING_MANAGE is intentionally absent from every grant set.
-# MATCH_READ / GRAPH_READ are intentionally absent: they are governed by
-# resource policy (AUTH-007 Section 4), not by a universal role grant.
+# GRAPH_READ is intentionally absent: it is governed by resource policy
+# (AUTH-007 Section 4), not by a universal role grant.
+# MATCH_READ stays resource-policy governed AND is granted to
+# MATERIALS_MANAGER only; authorization.evaluate() still applies the RBAC
+# grant check before the resource policy may allow (RBAC-first).
 ROLE_PERMISSIONS: Mapping[str, FrozenSet[str]] = {
     SITE_ENGINEER: frozenset(
         {
@@ -135,6 +138,7 @@ ROLE_PERMISSIONS: Mapping[str, FrozenSet[str]] = {
             INVENTORY_DISPATCH,
             INGEST_CATALOG,
             INGEST_DOCUMENT,
+            MATCH_READ,
         }
     ),
     TECHNICAL_AUTHORITY: frozenset(

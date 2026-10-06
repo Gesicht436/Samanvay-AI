@@ -163,6 +163,10 @@ def evaluate(request: AuthorizationRequest) -> AuthorizationDecision:
 
     # ── Resource-policy governed reads ────────────────────────────────
     if permission in perm.RESOURCE_POLICY_PERMISSIONS:
+        # RBAC-first: the caller's role must actually hold the permission before
+        # the resource-policy evaluator may issue an unconditional ALLOW.
+        if not perm.role_has_permission(subject.role, permission):
+            return _deny(DENY_PERMISSION_NOT_GRANTED)
         return _evaluate_resource_policy(request)
 
     # ── Audit-scope permissions ───────────────────────────────────────

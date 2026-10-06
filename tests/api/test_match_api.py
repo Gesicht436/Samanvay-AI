@@ -1,10 +1,34 @@
+"""
+Match API contract tests.
+
+Covers the F-1 / F-2 remediation of POST /api/v1/match/search:
+
+* anonymous                -> 401
+* SITE_ENGINEER            -> 403
+* TECHNICAL_AUTHORITY      -> 403
+* CISF_SECURITY            -> 403
+* VIGILANCE_AUDITOR        -> 403
+* SUPER_ADMIN              -> 403
+* MATERIALS_MANAGER        -> 200  (sole holder of MATCH_READ)
+* CPSE isolation: results are scoped to the session-derived CPSE; a spoofed
+  ``X-CPSE-ID`` header or a client body ``cpse`` field never broadens them.
+* GET /api/v1/match/benchmark -> 404 (removed from the production router).
+
+Authenticated cases use the real application authentication flow:
+``POST /api/v1/auth/login`` establishes the server-side session cookie that the
+following request presents. No authentication or authorization dependency is
+mocked, overridden or weakened.
+"""
+
+import inspect
+
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from ml.ner.normalizer import DialectNormalizer
-from rules.tolerance import evaluate_pair
-from ml.ranking.ranker import CompatibilityRanker
+from backend.app.api import dependencies as api_dependencies
+from backend.app.core.config import settings
+from backend.app.schemas.auth import DEFAULT_SEED_PASSWORD
 from backend.app.schemas.material import MatchRequest, MatchSearchResponse
 from backend.app.services.match_service import (
     parse_query,
@@ -16,9 +40,92 @@ from backend.app.services.match_service import (
 )
 from backend.app.models.base import SessionLocal
 from backend.app.models.tables import InventoryItem
+from ml.ner.normalizer import DialectNormalizer
+from rules.tolerance import evaluate_pair
+from ml.ranking.ranker import CompatibilityRanker
 
 
-client = TestClient(app)
+# CPSE A = the caller's own tenant; CPSE B = a foreign tenant used to attempt
+# cross-CPSE broadening.
+CPSE_A = "OIL"
+CPSE_B = "IOCL"
+ISO_SKU_A = "TEST-ISO-OIL-0001"
+ISO_SKU_B = "TEST-ISO-IOCL-0001"
+
+MATCH_SEARCH_BODY = {
+    "query_text": "FLG WNRF 4IN 300# A105",
+    "item_type": "FLANGE",
+    "size_nb_mm": 100.0,
+    "pressure_class": 300,
+}
+
+
+# ── Real application fixtures ───────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def _application_lifespan():
+    """Run the real application lifespan once (DB init + seed users/inventory).
+
+    This is the production startup path; no test-only authentication wiring.
+    """
+    with TestClient(app):
+        yield
+
+
+@pytest.fixture()
+def client(_application_lifespan):
+    """Fresh client with an empty cookie jar, so every test starts anonymous."""
+    return TestClient(app)
+
+
+def _login(test_client, username):
+    """Authenticate through the real login endpoint and session cookie flow."""
+    response = test_client.post(
+        "/api/v1/auth/login",
+        json={"username": username, "password": DEFAULT_SEED_PASSWORD},
+    )
+    assert response.status_code == 200, response.text
+    assert test_client.cookies.get(settings.session_cookie_name), (
+        "login must establish the server-side session cookie"
+    )
+    return response.json()
+
+
+def _ensure_cpse_twin_items():
+    """Insert identical matching parts under CPSE A and CPSE B (idempotent)."""
+    db = SessionLocal()
+    try:
+        for sku in (ISO_SKU_A, ISO_SKU_B):
+            db.query(InventoryItem).filter(InventoryItem.sku_code == sku).delete()
+        db.commit()
+        for sku, cpse, depot_id, depot_location in (
+            (ISO_SKU_A, CPSE_A, "DEPOT-OIL-DLJ", "Duliajan"),
+            (ISO_SKU_B, CPSE_B, "DEPOT-IOCL-PAN", "Panipat"),
+        ):
+            db.add(
+                InventoryItem(
+                    sku_code=sku,
+                    cpse=cpse,
+                    depot_id=depot_id,
+                    depot_location=depot_location,
+                    description="FLG WNRF 4IN 300# A105 FLANGE",
+                    item_type="FLANGE",
+                    size_nb_mm=100.0,
+                    pressure_class=300,
+                    metallurgy="ASTM A105",
+                    facing_end="RF",
+                    quantity=10,
+                    unit_cost_inr=1500.0,
+                    status="TO_BE_CONSUMED",
+                )
+            )
+        db.commit()
+    finally:
+        db.close()
+
+
+def _search_path():
+    return "/api/v1/match/search"
 
 
 def test_normalizer_and_matching_pipeline():
@@ -109,38 +216,159 @@ def test_match_service_helpers():
     assert _resolve_tier(0.99, False) == "Tier 3"
 
 
-def test_match_search_endpoint():
+# ── F-1: MATCH_READ RBAC gate ───────────────────────────────────────────────
+
+def test_match_search_anonymous_returns_401(client):
+    """Anonymous callers are rejected before any route logic; the X-CPSE-ID
+    header must not act as a credential."""
     response = client.post(
-        "/api/v1/match/search",
-        json={
-            "query_text": "FLG WNRF 4IN 300# A105",
-            "item_type": "FLANGE",
-            "size_nb_mm": 100.0,
-            "pressure_class": 300,
-        },
+        _search_path(),
+        json=MATCH_SEARCH_BODY,
         headers={"X-CPSE-ID": "IOCL"},
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert "query" in data
-    assert "candidates" in data
-    assert isinstance(data["candidates"], list)
-
-    # Validate against MatchSearchResponse schema
-    validated = MatchSearchResponse(**data)
-    assert validated.query == "FLG WNRF 4IN 300# A105"
-
-    # Verify Attribute-Level Privacy: cross-CPSE candidates must NOT have unit_cost_inr
-    for cand in validated.candidates:
-        if cand.cpse != "IOCL":
-            assert cand.unit_cost_inr is None
-            assert cand.total_value_inr is None
+    assert response.status_code == 401
 
 
-def test_match_benchmark_endpoint():
+@pytest.mark.parametrize(
+    "username,expected_status",
+    [
+        pytest.param("engineer_oil", 403, id="site-engineer"),
+        pytest.param("tech_authority", 403, id="technical-authority"),
+        pytest.param("cisf_oil", 403, id="cisf-security"),
+        pytest.param("auditor", 403, id="vigilance-auditor"),
+        pytest.param("admin", 403, id="super-admin"),
+        pytest.param("stores_oil", 200, id="materials-manager"),
+    ],
+)
+def test_match_search_authorization_matrix(client, username, expected_status):
+    """Every role without MATCH_READ is denied; MATERIALS_MANAGER is allowed.
+
+    SUPER_ADMIN has no implicit bypass, so it is denied as well.
+    """
+    _login(client, username)
+    response = client.post(
+        _search_path(),
+        json=MATCH_SEARCH_BODY,
+        headers={"X-CPSE-ID": CPSE_A},
+    )
+    assert response.status_code == expected_status
+
+    if expected_status == 200:
+        _ensure_cpse_twin_items()
+        validated = MatchSearchResponse(**response.json())
+        assert validated.query == MATCH_SEARCH_BODY["query_text"]
+        assert validated.candidates
+        assert len(validated.candidates) == validated.total_candidates_evaluated
+        # Session-derived CPSE scoping (stores_oil belongs to CPSE A).
+        assert all(cand.cpse == CPSE_A for cand in validated.candidates)
+    else:
+        assert response.json().get("detail") == {
+            "error": "AUTHORIZATION_DENIED",
+            "reason": "PERMISSION_NOT_GRANTED",
+        }
+
+
+# ── F-2: server-authoritative CPSE scoping ──────────────────────────────────
+
+def _iter_api_routes(routes):
+    """Yield every route, descending into FastAPI's nested included routers."""
+    for route in routes:
+        yield route
+        for attr in ("routes", "original_router"):
+            sub = getattr(route, attr, None)
+            if sub is None:
+                continue
+            if hasattr(sub, "__iter__") and not isinstance(sub, (str, bytes)):
+                yield from _iter_api_routes(sub)
+            elif hasattr(sub, "routes"):
+                yield from _iter_api_routes(sub.routes)
+
+
+def test_match_search_route_wiring_uses_session_cpse():
+    """Static wiring check: the route derives CPSE from the session user only
+    (verify_cpse_access) and is gated by require_permission(MATCH_READ).
+
+    ``verify_cpse_access`` accepts nothing but the authenticated user, so
+    X-CPSE-ID cannot reach the service through this route."""
+    from backend.app.api.routers import match as match_router
+
+    route = next(
+        r
+        for r in _iter_api_routes(app.routes)
+        if getattr(r, "endpoint", None) is match_router.search_matches
+    )
+    assert "POST" in (route.methods or set())
+
+    calls = []
+    stack = [route.dependant]
+    while stack:
+        dep = stack.pop()
+        if dep.call is not None:
+            calls.append(dep.call)
+        stack.extend(dep.dependencies)
+
+    assert api_dependencies.verify_cpse_access in calls, (
+        "route must obtain CPSE via verify_cpse_access (session-derived)"
+    )
+    assert list(inspect.signature(api_dependencies.verify_cpse_access).parameters) == [
+        "current_user"
+    ], "verify_cpse_access must not accept any client-controlled input"
+    assert any(
+        getattr(call, "__qualname__", "").endswith("require_permission.<locals>.checker")
+        for call in calls
+    ), "MATCH_READ permission gate missing from route"
+
+
+def test_match_search_cpse_isolation_header_cannot_broaden(client):
+    """Authenticate as the MATERIALS_MANAGER of CPSE A and request matching.
+
+    Operational candidates must come only from CPSE A, even when X-CPSE-ID and
+    a client body ``cpse`` field both claim CPSE B."""
+    _ensure_cpse_twin_items()
+    _login(client, "stores_oil")  # session CPSE = CPSE A
+
+    spoofed_body = dict(MATCH_SEARCH_BODY)
+    spoofed_body["cpse"] = CPSE_B  # client-supplied body CPSE attempt
+    spoofed = client.post(
+        _search_path(),
+        json=spoofed_body,
+        headers={"X-CPSE-ID": CPSE_B},
+    )
+    assert spoofed.status_code == 200
+    spoofed_data = MatchSearchResponse(**spoofed.json())
+    assert spoofed_data.candidates, "expected candidates from CPSE A"
+    assert all(cand.cpse == CPSE_A for cand in spoofed_data.candidates)
+    spoofed_skus = {cand.sku_code for cand in spoofed_data.candidates}
+    assert ISO_SKU_B not in spoofed_skus
+
+    # The CPSE B twin exists and matches the same query, so its absence proves
+    # the server-side filter rather than missing data.
+    db = SessionLocal()
+    try:
+        twin_b = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.sku_code == ISO_SKU_B)
+            .first()
+        )
+        assert twin_b is not None
+        assert twin_b.cpse == CPSE_B
+    finally:
+        db.close()
+
+    # The header cannot broaden results: an otherwise identical request with
+    # the caller's own CPSE yields exactly the same candidate set.
+    honest = client.post(
+        _search_path(),
+        json=MATCH_SEARCH_BODY,
+        headers={"X-CPSE-ID": CPSE_A},
+    )
+    assert honest.status_code == 200
+    honest_data = MatchSearchResponse(**honest.json())
+    assert all(cand.cpse == CPSE_A for cand in honest_data.candidates)
+    assert {cand.sku_code for cand in honest_data.candidates} == spoofed_skus
+
+
+def test_match_benchmark_route_absent(client):
+    """The benchmark endpoint is not part of the production router."""
     response = client.get("/api/v1/match/benchmark")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "COMPLETED"
-    assert data["total_cases_evaluated"] == 150
-    assert data["precision_zero_tolerance"] == 1.0
+    assert response.status_code == 404

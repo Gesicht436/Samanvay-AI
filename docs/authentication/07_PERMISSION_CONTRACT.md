@@ -667,6 +667,17 @@ Cross-CPSE canonical information does NOT implicitly grant cross-CPSE operationa
 
 No read permission automatically grants mutation authority.
 
+
+
+### BENCHMARK
+
+`GET /api/v1/match/benchmark` is a development/test-only helper. It is NOT part
+of the frozen production API surface. It carries no permission (no
+`BENCHMARK_READ` exists), so the permission contract is unchanged. The production
+router no longer exposes this route; deployments must keep it removed or disabled
+ahead of any public release.
+
+
 ---
 
 ## 15. CPSE/Tenant Isolation
