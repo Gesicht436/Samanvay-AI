@@ -276,6 +276,8 @@ def provision_user(
     """Account provisioning (AUTH-006). Creates an active but UNAPPROVED account.
 
     No session is created; approval is a separate administrative operation.
+    ACCOUNT_PROVISIONED telemetry is committed atomically with the User INSERT
+    (AUTH-5J.3, decision D-5J.3-1).
     """
     existing = (
         db.query(User)
@@ -304,6 +306,24 @@ def provision_user(
     )
     db.add(user)
     try:
+        # AUTH-5J.3 (D-5J.3-1): flush assigns the target id, then stage
+        # ACCOUNT_PROVISIONED on the same transaction so the User INSERT and
+        # its telemetry commit atomically. Event identity: the authenticated
+        # actor (user_id) and the actor session (session_id); the target
+        # account id/username go in sanitized metadata. No password, password
+        # hash, session secret or CSRF token may ever enter event metadata.
+        db.flush()
+        session_service.record_security_event(
+            db,
+            session_service.EVENT_ACCOUNT_PROVISIONED,
+            user_id=current_user.id,
+            session_id=_csrf.id,
+            success=True,
+            metadata={
+                "target_user_id": user.id,
+                "target_username": user.username,
+            },
+        )
         db.commit()
     except Exception:
         db.rollback()

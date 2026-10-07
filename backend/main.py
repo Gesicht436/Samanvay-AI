@@ -66,8 +66,12 @@ app = FastAPI(
         "& Compatibility Platform for MoPNG (SIH26099)"
     ),
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # AUTH-5J.3 (D-5J.3-4, frozen AUTH-006 Section 2 final target):
+    # documentation and OpenAPI are development-only surfaces. Production
+    # deployments must not expose /docs, /redoc or /openapi.json.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
 # ── CORS Middleware ────────────────────────────────────────────────────────
