@@ -358,6 +358,17 @@ def reject_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.is_approved:
+        # An approved account has moved past the REJECT lifecycle stage
+        # (PROVISION -> ACTIVE + UNAPPROVED -> REJECT). Rejecting it would
+        # circumvent the lifecycle boundary and delete a treated-as-complete
+        # account, so preserve it and fail with a state conflict. No
+        # ACCOUNT_REJECTED telemetry is emitted, since the account is not
+        # actually being rejected.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot reject an already approved account.",
+        )
     target_username = user.username
     db.delete(user)
     session_service.record_security_event(
