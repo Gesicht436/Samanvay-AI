@@ -37,7 +37,7 @@ Authentication does not imply authorization. Authorization does not by itself es
 
 ### Current repository behavior
 
-The current browser stores a JWT in `localStorage` under `samanvay_auth_token`; the frontend API client sends `Authorization: Bearer ...`. There is no authentication cookie or server-side session model. See `frontend/src/context/AuthContext.tsx`, `frontend/src/lib/api.ts`, and `backend/app/core/security.py`.
+The current repository implements the frozen target: `POST /auth/login` verifies username/password with bcrypt against the local account store, performs account-state checks, and creates a server-side `AuthSession`. The browser carries only the session cookie (`__Host-samanvay_session` in production; `samanvay_session` in development) — `Secure`, `HttpOnly`, `SameSite=Lax`. The frontend keeps identity in memory only and restores it via `GET /auth/me`; unsafe requests carry an in-memory CSRF token. There is no JWT, no Bearer header, and no localStorage authentication state. The credential-authority direction is decided — External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1) — while the exact protocol/provider remains an OPEN ARCHITECTURE DECISION; local bcrypt verification is the current implementation until that integration is specified. See `frontend/src/context/AuthContext.tsx`, `frontend/src/lib/api.ts`, `backend/app/api/routers/auth.py`, and `backend/app/api/dependencies.py`.
 
 ---
 
@@ -53,7 +53,7 @@ An authenticated session may be established only when:
 4. `is_approved = true`.
 5. A new server-side session is created and committed successfully.
 
-Session state is server-side and revocable. Logout, expiration, account disablement, and other policy invalidations make the session unusable. Existing JWTs are not migrated into session rows; AUTH-005 defines the finite cutover.
+Session state is server-side and revocable. Logout, expiration, account disablement, and other policy invalidations make the session unusable. Existing JWTs were not migrated into session rows; the finite JWT cutover was completed by AUTH-006 and no JWT authentication path remains.
 
 ---
 
@@ -72,7 +72,7 @@ Session state is server-side and revocable. Logout, expiration, account disablem
 * No public request can create `SUPER_ADMIN` or any other privileged role.
 * An inactive user cannot log in or continue using an existing session.
 * Account state must be evaluated consistently during authentication/session resolution. A credential that is invalid, expired, revoked, or associated with an inactive/unapproved account must not be silently downgraded into anonymous behavior on a protected route.
-* The current repository has no protected account-creation/editing route; this is an implementation gap, not an unresolved target-policy decision.
+* Account creation is an authenticated, permission-gated backend route (`POST /auth/users`); account edit/disable routes do not exist yet, which is an implementation gap, not an unresolved target-policy decision.
 * Database nullability/backfill and account-state persistence are defined by AUTH-005.
 
 These are **TARGET** controls. Current behavior is documented in Section 21.
@@ -437,7 +437,7 @@ The only normal public production authentication/API entrypoints are:
 
 Development-only documentation/OpenAPI may be exposed in development environments.
 
-Google OAuth entry/callback will be intentionally reachable as part of the authentication flow when implemented, subject to its own validation and security requirements.
+No Google OAuth/OIDC entrypoint or callback exists; OIDC/Google is not part of the current authentication target (Section 16).
 
 The following are **not public production business endpoints**:
 
@@ -472,7 +472,6 @@ The target event set includes:
 
 * `LOGIN_SUCCESS`
 * `LOGIN_FAILURE`
-* `GOOGLE_LOGIN`
 * `SESSION_CREATED`
 * `SESSION_REVOKED`
 * `LOGOUT`
@@ -499,7 +498,6 @@ Authentication-sensitive operations require abuse protection/rate limiting, incl
 * Login.
 * Account provisioning/administrative authentication operations as applicable.
 * Recovery when implemented.
-* Google callback when implemented.
 
 Public signup is disabled and therefore is not a production target endpoint.
 
@@ -524,26 +522,13 @@ Its mechanism and exact designated-operation list are later scoped implementatio
 
 ---
 
-## 16. Google OIDC
+## 16. Google OIDC — Retired
 
-Google sign-in is a target architecture requirement using an OIDC authorization-code flow.
+Google OIDC is **not** part of the current authentication target. It was previously specified as a target requirement and has been removed from the architecture direction; it may only be reintroduced by an explicit later decision.
 
-Persistent `OAuthIdentity` storage is explicitly deferred beyond AUTH-006 by AUTH-005.
+No Google OAuth/OIDC flow, provider validation, or `OAuthIdentity` persistence exists in the repository, and none may be invented without an explicit approved task. The former `OAuthIdentity` logical model is retained only as historical reference in `05_DATABASE_DESIGN.md`.
 
-When Google OIDC is implemented, validate:
-
-* State.
-* Callback/redirect URI.
-* Issuer.
-* Audience.
-* Signature.
-* Expiry.
-
-Validated Google identity must resolve to or be explicitly linked to a local Samanvay account.
-
-Google authentication never assigns a privileged Samanvay role automatically.
-
-Provider validation, account-linking policy, and persistence implementation are later scoped work; no Google OAuth/OIDC flow currently exists in the repository.
+The credential-authority direction is External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1, Section 2), but its exact protocol/provider remains an OPEN ARCHITECTURE DECISION; no provider (LDAP, Active Directory, OIDC, SAML, or otherwise) may be assumed or invented.
 
 ---
 
@@ -612,7 +597,7 @@ Business Logic / Service
 PostgreSQL
 ```
 
-This is the TARGET architecture. It is not the current runtime data flow.
+This architecture matches both the frozen target and the current runtime data flow: session-cookie authentication was implemented by AUTH-006.
 
 ---
 
@@ -677,7 +662,7 @@ This is the TARGET architecture. It is not the current runtime data flow.
 | Seed password exposure                                         | Prohibited                                                                                                               |
 | Public business endpoints                                      | None beyond explicitly allowlisted authentication/health functionality                                                   |
 | Benchmark                                                      | Development/test-only; not normal production capability                                                                  |
-| Google OIDC                                                    | Target architecture; `OAuthIdentity` persistence deferred beyond AUTH-006                                                |
+| Google OIDC                                                    | Not part of the current target; reintroduction requires an explicit later decision                                                |
 | Session revocation                                             | Server-side                                                                                                              |
 | Rate limiting                                                  | Required for auth-sensitive operations                                                                                   |
 | Step-up authentication                                         | Required for operations designated as sensitive by policy                                                                |
@@ -687,24 +672,24 @@ This is the TARGET architecture. It is not the current runtime data flow.
 
 ## 21. Repository Grounding: Current Behavior vs TARGET
 
-The following describes inspected code, not the frozen target.
+The following describes verified current code against the frozen target.
 
 | Area                     | CURRENT repository behavior                                                                                                 | FROZEN TARGET                                                                                               |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Browser credential       | Frontend stores `samanvay_auth_token` in localStorage and adds a bearer Authorization header                                | Server-side session cookie; no browser-readable auth token                                                  |
-| Session persistence      | No `AuthSession` model or server-side auth session table                                                                    | AUTH-005 server-side, revocable session                                                                     |
-| Login                    | `POST /auth/login` checks bcrypt, `is_active`, `is_approved`, then returns signed JWT                                       | Establish session only for active and approved accounts                                                     |
-| Signup                   | `POST /auth/signup` is public, accepts role/CPSE/depot, can accept `SUPER_ADMIN`, and returns JWT for an unapproved account | Public self-registration disabled; authenticated administrative provisioning only                           |
+| Browser credential       | Frontend holds no browser-readable credential; identity is memory-only and restored from the HttpOnly session cookie                                | Server-side session cookie; no browser-readable auth token                                                  |
+| Session persistence      | `AuthSession` persists server-side sessions with SHA-256-hashed secrets, expiry, and revocation                                                                    | AUTH-005 server-side, revocable session                                                                     |
+| Login                    | `POST /auth/login` checks bcrypt, `is_active`, `is_approved`, creates `AuthSession`, sets HttpOnly cookie, returns profile only                                       | Establish session only for active and approved accounts                                                     |
+| Signup                   | Route does not exist (retired by AUTH-006 Phase 2); public self-registration disabled | Public self-registration disabled; authenticated administrative provisioning only                           |
 | Provisioning/approval    | User list/approve/reject are protected by direct `SUPER_ADMIN` checks; no protected account-create route exists             | `SUPER_ADMIN`-authorized provisioning plus separate approval                                                |
-| Required user dependency | `get_current_user` validates bearer JWT and checks active state, but does not check approval on each request                | Session + current User lookup + active/approved policy                                                      |
-| Optional identity        | `get_optional_user` can return `None` for missing/invalid JWT and allow route logic to continue                             | Optional authentication only where intentionally allowed; presented invalid credential must not downgrade   |
-| Authorization            | `require_roles` and direct role comparisons; no centralized permission provider                                             | Reusable centralized permission policy                                                                      |
+| Required user dependency | `get_current_user` resolves the session cookie to `AuthSession`, loads User, and checks active and approved state                | Session + current User lookup + active/approved policy                                                      |
+| Optional identity        | `get_optional_user` returns `None` only when no session cookie is presented; an invalid presented session returns 401                             | Optional authentication only where intentionally allowed; presented invalid credential must not downgrade   |
+| Authorization            | Centralized `require_permission` permission provider implemented (AUTH-5A–5K)                                             | Reusable centralized permission policy                                                                      |
 | CPSE                     | `verify_cpse_access` can use user CPSE, `X-CPSE-ID`, or fallback `OIL`; not a general tenant boundary                       | Server-derived CPSE; header cannot establish/override tenant authority                                      |
 | Frontend route controls  | `ProtectedRoute` and UI role checks exist                                                                                   | UI-only; backend authoritative                                                                              |
-| Security events          | No `SecurityEvent` model found; `SovereignAuditLedger` exists for business/statutory audit                                  | AUTH-005 `SecurityEvent` authoritative for auth telemetry                                                   |
-| CSRF/rate limiting       | No auth cookie, CSRF implementation, or rate-limit middleware/service found                                                 | Cookie-authenticated unsafe requests require CSRF defense; auth-sensitive operations require abuse controls |
-| Google OIDC              | No Google OAuth/OIDC route/provider validation found                                                                        | Target OIDC architecture                                                                                    |
-| Seed behavior            | Startup seeding can create/reactivate/reapprove seed accounts; public seed route exposes seed information/credential        | Development/test-only or controlled deployment mechanism; no public production seed credential              |
+| Security events          | `SecurityEvent` model exists and is authoritative for authentication/security telemetry                                  | AUTH-005 `SecurityEvent` authoritative for auth telemetry                                                   |
+| CSRF/rate limiting       | Session cookie set; CSRF/Origin validation on unsafe requests; login rate limiting active                                                 | Cookie-authenticated unsafe requests require CSRF defense; auth-sensitive operations require abuse controls |
+| Google OIDC              | No Google OAuth/OIDC route/provider validation found                                                                        | Not part of the current target; reintroduction requires an explicit decision                                                                                    |
+| Seed behavior            | Startup seeding can create/reactivate/reapprove seed accounts; public `/auth/seed` route removed; `/auth/seed-users` is read-only and never discloses a credential        | Development/test-only or controlled deployment mechanism; no public production seed credential              |
 | Public API posture       | Several business routes lack auth dependencies                                                                              | Default private/authenticated API                                                                           |
 | Inventory visibility     | Several inventory reads are optional-auth/public and are not a general tenant boundary                                      | Authenticated own-CPSE visibility according to role/resource policy                                         |
 | Inventory mutations      | Several mutations are currently unauthenticated or weakly authorized                                                        | Explicit role + tenant/resource authorization                                                               |
@@ -747,10 +732,10 @@ Unless marked otherwise, target API posture is private by default. A missing aut
 | Operation / current endpoint                           | Current auth                                            | Current role evidence                       | Target auth            | Target capability                                                                                   | Tenant/resource rule                                                                  | Status               |
 | ------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------- |
 | Login — `POST /api/v1/auth/login`                      | No                                                      | N/A                                         | Public                 | Credential authentication only                                                                      | Tenant comes from verified User                                                       | FROZEN               |
-| Logout — `POST /api/v1/auth/logout`                    | Not present                                             | N/A                                         | Authenticated session  | Revoke caller's session                                                                             | Session selected from cookie                                                          | IMPLEMENTATION GAP   |
-| Session/CSRF bootstrap                                 | Not present                                             | N/A                                         | Authenticated session  | Session/CSRF support only                                                                           | Current session                                                                       | IMPLEMENTATION GAP   |
-| Public signup — `POST /api/v1/auth/signup`             | No                                                      | Body can select role/CPSE/depot             | Not a target operation | No public self-registration                                                                         | N/A                                                                                   | FROZEN               |
-| Account provisioning                                   | Public signup/startup seed currently create accounts    | No protected create-user check              | Authenticated          | `SUPER_ADMIN`-authorized provisioning                                                               | Server assigns/validates CPSE/depot                                                   | IMPLEMENTATION GAP   |
+| Logout — `POST /api/v1/auth/logout`                    | Session + CSRF (Origin)                                 | N/A                                         | Authenticated session  | Revoke caller's session                                                                             | Session selected from cookie                                                          | FROZEN               |
+| Session/CSRF bootstrap                                 | Present (`GET /auth/csrf`, session-bound)              | N/A                                         | Authenticated session  | Session/CSRF support only                                                                           | Current session                                                                       | FROZEN               |
+| Public signup — `POST /api/v1/auth/signup`             | Route retired (404)                                     | N/A                                         | Not a target operation | No public self-registration                                                                         | N/A                                                                                   | FROZEN               |
+| Account provisioning                                   | Authenticated admin `POST /auth/users` + startup seed   | `require_permission(SYSTEM_ADMIN)`          | Authenticated          | `SUPER_ADMIN`-authorized provisioning                                                               | Server assigns/validates CPSE/depot                                                   | IMPLEMENTATION GAP   |
 | User listing — `GET /api/v1/auth/users`                | Yes                                                     | Direct `SUPER_ADMIN` check                  | Authenticated          | System administration                                                                               | Administrative policy                                                                 | FROZEN               |
 | User approval                                          | Yes                                                     | Direct `SUPER_ADMIN` check                  | Authenticated          | System administration                                                                               | Target user selected by ID; approval only                                             | FROZEN               |
 | User rejection                                         | Yes                                                     | Direct `SUPER_ADMIN` check                  | Authenticated          | System administration                                                                               | Target user selected by ID; state validated                                           | FROZEN               |
@@ -762,9 +747,9 @@ Unless marked otherwise, target API posture is private by default. A missing aut
 | Create audit finding/observation; add feedback/comment | Yes                                                     | Any authenticated user currently passes     | Authenticated          | `VIGILANCE_AUDITOR`                                                                                 | Audit-domain records only                                                             | FROZEN               |
 | Verify/close audit finding                             | No dedicated route                                      | N/A                                         | Authenticated          | Separate management authority                                                                       | Exact existing-role mapping and implementation route remain to be specified           | SPECIFICATION DETAIL |
 | Management response/settlement                         | No dedicated route                                      | N/A                                         | Authenticated          | `MATERIALS_MANAGER` for operational/material findings; `TECHNICAL_AUTHORITY` for technical findings | Finding-specific; does not itself authorize operational-record mutation               | FROZEN               |
-| Inventory listing                                      | Optional JWT                                            | No role check                               | Authenticated          | Own-CPSE inventory according to role/resource policy                                                | Own CPSE; no cross-CPSE operational access                                            | FROZEN               |
-| Inventory statistics                                   | Optional JWT                                            | No role check                               | Authenticated          | Own-CPSE inventory visibility according to role/resource policy                                     | Aggregates must be CPSE-scoped                                                        | FROZEN               |
-| Inventory item access                                  | Optional JWT                                            | No role check                               | Authenticated          | Role/resource-scoped own-CPSE access                                                                | SKU selector only; tenant/resource check required                                     | FROZEN               |
+| Inventory listing                                      | Optional session                                            | No role check                               | Authenticated          | Own-CPSE inventory according to role/resource policy                                                | Own CPSE; no cross-CPSE operational access                                            | FROZEN               |
+| Inventory statistics                                   | Optional session                                            | No role check                               | Authenticated          | Own-CPSE inventory visibility according to role/resource policy                                     | Aggregates must be CPSE-scoped                                                        | FROZEN               |
+| Inventory item access                                  | Optional session                                            | No role check                               | Authenticated          | Role/resource-scoped own-CPSE access                                                                | SKU selector only; tenant/resource check required                                     | FROZEN               |
 | Inventory creation/addition                            | No                                                      | No role check                               | Authenticated          | `MATERIALS_MANAGER`                                                                                 | Authorized own-CPSE/depot context                                                     | FROZEN               |
 | Inventory record update                                | No route found                                          | N/A                                         | Authenticated          | `MATERIALS_MANAGER`                                                                                 | Own-CPSE/resource/operational authority                                               | IMPLEMENTATION GAP   |
 | Inventory status update                                | Yes                                                     | `MATERIALS_MANAGER` or `SUPER_ADMIN`        | Authenticated          | `MATERIALS_MANAGER` business capability                                                             | Own-CPSE/resource policy; `SUPER_ADMIN` does not inherit                              | FROZEN               |
@@ -778,20 +763,20 @@ Unless marked otherwise, target API posture is private by default. A missing aut
 | Catalog ingestion — `POST /api/v1/ingest/catalog`      | No                                                      | No role check                               | Authenticated          | `MATERIALS_MANAGER` or `SUPER_ADMIN`                                                                | Uploaded CPSE/depot cannot establish authority                                        | FROZEN               |
 | Document listing                                       | No                                                      | No role check                               | Authenticated          | Own-CPSE document access; auditor exception                                                         | Cross-CPSE only under explicit audit authorization                                    | FROZEN               |
 | Document detail                                        | No                                                      | No role check                               | Authenticated          | Own-CPSE document access; auditor exception                                                         | ID lookup requires resource authorization                                             | FROZEN               |
-| Material search                                        | Optional JWT                                            | No role check                               | Authenticated          | Matching capability                                                                                 | Cross-CPSE canonical/material-equivalence allowed; operational fields remain scoped   | FROZEN               |
+| Material search                                        | Optional session                                            | No role check                               | Authenticated          | Matching capability                                                                                 | Cross-CPSE canonical/material-equivalence allowed; operational fields remain scoped   | FROZEN               |
 | Benchmark                                              | No                                                      | No role check                               | Development/test       | No production capability                                                                            | Development/test dataset only                                                         | FROZEN               |
 | Graph discovery                                        | No                                                      | No role check                               | Authenticated          | Canonical/material graph access                                                                     | Cross-CPSE canonical/material relationships allowed; operational data scoped          | FROZEN               |
 | Graph item properties                                  | No                                                      | No role check                               | Authenticated          | Resource-scoped graph access                                                                        | Operational properties require own-CPSE authority                                     | FROZEN               |
 | Depot surplus graph                                    | No                                                      | No role check                               | Authenticated          | Operational graph access                                                                            | Depot must belong to caller's CPSE                                                    | FROZEN               |
 | Logistics calculation                                  | No                                                      | No role check                               | Authenticated          | Operational graph capability                                                                        | Source/target depots must satisfy CPSE policy; no cross-CPSE operational route access | FROZEN               |
 | Network topology                                       | No                                                      | No role check                               | Authenticated          | Graph/topology access                                                                               | Operational topology is CPSE-scoped                                                   | FROZEN               |
-| Requisition list                                       | Optional JWT                                            | Literal `AUDITOR`/other conditional filters | Authenticated          | Role-specific frozen visibility                                                                     | Server-side per-record authorization                                                  | FROZEN               |
+| Requisition list                                       | Optional session                                            | Literal `AUDITOR`/other conditional filters | Authenticated          | Role-specific frozen visibility                                                                     | Server-side per-record authorization                                                  | FROZEN               |
 | Requisition view                                       | No                                                      | No role/ownership check                     | Authenticated          | Role-specific frozen visibility                                                                     | ID-only access prohibited                                                             | FROZEN               |
-| Requisition create                                     | Optional JWT                                            | No role check                               | Authenticated          | `SITE_ENGINEER`                                                                                     | Authenticated CPSE/resource context                                                   | FROZEN               |
-| Approve Standard/Low Value                             | Optional JWT                                            | No proper role check                        | Authenticated          | `MATERIALS_MANAGER`                                                                                 | Deterministic classification + supplying-CPSE/resource policy                         | FROZEN               |
-| Approve Technical/High Value                           | Optional JWT                                            | No proper role check                        | Authenticated          | `TECHNICAL_AUTHORITY`                                                                               | Deterministic classification + supplying-CPSE/resource policy                         | FROZEN               |
-| Requisition reject                                     | Optional JWT                                            | No role allowlist                           | Authenticated          | `MATERIALS_MANAGER` or `TECHNICAL_AUTHORITY`                                                        | State + resource/tenant policy                                                        | FROZEN               |
-| Gate-pass issue                                        | Optional JWT                                            | No CISF role check                          | Authenticated          | `CISF_SECURITY`                                                                                     | Supplying-CPSE/requisition authority                                                  | FROZEN               |
+| Requisition create                                     | Optional session                                            | No role check                               | Authenticated          | `SITE_ENGINEER`                                                                                     | Authenticated CPSE/resource context                                                   | FROZEN               |
+| Approve Standard/Low Value                             | Optional session                                            | No proper role check                        | Authenticated          | `MATERIALS_MANAGER`                                                                                 | Deterministic classification + supplying-CPSE/resource policy                         | FROZEN               |
+| Approve Technical/High Value                           | Optional session                                            | No proper role check                        | Authenticated          | `TECHNICAL_AUTHORITY`                                                                               | Deterministic classification + supplying-CPSE/resource policy                         | FROZEN               |
+| Requisition reject                                     | Optional session                                            | No role allowlist                           | Authenticated          | `MATERIALS_MANAGER` or `TECHNICAL_AUTHORITY`                                                        | State + resource/tenant policy                                                        | FROZEN               |
+| Gate-pass issue                                        | Optional session                                            | No CISF role check                          | Authenticated          | `CISF_SECURITY`                                                                                     | Supplying-CPSE/requisition authority                                                  | FROZEN               |
 | Dispatch                                               | No                                                      | No role check                               | Authenticated          | `MATERIALS_MANAGER`                                                                                 | Source/depot authority                                                                | FROZEN               |
 | Deliver/Receive                                        | No                                                      | No role check                               | Authenticated          | `SITE_ENGINEER`                                                                                     | Receiving authority                                                                   | FROZEN               |
 | Audit requisition oversight                            | Public/optional currently                               | Frontend only                               | Authenticated          | `VIGILANCE_AUDITOR`                                                                                 | Relevant records only; explicit audit authorization for cross-CPSE                    | FROZEN               |

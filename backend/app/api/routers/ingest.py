@@ -258,10 +258,15 @@ async def upload_catalog(
 def list_documents(
     skip: int = 0,
     limit: int = 20,
+    _current_user: User = Depends(require_permission(perm.DOCUMENT_READ)),
     db: Session = Depends(get_db_session),
 ):
     """
     Lists ingested documents from the sovereign intake ledger.
+
+    AUTH-5K: authentication + DOCUMENT_READ permission only. Tenant scoping
+    is explicitly deferred (E-1): IngestedDocument has no CPSE/depot
+    ownership field, so no tenant filter is introduced here.
     """
     try:
         docs = db.query(IngestedDocument).order_by(IngestedDocument.id.desc()).offset(skip).limit(limit).all()
@@ -287,10 +292,15 @@ def list_documents(
 @router.get("/documents/{doc_id}")
 def get_document(
     doc_id: int,
+    _current_user: User = Depends(require_permission(perm.DOCUMENT_READ)),
     db: Session = Depends(get_db_session),
 ):
     """
     Retrieves full parsed metadata and extraction results for an ingested document.
+
+    AUTH-5K: authentication + DOCUMENT_READ permission only. Tenant scoping
+    is explicitly deferred (E-1): IngestedDocument has no CPSE/depot
+    ownership field, so no tenant filter is introduced here.
     """
     doc = db.query(IngestedDocument).filter(IngestedDocument.id == doc_id).first()
     if not doc:

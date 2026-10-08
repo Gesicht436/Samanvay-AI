@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
-from backend.app.api.dependencies import get_db_session, require_permission
+from backend.app.api.dependencies import _record_authorization_failure, get_db_session, require_permission
 from backend.app.core import permissions as perm
 from backend.app.models.tables import InventoryItem, User
 from graph.logistics import (
@@ -17,6 +17,7 @@ router = APIRouter(prefix="/graph", tags=["Graph"])
 
 def _session_cpse(
     current_user: User = Depends(require_permission(perm.GRAPH_READ)),
+    db: Session = Depends(get_db_session),
 ) -> str:
     """Return the authenticated session's CPSE for read-only graph access.
 
@@ -28,6 +29,12 @@ def _session_cpse(
     """
     cpse = current_user.cpse
     if not cpse:
+        _record_authorization_failure(
+            db,
+            current_user,
+            permission=perm.GRAPH_READ,
+            reason_code="MISSING_RESOURCE_ATTRIBUTES",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={

@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import {
   Shield,
@@ -10,7 +9,6 @@ import {
   UserCheck,
   Building2,
   Lock,
-  ArrowRight,
   AlertCircle,
   CheckCircle2,
   Cpu,
@@ -37,12 +35,13 @@ const CPSE_TABS = [
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, login, isAuthenticated, seedUsers, defaultSeedPassword } = useAuth();
+  const { user, login, isAuthenticated, seedUsers } = useAuth();
 
-  // AUTH-006 Phase 2: the 1-click persona hub, visible seed passwords, and
-  // seeded-credential helpers are evaluation-only. Next.js statically replaces
-  // process.env.NODE_ENV at build time, so the production bundle never
-  // contains seed usernames, seed passwords, or one-click seed login paths.
+  // AUTH-006 Phase 2: the persona hub is evaluation-only. Next.js statically
+  // replaces process.env.NODE_ENV at build time, so the production bundle
+  // never contains seed usernames or one-click seed login paths. Task 16A:
+  // the client never embeds a default/organizational password — selecting a
+  // persona only prefills the username, and the operator types the password.
   // No new environment variable is introduced; this reuses the framework's
   // existing build-mode mechanism.
   const isProductionBuild = process.env.NODE_ENV === 'production';
@@ -57,14 +56,14 @@ export default function LoginPage() {
   const [selectedCpseTab, setSelectedCpseTab] = useState<string>('ALL');
   const [copiedUser, setCopiedUser] = useState<string | null>(null);
 
-  const handleLogin = async (e?: React.FormEvent, customUser?: string, customPass?: string) => {
+  const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
     setSuccessMsg(null);
     setIsSubmitting(true);
 
-    const u = customUser !== undefined ? customUser : username;
-    const p = customPass !== undefined ? customPass : password;
+    const u = username;
+    const p = password;
 
     if (!u.trim()) {
       setError('Please enter your CPSE username or ID.');
@@ -89,11 +88,13 @@ export default function LoginPage() {
   };
 
   const handlePersonaSelect = (seedUser: SeedUser) => {
-    // Evaluation-only helper. This handler is reachable only when the
-    // evaluation hub is rendered (non-production builds).
+    // Evaluation-only helper (non-production builds): prefills the username
+    // only. No default password exists anywhere in the client — the operator
+    // must type the evaluation password themselves to sign in.
     setUsername(seedUser.username);
-    setPassword(defaultSeedPassword);
-    handleLogin(undefined, seedUser.username, defaultSeedPassword);
+    setPassword('');
+    setError(null);
+    setSuccessMsg(null);
   };
 
   const handleCopyUsername = (uname: string, e: React.MouseEvent) => {
@@ -199,16 +200,16 @@ export default function LoginPage() {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-500" />
                 <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  Judge & Evaluation Personas (1-Click Login)
+                  Judge & Evaluation Personas
                 </h2>
               </div>
               <span className="text-[11px] font-mono text-zinc-400">
-                Password: <code className="text-emerald-600 dark:text-emerald-400 font-semibold">{defaultSeedPassword}</code>
+                Select to prefill username
               </span>
             </div>
 
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4 leading-relaxed font-sans">
-              Select any pre-configured persona across the 7 CPSEs (OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL), Central MoPNG Vigilance Auditor, or Super Admin to test tenant isolation and segregation of duties.
+              Select any pre-configured persona across the 7 CPSEs (OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL), Central MoPNG Vigilance Auditor, or Super Admin to test tenant isolation and segregation of duties. Selecting a persona prefills the login username; enter the password provided by your evaluation operator.
             </p>
 
             {/* CPSE Tabs */}
@@ -368,9 +369,6 @@ export default function LoginPage() {
                   <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                     Password
                   </label>
-                  <span className="text-[11px] text-zinc-400 font-mono">
-                    Default: {defaultSeedPassword}
-                  </span>
                 </div>
                 <input
                   type="password"
@@ -398,19 +396,6 @@ export default function LoginPage() {
                 )}
               </button>
             </form>
-
-            <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-center text-xs text-zinc-600 dark:text-zinc-400 flex items-center justify-between">
-              <span>New CPSE Officer?</span>
-              {showEvaluationHub && (
-                <Link
-                  href="/signup"
-                  className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1"
-                >
-                  <span>Register Account</span>
-                  <ArrowRight className="w-3 h-3" />
-                </Link>
-              )}
-            </div>
 
             <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2 text-[11px] text-zinc-500 dark:text-zinc-400">
               <p className="font-semibold text-zinc-700 dark:text-zinc-300">

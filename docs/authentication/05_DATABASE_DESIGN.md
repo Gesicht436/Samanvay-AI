@@ -20,7 +20,7 @@ The design covers:
 * Session revocation
 * Security events
 * Account approval/activation
-* OAuth identity association (logical target model; database implementation deferred as specified in Section 23)
+* OAuth identity association — historical logical model only, not part of the current target (see Section 23)
 * Required indexes and constraints
 * Migration requirements
 
@@ -42,7 +42,7 @@ The database must support the following security properties:
 6. User role and CPSE must come from trusted account data.
 7. Session identifiers must not be stored in plaintext.
 8. Security events must be auditable.
-9. When OAuth identity persistence is implemented in its later phase, external identities must be uniquely associated with the correct local user.
+9. (Historical) If an external identity model is ever explicitly re-approved, external identities must be uniquely associated with the correct local user; no external identity persistence exists or is targeted today.
 10. Database constraints should prevent invalid security states where practical.
 
 ---
@@ -255,7 +255,7 @@ Session Invalid
 A session may be created only after:
 
 1. User exists.
-2. Password authentication succeeds. OAuth/OIDC session creation is deferred with OAuth identity persistence to a later phase (Section 23).
+2. Password authentication succeeds (local bcrypt verification today). OAuth/OIDC is not part of the current target (Section 23); the credential-authority direction is External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1), with the exact protocol/provider still an open architecture decision.
 3. User is active.
 4. User is approved.
 5. Authentication policy permits login.
@@ -439,7 +439,6 @@ The system should support at minimum:
 
 * `LOGIN_SUCCESS`
 * `LOGIN_FAILURE`
-* `GOOGLE_LOGIN`
 * `SESSION_CREATED`
 * `SESSION_REVOKED`
 * `LOGOUT`
@@ -505,7 +504,6 @@ Examples:
 * Failed login
 * Invalid credentials
 * Rate-limit trigger
-* Invalid OAuth callback
 
 Therefore the relationship is optional.
 
@@ -515,19 +513,19 @@ When present, this is an FK to the session UUID and uses `ON DELETE SET NULL`. H
 
 # 23. OAuth Identity Model
 
-### Phase decision
+### Status: retired from the current target (Sections 23–25 are historical)
 
-Google OIDC remains a target architectural requirement, but the `OAuthIdentity` database table and its migration are **deferred to a later OAuth phase after AUTH-006**. AUTH-006 may define the authentication/session design, but it must not assume this table is deployed. The logical target model is specified here so its eventual database contract is explicit; this phase's migration creates no OAuth identity table. This resolves the scope decision and is not a deferral of the Google OIDC requirement itself.
+Google OIDC / OAuth identity persistence is **not part of the current authentication target**. No `OAuthIdentity` table exists, no migration creates one, and none may be created without an explicit approved task. Sections 23–25 are retained only as a historical logical model in case an external identity mechanism is ever explicitly re-approved; they must not be implemented as-is.
 
-Google authentication requires a persistent mapping between the external identity and the local user.
+The credential-authority direction is External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1); the exact protocol/provider remains an OPEN ARCHITECTURE DECISION.
 
-The target design should introduce a dedicated entity rather than placing provider-specific identity fields directly into `User`.
+If an external identity model is ever re-approved, it requires a persistent mapping between the external identity and the local user, using a dedicated entity rather than provider-specific identity fields on `User`.
 
-Proposed logical entity:
+Historical logical entity:
 
 `OAuthIdentity`
 
-When implemented in that later phase, the table name is `oauth_identities`; `id` is a required PostgreSQL `UUID` primary key generated as UUIDv4. `user_id` is a required PostgreSQL `INTEGER` FK matching `users.id`.
+In the historical model, the table name is `oauth_identities`; `id` is a required PostgreSQL `UUID` primary key generated as UUIDv4. `user_id` is a required PostgreSQL `INTEGER` FK matching `users.id`.
 
 Minimum fields:
 
@@ -597,7 +595,7 @@ User
  │
  ├──< SecurityEvent
  │
- └──< OAuthIdentity (later OAuth phase)
+ └──< OAuthIdentity (historical only — not implemented)
 ```
 
 Where:
@@ -608,7 +606,7 @@ Where:
 
 `SecurityEvent.session_id → AuthSession.id`
 
-`OAuthIdentity.user_id → User.id` (later OAuth phase)
+`OAuthIdentity.user_id → User.id` (historical model only — not implemented)
 
 ---
 
@@ -625,14 +623,14 @@ The following FK actions are the target database contract:
 | `AuthSession.user_id → users.id` | NOT NULL | `CASCADE` | User deletion removes that user's sessions. |
 | `SecurityEvent.user_id → users.id` | NULL | `SET NULL` | Event history remains; the relational user link is cleared. |
 | `SecurityEvent.session_id → auth_sessions.id` | NULL | `SET NULL` | Event history remains when a session is purged. |
-| `OAuthIdentity.user_id → users.id` | NOT NULL | `CASCADE` | In a later OAuth phase, deleting the local user removes provider mappings, not security events. |
+| `OAuthIdentity.user_id → users.id` | NOT NULL | `CASCADE` | Historical model only (not implemented); would remove provider mappings, not security events. |
 
 SecurityEvent rows are retained under the approved event-retention policy and are never cascade-deleted by user/session deletion. If an FK is cleared, only non-secret metadata may retain a necessary historical actor/session reference. A user hard-delete cascades its AuthSession rows immediately; the linked SecurityEvent rows remain with nullable user/session links cleared. User hard-deletion and legal retention policy remain product/compliance decisions.
 
 Target behavior:
 
 * Sessions are soft-revoked and retained through the operational retention period, then may be physically purged.
-* OAuth identities are cascade-deleted with their local user in the later OAuth phase.
+* (Historical) OAuth identities would be cascade-deleted with their local user; no such table exists.
 * Security events are retained according to the event-retention policy; nullable FK links are set to NULL on deletion.
 
 No destructive cascade should be introduced without explicit review.
@@ -703,8 +701,8 @@ The migration and deployment plan must account for:
 4. Inspect email uniqueness and case-collision behavior before adding/changing email constraints or normalization.
 5. Inspect CPSE/depot values and preserve valid existing associations; do not detach users from tenant/location data.
 6. Preserve all existing `SovereignAuditLedger` rows and hash-chain values unchanged.
-7. Create `AuthSession` and `SecurityEvent` tables, indexes, FKs, nullability, and constraints safely. Do not create the `OAuthIdentity` table in this phase; its migration is deferred with OAuth persistence to the later OAuth phase in Section 23.
-8. Define deployment ordering: apply and verify the schema migration before deploying application code that requires the new tables/constraints. Coordinate application rollout and JWT cutover as in Section 30; do not rely on `create_all()` to upgrade existing volumes.
+7. Create `AuthSession` and `SecurityEvent` tables, indexes, FKs, nullability, and constraints safely. Do not create an `OAuthIdentity` table — no OAuth identity persistence exists in the current target (Section 23 is historical).
+8. Define deployment ordering: apply and verify the schema migration before deploying application code that requires the new tables/constraints. Coordinate application rollout with the completed JWT cutover recorded in Section 30; do not rely on `create_all()` to upgrade existing volumes.
 
 Existing users must not accidentally become:
 
@@ -725,15 +723,15 @@ The current Docker Compose configuration publishes PostgreSQL on port 5432; the 
 
 ---
 
-# 30. Existing JWT Transition
+# 30. JWT Transition (Completed)
 
-The current application uses JWT authentication.
+The application no longer uses JWT authentication; the JWT-era description below is historical.
 
-The target architecture uses server-side sessions.
+The architecture uses server-side sessions.
 
-Existing JWTs are stateless and are not stored in PostgreSQL; they will not be migrated into `AuthSession` or converted into session rows. The target uses server-side sessions for new authentication.
+Legacy JWTs were stateless and were never stored in PostgreSQL; they were not migrated into `AuthSession`. All current authentication uses server-side sessions.
 
-Target cutover behavior:
+Cutover behavior (executed by AUTH-006):
 
 ```text
 Old JWT
@@ -745,11 +743,11 @@ User performs normal login
 New server-side session created
 ```
 
-At a declared application cutover point, all backend instances stop accepting old JWT bearer credentials and require the new server-side session mechanism. Users authenticate again to obtain sessions. Rolling deployment must coordinate traffic draining/replacement so old and new instances do not leave an indefinite mixed JWT/session acceptance period. If a bounded compatibility window is operationally required, its end time and route scope must be declared before rollout.
+At the declared application cutover, backend instances stopped accepting old JWT bearer credentials and require the server-side session mechanism. Users authenticate again to obtain sessions. (Historical guidance: rolling deployment must coordinate traffic draining/replacement so old and new instances do not leave an indefinite mixed JWT/session acceptance period; no such compatibility window exists today.)
 
-The cutover audit must include every route using `get_optional_user` or other optional JWT identity, in addition to routes requiring JWTs. No route may silently retain the old optional-JWT behavior after the cutover.
+The cutover audit covered every route using `get_optional_user` or other optional identity, in addition to routes that required JWTs. No route retains old optional-JWT behavior after the cutover.
 
-A temporary compatibility layer, if necessary, must be explicitly documented, limited to the approved window/route set, and removed at the declared end of cutover.
+No temporary compatibility layer remains; no hybrid JWT/session authentication mode is permitted.
 
 ---
 
@@ -806,7 +804,7 @@ Required target indexes must support the actual lookup patterns without broad ta
 * `SecurityEvent(user_id, created_at)`: supports user history, with nullable `user_id` for anonymous events.
 * `SecurityEvent(session_id, created_at)`: supports session history; `session_id` is nullable.
 * `SecurityEvent(event_type, created_at)`: supports event-type/time-window investigations.
-* Later-phase `OAuthIdentity(provider, provider_subject)`: unique B-tree for external identity lookup.
+* (Historical only, not part of the current target) `OAuthIdentity(provider, provider_subject)`: unique B-tree for external identity lookup.
 
 Confirm indexes against the final query plans during implementation; do not create time-dependent partial-index predicates such as `expires_at > now()`.
 
@@ -824,8 +822,8 @@ Confirm indexes against the final query plans during implementation; do not crea
 | Disabled-account enforcement | `User.is_active`                     |
 | Approval enforcement         | `User.is_approved`                   |
 | Security audit               | `SecurityEvent`                      |
-| OAuth identity               | Later OAuth phase; `OAuthIdentity` logical model only in this phase |
-| External identity uniqueness | Later OAuth phase; provider + subject unique constraint |
+| OAuth identity               | Not part of the current target; `OAuthIdentity` is a historical logical model only (Section 23) |
+| External identity uniqueness | Not part of the current target; historical provider + subject unique constraint |
 | Tenant identity              | `User.cpse`                          |
 | Role identity                | `User.role`                          |
 
@@ -885,9 +883,9 @@ will be retained.
 
 Define security-event and revoked/expired-session retention periods and cleanup schedule, consistent with statutory and operational requirements.
 
-### D-005-05 — JWT cutover release window
+### D-005-05 — JWT cutover release window (resolved)
 
-The cutover behavior is resolved in Section 30. The deployment owner must set the release-specific cutover time/window and traffic-drain sequence before rollout.
+The JWT cutover was executed by AUTH-006; Section 30 records the completed behavior. No JWT acceptance window remains.
 
 ### D-005-06 — Migration mechanism
 
@@ -916,10 +914,10 @@ AUTH-005 is complete when:
 15. `SecurityEvent` is authoritative for auth telemetry; its relationship and failure/atomicity behavior versus `SovereignAuditLedger` are explicit.
 16. Migration requirements preserve user IDs, bcrypt hashes, role/tenant data, and existing audit history; production migration is explicitly not delegated to `create_all()`.
 17. Startup seeding behavior is an explicit migration/deployment consideration.
-18. JWTs are not migrated; cutover and optional-JWT route audit requirements are defined.
+18. JWTs were not migrated; the cutover and optional-identity route audit were completed (Section 30).
 19. PostgreSQL network exposure/runtime privileges are called out for production review.
-20. `OAuthIdentity` database implementation is explicitly deferred to a later OAuth phase; Google OIDC remains a target architectural requirement, and no OAuth table is required for this phase's migration.
-21. Remaining open items are only session/product or deployment/tooling decisions, not unresolved schema types, FK behavior, or OAuth phase scope.
+20. No `OAuthIdentity` table is implemented or required; Google OIDC is not part of the current target (Section 23 is historical).
+21. Remaining open items are only session/product or deployment/tooling decisions, not unresolved schema types or FK behavior.
 
 ---
 
@@ -959,7 +957,7 @@ AUTH-006 will define:
 * Security-event integration
 * Migration/cutover behavior
 
-OAuthIdentity persistence and its migration remain deferred to a later OAuth phase; Google OIDC remains a target architectural requirement.
+OAuthIdentity persistence and Google OIDC are not part of the current target; Section 23 is historical reference only. The credential-authority direction is External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1); the exact protocol/provider remains an OPEN ARCHITECTURE DECISION.
 
 ---
 

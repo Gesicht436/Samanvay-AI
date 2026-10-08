@@ -1,33 +1,40 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, SeedUser, AuthTokenResponse, UserSignupRequest } from '@/lib/types';
-import { api } from '@/lib/api';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
+import { User, SeedUser } from '@/lib/types';
+import { api, clearSessionCsrfToken, isAuthenticationFailure } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   seedUsers: SeedUser[];
-  defaultSeedPassword: string;
-  login: (username: string, password?: string) => Promise<User>;
-  signup: (payload: UserSignupRequest) => Promise<User>;
-  logout: () => void;
+  login: (username: string, password: string) => Promise<User>;
+  logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const TOKEN_KEY = 'samanvay_auth_token';
-const USER_KEY = 'samanvay_user';
-
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // AUTH-006 Phase 1: identity lives in memory only and is always derived
+  // from the server session cookie. No token, no localStorage/sessionStorage.
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [seedUsers, setSeedUsers] = useState<SeedUser[]>([]);
-  const [defaultSeedPassword, setDefaultSeedPassword] = useState<string>('Samanvay@2026');
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const clearIdentity = useCallback(() => {
+    clearSessionCsrfToken();
+    setUser(null);
+  }, []);
 
   // Load available seed personas from backend
   const loadSeedUsers = async () => {
@@ -35,94 +42,103 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await api.getSeedUsers();
       if (data && data.users) {
         setSeedUsers(data.users);
-        if (data.default_password) {
-          setDefaultSeedPassword(data.default_password);
-        }
       }
     } catch (err) {
       console.error('Failed to load seed personas:', err);
     }
   };
 
-  // Check stored credentials on client load
-  useEffect(() => {
-    loadSeedUsers();
-
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    const storedUserStr = localStorage.getItem(USER_KEY);
-
-    if (storedToken) {
-      setToken(storedToken);
-      if (storedUserStr) {
-        try {
-          setUser(JSON.parse(storedUserStr));
-        } catch {
-          // ignore corrupted local storage
-        }
-      }
-
-      // Verify token integrity with /auth/me
-      api.getMe()
-        .then((freshUser) => {
-          setUser(freshUser);
-          localStorage.setItem(USER_KEY, JSON.stringify(freshUser));
-        })
-        .catch(() => {
-          // Token expired or invalid
-          logout();
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
-    } else {
-      setIsLoading(false);
+  const establishSessionIdentity = useCallback(async (): Promise<User> => {
+    // Session cookie authenticates; then populate the memory-only identity and
+    // obtain the session-bound CSRF token for subsequent unsafe requests.
+    const freshUser = await api.getMe();
+    await api.getCsrfToken();
+    if (mountedRef.current) {
+      setUser(freshUser);
     }
+    return freshUser;
   }, []);
 
-  const login = async (username: string, password?: string): Promise<User> => {
-    const pwd = password || defaultSeedPassword;
-    const response: AuthTokenResponse = await api.login({
+  // Startup restoration: session cookie only, never local persistence.
+  useEffect(() => {
+    let cancelled = false;
+    const restore = async () => {
+      try {
+        await loadSeedUsers();
+        const freshUser = await establishSessionIdentity();
+        if (!cancelled && mountedRef.current) {
+          setUser(freshUser);
+        }
+      } catch (err) {
+        if (isAuthenticationFailure(err)) {
+          // No valid session: clear identity explicitly.
+          if (!cancelled && mountedRef.current) {
+            clearIdentity();
+          }
+        }
+        // Transient/non-401 startup failure: keep identity unresolved (still
+        // null at startup), do NOT treat it as logout. isLoading resolves so
+        // the UI can retry; the next /auth/me call re-establishes state.
+      } finally {
+        if (!cancelled && mountedRef.current) {
+          setIsLoading(false);
+        }
+      }
+    };
+    restore();
+    return () => {
+      cancelled = true;
+    };
+  }, [clearIdentity, establishSessionIdentity]);
+
+  const login = async (username: string, password: string): Promise<User> => {
+    // Cookie-setting contract: the server establishes the session and returns
+    // the user profile without any access_token. The client never carries a
+    // fallback/default password; the operator always supplies credentials.
+    await api.login({
       username: username.trim(),
-      password: pwd,
+      password,
     });
-
-    const authToken = response.access_token;
-    const authUser = response.user;
-
-    localStorage.setItem(TOKEN_KEY, authToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(authUser));
-
-    setToken(authToken);
-    setUser(authUser);
+    // Establish in-memory identity from the freshly set session.
+    const authUser = await establishSessionIdentity();
     return authUser;
   };
 
-  const signup = async (payload: UserSignupRequest): Promise<User> => {
-    const response: AuthTokenResponse = await api.signup(payload);
-    const authToken = response.access_token;
-    const authUser = response.user;
-
-    localStorage.setItem(TOKEN_KEY, authToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(authUser));
-
-    setToken(authToken);
-    setUser(authUser);
-    return authUser;
-  };
-
-  const logout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setToken(null);
-    setUser(null);
+  const logout = async (): Promise<void> => {
+    try {
+      // Backend logout is CSRF-protected and idempotent; the server clears
+      // the session cookie. Clear in-memory identity only after success, or
+      // when the server confirms the session is already gone (401), which the
+      // existing contract treats as idempotent revocation.
+      await api.logout();
+      if (mountedRef.current) {
+        clearIdentity();
+      }
+    } catch (err) {
+      if (isAuthenticationFailure(err)) {
+        if (mountedRef.current) {
+          clearIdentity();
+        }
+        return;
+      }
+      // Retryable/server failure: do NOT claim logout succeeded.
+      throw err;
+    }
   };
 
   const refreshProfile = async () => {
     try {
       const freshUser = await api.getMe();
-      setUser(freshUser);
-      localStorage.setItem(USER_KEY, JSON.stringify(freshUser));
+      if (mountedRef.current) {
+        setUser(freshUser);
+      }
     } catch (err) {
+      if (isAuthenticationFailure(err)) {
+        if (mountedRef.current) {
+          clearIdentity();
+        }
+        return;
+      }
       console.error('Failed to refresh user profile:', err);
     }
   };
@@ -131,13 +147,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        token,
         isLoading,
-        isAuthenticated: !!user && !!token,
+        isAuthenticated: !!user,
         seedUsers,
-        defaultSeedPassword,
         login,
-        signup,
         logout,
         refreshProfile,
       }}

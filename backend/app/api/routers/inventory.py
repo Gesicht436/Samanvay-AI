@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 from backend.app.api.dependencies import (
+    _record_authorization_failure,
     get_db_session,
     InventoryFilterParams,
     PaginationParams,
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
 def _inventory_session_cpse(
     current_user: User = Depends(require_permission(perm.INVENTORY_READ)),
+    db: Session = Depends(get_db_session),
 ) -> str:
     """Return the authenticated session's CPSE for inventory read access.
 
@@ -39,6 +41,12 @@ def _inventory_session_cpse(
     """
     cpse = current_user.cpse
     if not cpse:
+        _record_authorization_failure(
+            db,
+            current_user,
+            permission=perm.INVENTORY_READ,
+            reason_code="MISSING_RESOURCE_ATTRIBUTES",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -93,8 +101,17 @@ def _inventory_mutation_identity(permission: str):
     rather than defaulting to a fallback tenant.
     """
 
-    def dependency(current_user: User = Depends(require_permission(permission))) -> User:
+    def dependency(
+        current_user: User = Depends(require_permission(permission)),
+        db: Session = Depends(get_db_session),
+    ) -> User:
         if not current_user.cpse:
+            _record_authorization_failure(
+                db,
+                current_user,
+                permission=permission,
+                reason_code="MISSING_RESOURCE_ATTRIBUTES",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={

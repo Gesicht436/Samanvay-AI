@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import Dict, Any
 from backend.app.api.dependencies import (
+    _record_authorization_failure,
     get_db_session,
     validate_idempotency_key,
     require_any_permission,
@@ -117,12 +118,24 @@ def approve_req(
         # Segregation of duties: Requester cannot approve their own requisition.
         # Applies to every role, with no SUPER_ADMIN exemption.
         if req_record.requested_by == current_user.username:
+            _record_authorization_failure(
+                db,
+                current_user,
+                permission=",".join([perm.REQUISITION_APPROVE_STANDARD, perm.REQUISITION_APPROVE_TECHNICAL]),
+                reason_code="RESOURCE_OWNERSHIP",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Segregation of duties violation: Requester cannot approve their own requisition.",
             )
         # Only the supplying CPSE may authorize release of its surplus material.
         if current_user.cpse and req_record.source_cpse and current_user.cpse != req_record.source_cpse:
+            _record_authorization_failure(
+                db,
+                current_user,
+                permission=",".join([perm.REQUISITION_APPROVE_STANDARD, perm.REQUISITION_APPROVE_TECHNICAL]),
+                reason_code="TENANT_MISMATCH",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access forbidden: Only materials managers from supplying CPSE ({req_record.source_cpse}) can approve.",
@@ -154,6 +167,12 @@ def reject_req(
         # Can reject if requester is cancelling, or the supplying CPSE is declining.
         # Applies to every role, with no SUPER_ADMIN exemption.
         if req_record.requested_by != current_user.username and (current_user.cpse and req_record.source_cpse and current_user.cpse != req_record.source_cpse):
+            _record_authorization_failure(
+                db,
+                current_user,
+                permission=perm.REQUISITION_REJECT,
+                reason_code="TENANT_MISMATCH",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access forbidden: Not authorized to reject requisition {req_id}.",
@@ -188,6 +207,12 @@ def generate_gp(
         # Only the supplying CPSE may issue a material transfer gate pass.
         # Applies to every role, with no SUPER_ADMIN exemption.
         if current_user.cpse and req_record.source_cpse and current_user.cpse != req_record.source_cpse:
+            _record_authorization_failure(
+                db,
+                current_user,
+                permission=perm.REQUISITION_GATEPASS,
+                reason_code="TENANT_MISMATCH",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Gate pass can only be issued by supplying CPSE ({req_record.source_cpse}) personnel.",
@@ -225,6 +250,12 @@ def dispatch_req(
         # Only the supplying CPSE may dispatch released material out of its depot.
         # Applies to every role, with no SUPER_ADMIN exemption.
         if current_user.cpse and req_record.source_cpse and current_user.cpse != req_record.source_cpse:
+            _record_authorization_failure(
+                db,
+                current_user,
+                permission=perm.REQUISITION_DISPATCH,
+                reason_code="TENANT_MISMATCH",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access forbidden: Dispatch is restricted to the supplying CPSE ({req_record.source_cpse}).",
@@ -262,6 +293,12 @@ def deliver_req(
         # Receipt is confirmed by the receiving CPSE that raised the requisition.
         # Applies to every role, with no SUPER_ADMIN exemption.
         if current_user.cpse and req_record.target_cpse and current_user.cpse != req_record.target_cpse:
+            _record_authorization_failure(
+                db,
+                current_user,
+                permission=perm.REQUISITION_RECEIVE,
+                reason_code="TENANT_MISMATCH",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access forbidden: Delivery can only be confirmed by the receiving CPSE ({req_record.target_cpse}).",

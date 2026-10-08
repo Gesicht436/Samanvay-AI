@@ -41,7 +41,7 @@ The target uses AUTH-003's four layers:
 
 It also uses AUTH-004 security requirements and AUTH-005 server-side sessions.
 
-The target does **not** preserve the current JWT/localStorage authentication model.
+The implemented architecture does **not** preserve the legacy JWT/localStorage authentication model. In the table below, "Current" records the legacy pre-AUTH-006 behavior it replaced (migration history); "Target" is the implemented, verified reality.
 
 | Current                                                                                        | Target                                                                                                                                                                                           | Code action                                                                                                                                        |
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -58,17 +58,17 @@ The target does **not** preserve the current JWT/localStorage authentication mod
 | Frontend role checks gate pages.                                                               | Frontend checks remain UX controls only. Backend authentication, authorization, CPSE, and resource policy are authoritative.                                                                     | Preserve UI guard purpose; update identity source.                                                                                                 |
 | Public seed endpoints can create/re-enable seed accounts and expose credentials.               | Seed/admin provisioning is development/test-only or controlled deployment infrastructure. No public production seed credential exposure.                                                         | Remove public production seed behavior and credential disclosure.                                                                                  |
 
-The current JWT dependency inventory remains useful for migration, but it is **not** an authorization list.
+The legacy JWT dependency inventory (now removed) was useful for the completed migration; it is **not** an authorization list.
 
 Required-authentication routes currently include `/auth/me`, `/auth/users`, approval/rejection operations, audit feedback, and privileged inventory operations.
 
 Optional-authentication currently appears on inventory, matching, and requisition routes.
 
-During migration, every route must be classified against the frozen AUTH-003 route/resource policy. No route may remain anonymous merely because its current implementation lacks an authentication dependency.
+During the completed migration, every route was classified against the frozen AUTH-003 route/resource policy. No route may remain anonymous merely because its current implementation lacks an authentication dependency.
 
 The final target is:
 
-* Public: login, health/status, Google OIDC entry/callback when implemented, and development-only documentation/OpenAPI.
+* Public: login, health/status, and development-only documentation/OpenAPI.
 * Private: all business data and business operations.
 * No anonymous business mutations.
 * No invalid-credential-to-anonymous downgrade.
@@ -640,7 +640,6 @@ Required event types:
 | ----------------------- | ------------------------------------------------------ |
 | `LOGIN_SUCCESS`         | Successful credential authentication                   |
 | `LOGIN_FAILURE`         | Failed authentication                                  |
-| `GOOGLE_LOGIN`          | Successful Google OIDC authentication when implemented |
 | `SESSION_CREATED`       | Session creation                                       |
 | `SESSION_REVOKED`       | Session revocation                                     |
 | `LOGOUT`                | Successful authenticated logout                        |
@@ -687,8 +686,7 @@ RateLimitGuard.consume(
 Required abuse-control surfaces:
 
 * login;
-* account recovery when implemented;
-* Google OIDC callback when implemented.
+* account recovery when implemented.
 
 **Public signup is disabled**, so no production signup abuse surface exists in the target API.
 
@@ -804,11 +802,13 @@ Development/test seed behavior must be explicitly gated.
 
 ---
 
-## 10. JWT Cutover
+## 10. JWT Cutover (Completed by AUTH-006)
+
+**STATUS: EXECUTED.** The sequence below records the completed finite session cutover; no JWT authentication path remains in the repository.
 
 Use AUTH-005's finite session cutover.
 
-Existing JWTs are not migrated into sessions.
+Existing JWTs were not migrated into sessions.
 
 Implementation sequence:
 
@@ -839,7 +839,7 @@ Implementation sequence:
 
 10. Users authenticate again and receive new sessions.
 
-11. Remove PyJWT/JWT configuration/helpers only after global caller search confirms they are unused.
+11. Remove PyJWT/JWT configuration/helpers only after global caller search confirms they are unused. (Completed: JWT helpers were removed with the cutover, and the unused PyJWT dependency was dropped in Task 16A.)
 
 There must be no indefinite hybrid JWT/session authentication mode.
 
@@ -1190,7 +1190,7 @@ After cutover, test that bearer JWTs are rejected across all previously JWT-prot
     * authentication UI;
     * removal of localStorage credentials.
 
-11. **JWT cutover**
+11. **JWT cutover (completed)**
 
     * coordinated deployment;
     * reject old JWTs;
@@ -1213,7 +1213,7 @@ After cutover, test that bearer JWTs are rejected across all previously JWT-prot
 | `backend/app/models/tables.py`                | Add `AuthSession` and `SecurityEvent`.                                                         |
 | `backend/app/api/routers/auth.py`             | Login, `/me`, logout, CSRF, account administration, controlled seed behavior.                  |
 | `backend/app/api/dependencies.py`             | Session resolution, current user, authorization integration, CPSE/resource policy integration. |
-| `backend/app/core/security.py`                | Retain bcrypt and required hashing; remove JWT helpers after cutover.                          |
+| `backend/app/core/security.py`                | Retain bcrypt and required hashing; JWT helpers already removed (cutover complete).            |
 | `backend/app/core/config.py`                  | Session/cookie/origin/rate-limit configuration and validation.                                 |
 | `backend/main.py`                             | Security middleware/integration, CORS restrictions, controlled startup behavior.               |
 | `backend/app/services/seeder.py`              | Development/test-only seed behavior.                                                           |
@@ -1245,7 +1245,7 @@ After cutover, test that bearer JWTs are rejected across all previously JWT-prot
 
 ### Expected to be removed/deprecated
 
-After repository-wide cutover:
+After repository-wide cutover (completed — see Section 10):
 
 * JWT response models;
 * bearer-token injection;
@@ -1307,7 +1307,7 @@ AUTH-006 implementation is complete only when:
 
 AUTH-006 does **not** implement or redesign:
 
-* Google OAuth/OIDC implementation or `OAuthIdentity` persistence. The later OIDC task must implement authorization-code flow with state, redirect URI validation, issuer/audience/signature/expiry validation, local account resolution/linking, and no automatic privileged-role grant.
+* Google OAuth/OIDC implementation or `OAuthIdentity` persistence. OIDC/Google is not part of the current authentication target; any future reintroduction requires an explicit approved task. The credential-authority direction is External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1); its exact protocol/provider remains an open architecture decision.
 * Password reset/recovery.
 * Email verification.
 * Step-up authentication/MFA.

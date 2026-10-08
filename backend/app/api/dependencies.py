@@ -204,12 +204,21 @@ def require_any_permission(*permissions: str, resource_type: Optional[str] = Non
 def require_csrf(
     request: Request,
     session: AuthSession = Depends(get_current_session),
+    db: Session = Depends(get_db_session),
 ) -> AuthSession:
     """AUTH-006 Section 4: strict Origin allowlist + session-bound CSRF token.
 
     Returns 403 before any mutation when either check fails.
     """
     if not csrf_core.origin_allowed(request.headers.get("origin"), settings.allowed_origins_list):
+        user = db.query(User).filter(User.id == session.user_id).first()
+        if user is not None:
+            _record_authorization_failure(
+                db,
+                user,
+                permission="CSRF_ORIGIN",
+                reason_code="CSRF_ORIGIN_DENIED",
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": "CSRF_ORIGIN_DENIED"},
@@ -217,6 +226,14 @@ def require_csrf(
     if not csrf_core.verify_csrf_token(
         session.session_token_hash, request.headers.get("x-csrf-token")
     ):
+        user = db.query(User).filter(User.id == session.user_id).first()
+        if user is not None:
+            _record_authorization_failure(
+                db,
+                user,
+                permission="CSRF_TOKEN",
+                reason_code="CSRF_TOKEN_DENIED",
+            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"error": "CSRF_TOKEN_DENIED"},

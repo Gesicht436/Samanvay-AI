@@ -62,20 +62,12 @@ export interface SeedUser {
   description: string;
 }
 
-export interface AuthTokenResponse {
-  access_token: string;
-  token_type: string;
-  user: User;
-}
-
-export interface UserSignupRequest {
-  username: string;
-  password: string;
-  full_name: string;
-  email: string;
-  role: string;
-  cpse: string;
-  depot_id: string;
+// AUTH-006 session-cookie contract: the backend login endpoint sets the
+// HttpOnly session cookie and returns the user profile directly. There is no
+// access_token. Authenticated identity is represented by the User profile
+// fetched from the server session (GET /auth/me).
+export interface CsrfTokenResponse {
+  csrf_token: string;
 }
 
 

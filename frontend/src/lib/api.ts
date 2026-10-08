@@ -1,4 +1,4 @@
-import { User, SeedUser, AuthTokenResponse, UserSignupRequest } from './types';
+import { User, SeedUser, CsrfTokenResponse } from './types';
 
 function resolveApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
@@ -20,6 +20,39 @@ function resolveApiBaseUrl(): string {
 
 const API_BASE_URL = resolveApiBaseUrl();
 
+// ── AUTH-006 session-cookie foundation (Phase 1) ─────────────────────────────
+// Authentication state lives in the server-side session (HttpOnly cookie).
+// This module keeps the session-bound CSRF synchronizer token in memory ONLY.
+// It is never written to localStorage/sessionStorage, never logged, and never
+// persisted. No JWT/Bearer handling exists anywhere in this module.
+let sessionCsrfToken: string | null = null;
+
+export function setSessionCsrfToken(token: string | null): void {
+  sessionCsrfToken = token;
+}
+
+export function clearSessionCsrfToken(): void {
+  sessionCsrfToken = null;
+}
+
+function isUnsafeMethod(method?: string): boolean {
+  const m = (method || 'GET').toUpperCase();
+  return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
+}
+
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, detail: string) {
+    super(`API Error ${status}: ${detail}`);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+export function isAuthenticationFailure(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401;
+}
+
 async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers: Record<string, string> = {};
@@ -27,30 +60,37 @@ async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise
     headers['Content-Type'] = 'application/json';
   }
 
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('samanvay_auth_token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+  // Unsafe requests carry the in-memory CSRF token when a session holds one.
+  // The login request has no token yet and is sent without it.
+  const method = (options.method || 'GET').toUpperCase();
+  if (isUnsafeMethod(method) && sessionCsrfToken) {
+    headers['X-CSRF-Token'] = sessionCsrfToken;
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
+    credentials: 'include',
     headers: {
       ...headers,
       ...(options.headers as Record<string, string>),
     },
   });
 
+  // Empty success responses (e.g. 204 from POST /auth/logout) carry no body.
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   if (!response.ok) {
-    let errorDetail = response.statusText;
+    let errorDetail: string = response.statusText;
     try {
       const errJson = await response.json();
-      errorDetail = errJson.detail || errorDetail;
+      const rawDetail = errJson.detail || errorDetail;
+      errorDetail = typeof rawDetail === 'string' ? rawDetail : JSON.stringify(rawDetail);
     } catch {
       // Ignore text parse failure
     }
-    throw new Error(`API Error ${response.status}: ${errorDetail}`);
+    throw new ApiError(response.status, errorDetail);
   }
 
   return response.json();
@@ -197,19 +237,26 @@ export const api = {
     fetchAPI<any>(`/ingest/documents?skip=${skip}&limit=${limit}`),
   getDocumentById: (docId: number) => fetchAPI<any>(`/ingest/documents/${docId}`),
 
-  // Sovereign Authentication & Access Control
+  // Sovereign Authentication & Access Control (AUTH-006 session-cookie contract).
+  // The server owns the session: login sets the HttpOnly cookie and returns the
+  // user profile (no access_token). Identity is established via /auth/me and
+  // unsafe requests are CSRF-verified with the memory-only token.
   login: (payload: { username: string; password: string }) =>
-    fetchAPI<AuthTokenResponse>('/auth/login', {
+    fetchAPI<User>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  signup: (payload: UserSignupRequest) =>
-    fetchAPI<AuthTokenResponse>('/auth/signup', {
+  getCsrfToken: async () => {
+    const data = await fetchAPI<CsrfTokenResponse>('/auth/csrf');
+    setSessionCsrfToken(data.csrf_token);
+    return data;
+  },
+  logout: () =>
+    fetchAPI<void>('/auth/logout', {
       method: 'POST',
-      body: JSON.stringify(payload),
     }),
   getMe: () => fetchAPI<User>('/auth/me'),
-  getSeedUsers: () => fetchAPI<{ default_password: string; users: SeedUser[] }>('/auth/seed-users'),
+  getSeedUsers: () => fetchAPI<{ users: SeedUser[] }>('/auth/seed-users'),
   seedUsers: () => fetchAPI<{ status: string; total_users: number }>('/auth/seed', { method: 'POST' }),
 
   getUsers: () => fetchAPI<User[]>('/auth/users'),
