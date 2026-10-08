@@ -1,12 +1,13 @@
 'use client';
 
-import React from 'react';
+import { useRouter, useState } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { User, LogIn, LogOut, Shield } from 'lucide-react';
 
 export function UserHeaderBadge() {
   const { user, isAuthenticated, logout } = useAuth();
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   if (!isAuthenticated || !user) {
     return (
@@ -36,9 +37,21 @@ export function UserHeaderBadge() {
 
       <button
         type="button"
-        onClick={() => logout()}
-        className="p-1 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-        title="Sign Out"
+        onClick={async () => {
+          try {
+            await logout();
+            router.push('/login');
+          } catch {
+            // Non-401/retryable logout failure: identity is not cleared
+            // and no redirect is performed.
+            setLogoutError('Failed to sign out. Please try again.');
+          }
+        }}
+        className={`p-1 rounded transition-colors cursor-pointer ${logoutError
+          ? 'text-rose-600 dark:text-rose-400'
+          : 'text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors'
+          }`}
+        title={logoutError || 'Sign Out'}
       >
         <LogOut size={13} />
       </button>

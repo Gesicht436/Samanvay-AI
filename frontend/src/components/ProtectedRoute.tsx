@@ -60,6 +60,9 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     );
   }
 
+  // NOTE: Client-side role checks (above) are UI/navigation guards only.
+  // They MUST NOT be treated as a security boundary; backend permission
+  // checks remain authoritative for any actual authorization decision.
   // Check role authorization if specified
   if (allowedRoles && allowedRoles.length > 0) {
     const isAuthorized = allowedRoles.includes(user.role) || user.role === 'SUPER_ADMIN';

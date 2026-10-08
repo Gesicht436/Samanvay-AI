@@ -6,7 +6,9 @@ import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ArrowRight, UserCheck, KeyRound, UserPlus } from 'lucide-react';
 
-export function PublicNavbar() {
+// AUTH-006 Phase 2: production builds must not offer public signup. The
+// build-mode flag reuses the framework's existing NODE_ENV mechanism.
+const isProductionBuild = process.env.NODE_ENV === 'production';
   const { user, isAuthenticated } = useAuth();
 
   return (
@@ -65,13 +67,15 @@ export function PublicNavbar() {
                 <KeyRound size={13} />
                 <span>Sign In</span>
               </Link>
-              <Link
-                href="/signup"
-                className="flex items-center gap-1.5 px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium transition-colors"
-              >
-                <UserPlus size={13} />
-                <span>Register</span>
-              </Link>
+              {!isProductionBuild && (
+                <Link
+                  href="/signup"
+                  className="flex items-center gap-1.5 px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900 rounded-md text-xs font-medium transition-colors"
+                >
+                  <UserPlus size={13} />
+                  <span>Register</span>
+                </Link>
+              )}
             </div>
           )}
         </div>

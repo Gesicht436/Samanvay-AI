@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { UserCheck, ArrowRight, KeyRound, UserPlus } from 'lucide-react';
 
-export function LandingAuthCTA() {
+// AUTH-006 Phase 2: production builds must not offer public signup. The
+// build-mode flag reuses the framework's existing NODE_ENV mechanism.
+const isProductionBuild = process.env.NODE_ENV === 'production';
   const { user, isAuthenticated } = useAuth();
 
   return (
@@ -45,13 +47,15 @@ export function LandingAuthCTA() {
             <ArrowRight size={14} />
           </Link>
 
-          <Link
-            href="/signup"
-            className="py-3 px-6 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-semibold text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 transition-all flex items-center gap-2"
-          >
-            <UserPlus size={15} />
-            <span>Register CPSE Officer</span>
-          </Link>
+          {!isProductionBuild && (
+            <Link
+              href="/signup"
+              className="py-3 px-6 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-semibold text-xs rounded-lg border border-zinc-300 dark:border-zinc-700 transition-all flex items-center gap-2"
+            >
+              <UserPlus size={15} />
+              <span>Register CPSE Officer</span>
+            </Link>
+          )}
         </>
       )}
     </div>

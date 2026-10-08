@@ -39,6 +39,15 @@ export default function LoginPage() {
   const router = useRouter();
   const { user, login, isAuthenticated, seedUsers, defaultSeedPassword } = useAuth();
 
+  // AUTH-006 Phase 2: the 1-click persona hub, visible seed passwords, and
+  // seeded-credential helpers are evaluation-only. Next.js statically replaces
+  // process.env.NODE_ENV at build time, so the production bundle never
+  // contains seed usernames, seed passwords, or one-click seed login paths.
+  // No new environment variable is introduced; this reuses the framework's
+  // existing build-mode mechanism.
+  const isProductionBuild = process.env.NODE_ENV === 'production';
+  const showEvaluationHub = !isProductionBuild;
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +89,8 @@ export default function LoginPage() {
   };
 
   const handlePersonaSelect = (seedUser: SeedUser) => {
+    // Evaluation-only helper. This handler is reachable only when the
+    // evaluation hub is rendered (non-production builds).
     setUsername(seedUser.username);
     setPassword(defaultSeedPassword);
     handleLogin(undefined, seedUser.username, defaultSeedPassword);
@@ -176,8 +187,11 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Main Grid: 2 Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {/* Main Grid: standard credentials first in production; the evaluation
+          persona hub renders only in non-production builds. */}
+      <div className={`grid grid-cols-1 gap-6 items-start ${showEvaluationHub ? 'lg:grid-cols-12' : 'lg:grid-cols-1 max-w-2xl mx-auto w-full'}`}>
+        {showEvaluationHub && (
+        <>
         {/* Left Column: 1-Click Evaluation Personas Hub (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-xs">
@@ -387,13 +401,15 @@ export default function LoginPage() {
 
             <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-center text-xs text-zinc-600 dark:text-zinc-400 flex items-center justify-between">
               <span>New CPSE Officer?</span>
-              <Link
-                href="/signup"
-                className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1"
-              >
-                <span>Register Account</span>
-                <ArrowRight className="w-3 h-3" />
-              </Link>
+              {showEvaluationHub && (
+                <Link
+                  href="/signup"
+                  className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1"
+                >
+                  <span>Register Account</span>
+                  <ArrowRight className="w-3 h-3" />
+                </Link>
+              )}
             </div>
 
             <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2 text-[11px] text-zinc-500 dark:text-zinc-400">
