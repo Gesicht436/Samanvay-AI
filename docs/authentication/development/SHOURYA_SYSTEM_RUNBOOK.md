@@ -343,6 +343,7 @@ Rules for future agents:
 3. The credential-authority direction is already decided: **External Organizational Authority / Federation** — Samanvay must not become the authoritative organizational password store (`docs/authentication/10_DECISIONS.md` D-CRED-1). However, the exact provider/protocol is not yet selected — **OPEN ARCHITECTURE DECISION**. Agents MUST NOT invent LDAP, Active Directory, OIDC, SAML, Kerberos, REST, or another identity integration. Until the integration contract is formally specified, preserve the current local-bcrypt implementation and do not implement an external provider.
 4. Follow the currently implemented session-cookie authentication: `POST /auth/login` → server-side `AuthSession` → hashed session secret → HttpOnly session cookie (`__Host-samanvay_session` in production) → CSRF-protected unsafe requests.
 5. Read this runbook before performing any authentication work.
+6. Describe the local bcrypt verification only as the **prototype credential authority**, **development/demo authentication**, or **local prototype credential verification**. Never describe it as an organizational identity provider, an organizational credential integration, or the production CPSE identity architecture. In a real organizational deployment, credential verification is expected to be delegated to the organization-approved identity infrastructure; the exact provider/protocol is deployment-specific and unresolved (`docs/authentication/10_DECISIONS.md` D-CRED-1).
 
 Do NOT independently introduce:
 
@@ -354,17 +355,35 @@ Do NOT independently introduce:
 
 unless the project architecture is explicitly changed.
 
-The implemented conceptual flow is:
+The submitted prototype's implemented conceptual flow (prototype credential authority — development/demo authentication):
 
 ```text
-Organizational username + password
-            ↓
-Samanvay-AI authentication endpoint (local bcrypt verification today)
-            ↓
-Samanvay-AI server-side Application Session
-            ↓
-Authorization / RBAC / CPSE Scope
+username + password
+        ↓
+prototype credential verification
+        ↓
+account-state checks
+        ↓
+Samanvay AuthSession
+        ↓
+__Host-samanvay_session
 ```
+
+The real organizational deployment flow (target direction; exact provider/protocol deployment-specific and unresolved):
+
+```text
+organizational username + password
+        ↓
+organization-approved credential authority
+        ↓
+successful identity/authentication handoff
+        ↓
+Samanvay AuthSession
+        ↓
+__Host-samanvay_session
+```
+
+The local prototype credential verification is NOT the organization's authoritative credential store and is NOT the production CPSE identity architecture. The external authority owns organizational credential verification and password lifecycle; Samanvay owns application session management, authorization, RBAC, CPSE/resource boundaries, CSRF protection, application security events, session revocation, and application-level account-state enforcement where applicable. The session architecture is identical in both flows and is unchanged.
 
 Authentication architecture must not be redesigned during unrelated authorization tasks.
 
@@ -622,6 +641,25 @@ Lesson: when using policy reason constants, inspect the actual constant value an
 ### E. Telemetry must not change authorization semantics
 
 Lesson: instrumentation changes must preserve the original authorization guard, permission requirement, and response behavior.
+
+---
+
+## Known Recurring Error — Task 17 Tooling: Shell-Integration Capture Failure and Malformed PowerShell
+
+### Issue A — shell-integration output capture failure and stray artifact file
+
+During Task 17, the initial `git status --short` output could not be captured through shell integration ("output could not be captured through shell integration ... command may still be running"). The command was re-run later and its output verified normally. In the same session window an untracked stray file named `tatus --short` (a colored `git diff --stat` capture, evidently a redirect/typo artifact) appeared in the repository root. Task 17 issued no command containing output redirection; the file remains untracked, is not referenced by any document or code, was not committed, and is reported in the Task 17 final report rather than deleted because its origin is uncertain.
+
+### Issue B — malformed PowerShell one-liner
+
+A single-line byte-inspection command constructed during Task 17 contained invalid nested ternary syntax and failed with `ParserError: Missing ')' in method call`. A simpler byte-scan loop was used instead and succeeded. A later `git show --stat | Select-Object -First 3` reported exit code 1 only because `-First 3` closed the pipeline early; the required output had already been captured.
+
+### Prevention
+
+* Prefer simple PowerShell commands (Section 17); avoid clever one-liners.
+* When shell integration reports uncaptured output, re-run the command and verify results before drawing conclusions.
+* Never rely on output-redirect artifacts; do not commit stray files.
+* Treat pipeline-stop exit codes from `Select-Object -First N` as non-failures when the required output was already obtained.
 
 ---
 

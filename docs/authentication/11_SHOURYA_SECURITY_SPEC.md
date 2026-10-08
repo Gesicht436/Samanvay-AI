@@ -19,7 +19,7 @@ Prevents privilege escalation and cross-CPSE access.
 
 Model: Organizational username/password + server-side session
 
-The intended user-facing credential model is organizational username/password. The current repository implementation verifies credentials locally with bcrypt against the application's account store and then establishes a server-side session.
+The intended user-facing credential model is organizational username/password. The current repository implementation verifies credentials locally with bcrypt against the application's account store and then establishes a server-side session. This local verification is the **prototype credential authority** (development/demo authentication) of the submitted prototype — not an organizational identity provider; see the prototype vs. production distinction below.
 
 User
   ↓
@@ -32,6 +32,8 @@ Samanvay-AI server-side session (HttpOnly session cookie)
 Authorization
 
 The credential-authority direction is decided — External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1): an external organizational authority owns credential verification and password storage, and Samanvay must not become the authoritative organizational password store. The exact protocol/provider/integration mechanism remains an OPEN ARCHITECTURE DECISION, to be determined from the organization's actual identity infrastructure before implementation. No external organizational credential authority (LDAP, Active Directory, OIDC, SAML, directory, federation, or otherwise) is currently implemented, and none may be invented or assumed without an explicit approved task.
+
+**Prototype vs. production distinction (Task 17).** The local bcrypt verification above is the **prototype credential authority**: prototype/development authentication for the submitted prototype. It is NOT claimed to be the organization's authoritative credential store and NOT presented as the production CPSE identity architecture. In a real organizational/CPSE deployment, credential verification is expected to be delegated to the organization-approved identity infrastructure, which owns organizational credential verification and password lifecycle; the exact provider/protocol is deployment-specific, unresolved, and must not be invented or assumed. Samanvay retains application session management, authorization, RBAC, CPSE/resource boundaries, CSRF protection, application security events, session revocation, and application-level account-state enforcement where applicable — in both the prototype and production flows.
 
 Session-cookie security remains mandatory: `__Host-samanvay_session` in production, HttpOnly, SameSite=Lax, Secure in production, hashed session-secret storage, CSRF protection, login rate limiting, revocation, and account-state checks.
 

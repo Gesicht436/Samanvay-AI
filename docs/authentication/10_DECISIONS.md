@@ -139,8 +139,10 @@ authenticated user is allowed to do inside the application.
 **What remains unresolved.** The exact identity protocol/provider/
 integration mechanism for the external authority. It must be determined
 from the organization's actual identity infrastructure before any
-implementation begins. The eventual migration away from local
-`users.hashed_password` organizational password storage is a future
+implementation begins. The local `users.hashed_password` column is the
+**prototype credential store** — development/demo authentication for the
+submitted prototype, not organizational password ownership. Its eventual
+migration to the organization-approved credential authority is a future
 implementation/migration task, to be specified only after the integration
 contract exists.
 
@@ -153,3 +155,71 @@ contract exists.
   selected, assumed, or implemented.
 * Password verification continues against the local account store.
 * Session design, RBAC, and authorization are unaffected by this decision.
+
+### D-CRED-1 finalization — Prototype vs. production credential authority (Task 17)
+
+Source: Task 17 credential-authority boundary finalization. This does not
+change D-CRED-1's direction, status, or responsibility boundary; it makes
+explicit how the submitted prototype relates to that direction.
+
+**Prototype credential authority.** The submitted group-project prototype
+continues to use its existing local credential verification as its
+development/demo authentication authority — the **prototype credential
+authority** (local prototype credential verification:
+`users.hashed_password` → bcrypt → account-state checks). This local
+mechanism is:
+
+* prototype/development authentication for demonstration purposes;
+* NOT claimed to be the organization's authoritative credential store;
+* NOT presented as the production CPSE identity architecture.
+
+**Prototype flow (current submitted prototype).**
+
+```text
+username + password
+        ↓
+prototype credential verification
+        ↓
+account-state checks
+        ↓
+Samanvay AuthSession
+        ↓
+__Host-samanvay_session
+```
+
+**Real organizational deployment flow (target direction; exact
+provider/protocol deployment-specific and unresolved).**
+
+```text
+organizational username + password
+        ↓
+organization-approved credential authority
+        ↓
+successful identity/authentication handoff
+        ↓
+Samanvay AuthSession
+        ↓
+__Host-samanvay_session
+```
+
+**Production boundary.** When deployed in a real organizational/CPSE
+environment, credential verification is expected to be delegated to the
+organization's approved identity infrastructure. The external authority
+owns organizational credential verification and password lifecycle. The
+exact production provider/protocol is deployment-specific and unresolved;
+none may be invented or assumed.
+
+Samanvay owns, in both flows: application session management;
+authorization; RBAC; CPSE/resource boundaries; CSRF protection;
+application security events; session revocation; and application-level
+account-state enforcement where applicable. The session architecture
+(server-side `AuthSession` → cryptographically random session secret →
+SHA-256 hash stored server-side → `__Host-samanvay_session`) is unchanged
+and is not redesigned by this finalization.
+
+**Terminology rule.** In documentation and reports, describe the local
+bcrypt mechanism only as *prototype credential authority*,
+*development/demo authentication*, or *local prototype credential
+verification*. Never describe it as an organizational identity provider,
+an organizational credential integration, or the production CPSE identity
+architecture.

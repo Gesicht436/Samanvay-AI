@@ -89,6 +89,8 @@ The following fields remain authoritative:
 | `is_approved`     | Administrative approval state    |
 | `created_at`      | Account creation timestamp       |
 
+**Prototype credential store.** `hashed_password` stores the prototype's local credentials for development/demo authentication (the **prototype credential authority** of the submitted prototype). It is not the organization's authoritative credential store and does not represent organizational password ownership (`10_DECISIONS.md` D-CRED-1). Real organizational deployment delegates credential verification and password lifecycle to the organization-approved identity infrastructure; the exact provider/protocol is deployment-specific and unresolved.
+
 Future account-management requirements may introduce additional timestamps such as:
 
 * `updated_at`

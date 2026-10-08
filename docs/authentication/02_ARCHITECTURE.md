@@ -37,7 +37,56 @@ Authentication does not imply authorization. Authorization does not by itself es
 
 ### Current repository behavior
 
-The current repository implements the frozen target: `POST /auth/login` verifies username/password with bcrypt against the local account store, performs account-state checks, and creates a server-side `AuthSession`. The browser carries only the session cookie (`__Host-samanvay_session` in production; `samanvay_session` in development) — `Secure`, `HttpOnly`, `SameSite=Lax`. The frontend keeps identity in memory only and restores it via `GET /auth/me`; unsafe requests carry an in-memory CSRF token. There is no JWT, no Bearer header, and no localStorage authentication state. The credential-authority direction is decided — External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1) — while the exact protocol/provider remains an OPEN ARCHITECTURE DECISION; local bcrypt verification is the current implementation until that integration is specified. See `frontend/src/context/AuthContext.tsx`, `frontend/src/lib/api.ts`, `backend/app/api/routers/auth.py`, and `backend/app/api/dependencies.py`.
+The current repository implements the frozen target: `POST /auth/login` verifies username/password with bcrypt against the local account store, performs account-state checks, and creates a server-side `AuthSession`. The browser carries only the session cookie (`__Host-samanvay_session` in production; `samanvay_session` in development) — `Secure`, `HttpOnly`, `SameSite=Lax`. The frontend keeps identity in memory only and restores it via `GET /auth/me`; unsafe requests carry an in-memory CSRF token. There is no JWT, no Bearer header, and no localStorage authentication state. The credential-authority direction is decided — External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1) — while the exact protocol/provider remains an OPEN ARCHITECTURE DECISION; local bcrypt verification is the current implementation until that integration is specified — it is the **prototype credential authority** (development/demo authentication) of the submitted prototype, not an organizational identity provider and not the production CPSE identity architecture (see the new subsection below). See `frontend/src/context/AuthContext.tsx`, `frontend/src/lib/api.ts`, `backend/app/api/routers/auth.py`, and `backend/app/api/dependencies.py`.
+
+### Prototype vs. production credential authority
+
+**Prototype flow (submitted group-project prototype):**
+
+```text
+username + password
+        ↓
+prototype credential verification
+        ↓
+account-state checks
+        ↓
+Samanvay AuthSession
+        ↓
+__Host-samanvay_session
+```
+
+The local bcrypt verification above is the **prototype credential
+authority**: development/demo authentication for the submitted prototype.
+It is not claimed to be the organization's authoritative credential store,
+and it is not presented as the production CPSE identity architecture.
+
+**Real organizational deployment flow (target direction; exact
+provider/protocol deployment-specific and unresolved):**
+
+```text
+organizational username + password
+        ↓
+organization-approved credential authority
+        ↓
+successful identity/authentication handoff
+        ↓
+Samanvay AuthSession
+        ↓
+__Host-samanvay_session
+```
+
+In a real organizational/CPSE deployment, credential verification is
+expected to be delegated to the organization-approved identity
+infrastructure, which owns organizational credential verification and
+password lifecycle. Samanvay owns application session management,
+authorization, RBAC, CPSE/resource boundaries, CSRF protection,
+application security events, session revocation, and application-level
+account-state enforcement where applicable. The exact production
+provider/protocol remains an OPEN ARCHITECTURE DECISION
+(`10_DECISIONS.md` D-CRED-1) and may not be invented or assumed. The
+session architecture (`AuthSession` → SHA-256-hashed session secret →
+`__Host-samanvay_session`) is identical in both flows and is not
+redesigned by this boundary.
 
 ---
 

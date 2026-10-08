@@ -1307,7 +1307,7 @@ AUTH-006 implementation is complete only when:
 
 AUTH-006 does **not** implement or redesign:
 
-* Google OAuth/OIDC implementation or `OAuthIdentity` persistence. OIDC/Google is not part of the current authentication target; any future reintroduction requires an explicit approved task. The credential-authority direction is External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1); its exact protocol/provider remains an open architecture decision.
+* Google OAuth/OIDC implementation or `OAuthIdentity` persistence. OIDC/Google is not part of the current authentication target; any future reintroduction requires an explicit approved task. The credential-authority direction is External Organizational Authority / Federation (`10_DECISIONS.md` D-CRED-1); its exact protocol/provider remains an open architecture decision. The local password store remains the **prototype credential authority** (development/demo authentication) for the submitted prototype — not organizational password ownership and not the production CPSE identity architecture; production delegation of credential verification to the organization-approved credential authority is deployment-specific and unresolved (Task 17).
 * Password reset/recovery.
 * Email verification.
 * Step-up authentication/MFA.
