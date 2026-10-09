@@ -723,6 +723,65 @@ database is available.
 
 ---
 
+## Known Recurring Error — Task 19 CSRF + Origin Enforcement
+
+### Approved decision — `POST /match/search` is a protected POST
+
+The Task 19 audit found `POST /api/v1/match/search`
+(`backend/app/api/routers/match.py::search_matches`) was the only
+mutating-route decorator without `require_csrf` (19/20 covered). The
+project owner approved treating it as an authenticated protected POST
+under the existing strict-Origin + session-bound-token policy — no
+read-only exemption merely because the response looks read-shaped, and
+no change to token construction, Origin semantics, cookie/session
+design, CORS, or error vocabulary.
+
+### Changes made
+
+* `backend/app/api/routers/match.py`: added the existing
+  `_csrf: AuthSession = Depends(require_csrf)` dependency to
+  `search_matches` (import + parameter, following the inventory /
+  requisition / ingest / audit pattern). No handler, service, permission,
+  or tenant logic changed. No unrelated routes or frontend files touched.
+* `tests/unit/test_csrf_origin.py` (new, 15 tests, DB-free): HMAC token
+  construction vs an independently computed `hmac.new(...)` expectation;
+  token verify matrix (valid / wrong / cross-session / missing / empty /
+  whitespace / non-string / malformed stored hash); Origin matrix (exact
+  allowlist hit / missing / malformed / untrusted / suffix-spoof /
+  trailing-slash contract); `require_csrf` ordering through the real
+  dependency with stub request/session/DB doubles (Origin-denied → 403
+  before token validation; token-denied → 403 with the handler never
+  reached); route-wiring assertion that `match/search` declares
+  `require_csrf`.
+
+### Test outcomes (actual)
+
+* `python -m pytest tests/unit/test_csrf_origin.py -q` → **15 passed**.
+* `python -m pytest tests/unit/test_session_security.py
+  tests/unit/test_security.py -q` → **19 passed** (Task 18 regression
+  intact).
+* DB-free lifecycle subset (6 checks) → **6 passed**; DB-free auth
+  regression (seed-users / me-unauthorized / retired-seed) →
+  **3 passed**.
+* DB-backed CSRF acceptance/rejection over HTTP (real token issuance →
+  protected mutation → 403-negative cases) remains **BLOCKED**:
+  PostgreSQL unavailable at `localhost:5432` (Runbook sections 4, 16,
+  22). Not executed, never claimed as PASS.
+
+### Implementation notes
+
+* No genuine implementation errors were encountered. The new test file
+  was written in three editor calls only because a single write exceeded
+  the editor payload limit; the intermediate state briefly dropped one
+  test, which was restored before any test run — no test was ever run
+  against the partial file.
+* `require_csrf` is called directly (not via FastAPI injection) in the
+  ordering tests, so its `Depends(...)` defaults are bypassed by passing
+  explicit stub doubles — the real function body, including both 403
+  branches and telemetry staging, is what executes.
+
+---
+
 # 20. Test Reporting Convention
 
 Every test report should distinguish:
@@ -792,6 +851,136 @@ No database setup was performed.
 
 ---
 
+
+## Task 20 — Migration Infrastructure Recovery
+
+### Audit findings
+* `backend/alembic/baseline_schema.py` previously lacked `BASELINE_REVISION` and
+  `BASELINE_TABLES`, causing an import error in `tests/unit/test_migration_integrity.py`.
+  **Resolved:** added `BASELINE_REVISION = "0001"` and `BASELINE_TABLES` (12 tables in
+  teardown-safe order, matching `reversed(list(Base.metadata.sorted_tables))`).
+* `backend/app/services/schema_verification.py` previously had an IndentationError around
+  line 444. A syntax check subsequently passed; the file was verified for duplicated or
+  overlapping code regions and none found. **No change required.**
+* `scripts/generate_baseline_schema.py` appeared to contain potentially duplicated code.
+  Syntax check passed and the generator was reviewed in full; no functional defect found —
+  the `header`/`body`/`footer` string-splitting is intentional and produces the frozen
+  baseline correctly. **No change required.**
+
+### Files modified (Task 20)
+* `backend/alembic/baseline_schema.py` (added baseline identity + table list)
+* `backend/alembic/versions/0001_baseline.py` (new, baseline migration)
+* `backend/alembic/env.py` (new)
+* `backend/alembic/__init__.py` (new)
+* `backend/app/services/schema_verification.py` (new)
+* `scripts/adopt_schema.py` (new)
+* `scripts/generate_baseline_schema.py` (new)
+* `tests/unit/test_migration_integrity.py` (new)
+
+### Test outcomes (actual)
+* `python -m pytest tests/unit/test_migration_integrity.py -q` → **BLOCKED**:
+  `ModuleNotFoundError: No module named 'pydantic_settings'` at import time
+  (`backend/app/models/base.py` → `backend/app/core/config.py` → `pydantic_settings.BaseSettings`).
+  Not executed, never claimed as PASS or FAIL.
+* DB-free auth regression tests (`tests/unit/test_csrf_origin.py`,
+  `tests/unit/test_session_security.py`, `tests/unit/test_security.py`) → **BLOCKED**:
+  `ModuleNotFoundError: No module named 'fastapi'` at import time. Not executed, never
+  claimed as PASS or FAIL.
+
+### Outstanding PostgreSQL-dependent verification
+* Live PostgreSQL schema verification (`scripts/adopt_schema.py --dry-run`, `--stamp`)
+  is BLOCKED because PostgreSQL is unavailable at `localhost:5432`.
+* Production startup verification (`verify_schema_version`) is BLOCKED for the same reason.
+* These remain BLOCKED; only the DB-free static checks (syntax, import of baseline module,
+  AST-based migration-chain inspection) are available.
+
+### Completion pass (Task 20, October 2026) — verified findings
+
+#### Symptom A — eight failing tests, reproducible
+`python -m pytest tests/unit/test_migration_integrity.py -q` → **8 failed,
+20 passed**. The three `verify_*_fails_closed` tests reported
+"DID NOT RAISE RuntimeError"; four `test_adopt_*` tests returned exit 3 with
+`psycopg2.OperationalError ... Connection refused`; the idempotent-stamp test
+reported `connect` called twice.
+
+#### Root cause A (established)
+* The three verify tests set rows attributes on the object returned by
+  `_fake_engine()` — the **engine** mock — while the inner **connection**
+  mock kept its default `[("0001",)]`, so verification legitimately saw a
+  matching revision and did not raise. The implementation was proven correct
+  for all three cases by supplying rows through `_fake_engine(rows=...)`.
+* The four adopt tests patched `sqlalchemy.inspect` and
+  `adopt_schema.actual_from_inspector` but never patched
+  `adopt_schema.engine`, so `_verify()` used the real module-level engine
+  and attempted a live connection to `localhost:5432`.
+* The idempotent-stamp test (i) asserted `connect.assert_called_once()`
+  although the design performs two read-only connects (verify + stamp
+  pre-check), and (ii) configured fake rows via `fetchall.return_value`
+  although `_alembic_version_rows` iterates the Result directly
+  (a MagicMock `__iter__` defaults to empty), so the fake reported "not
+  stamped" and the stamp proceeded to `begin()`.
+
+#### Resolution A (verified)
+`tests/unit/test_migration_integrity.py`: rows now supplied via
+`_fake_engine(rows=...)`; every `main()`-invoking adopt test patches both
+`adopt_schema.engine` and `adopt_schema.inspect`; the fake result implements
+`fetchall()` and `__iter__()`; connect-count assertions assert the verified
+two-read flow while write safety is asserted by `_assert_no_writes()`
+(a statement-class scan of every `execute()` call) plus `engine.begin`
+assertions. Result: **35 passed** (28 original + 7 new), no assertion was
+weakened to obtain the result.
+
+#### Symptom B — live dry-run could never match (code-level defect)
+`schema_verification.py` documents a `pg_index` query in
+`scripts/adopt_schema.py` that did not exist, so on a live database every
+index predicate would be `UNVERIFIABLE` and `_compare_table` would report a
+difference for all 23 indexes even on an exactly matching schema.
+
+#### Root cause B (established)
+`_verify()` never supplied `index_predicates`, and SQLAlchemy's Inspector
+does not expose partial-index predicates.
+
+#### Resolution B (verified with fake connections)
+`scripts/adopt_schema.py` now runs a read-only
+`SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname =
+current_schema()` and extracts predicates with `predicate_from_indexdef()`
+(anchor on `) WHERE`, normalize via `check_tokens`, balance via `_balanced`).
+No WHERE clause → verified `None` (ordinary non-partial index); empty or
+unbalanced predicate → `ValueError` → adoption aborts exit 3 with no write;
+missing entry → stays `UNVERIFIABLE` → exit 1. Tests cover matching partial
+index, predicate mismatch, missing entry, unparseable definition, and the
+plain non-partial index — all DB-free.
+
+#### Preventive instructions
+* When faking an engine for code that uses a module-level binding, patch the
+  binding the code actually uses (`adopt_schema.engine`,
+  `adopt_schema.inspect`); patching `sqlalchemy.inspect` only affects
+  modules that import `inspect` **inside** the function.
+* Configure BOTH `fetchall()` and `__iter__()` on fake SQLAlchemy results;
+  production code may iterate a Result directly.
+* **TIMESTAMP symmetry:** a reflected PostgreSQL column type renders through
+  `str()` as bare `'TIMESTAMP'` for both tz and naive spellings, and the
+  expected-side baseline parser also produces `'TIMESTAMP'` for
+  `TIMESTAMP WITH TIME ZONE` — the two sides must stay equal. Do not
+  "normalize" only one side (e.g. changing the parser to emit `TIMESTAMPTZ`)
+  or every datetime column will mismatch on a live database.
+* `pg_indexes.tablename` is the **table** name, not the schema name.
+
+#### Test outcomes (completion pass, actual)
+* `python -m pytest tests/unit/test_migration_integrity.py -q` → **35 passed**
+  (plus one benign Alembic `path_separator` DeprecationWarning originating
+  from `backend/alembic.ini`; the config was left untouched).
+* `python -m pytest tests/unit/test_csrf_origin.py
+  tests/unit/test_session_security.py tests/unit/test_security.py -q` →
+  **34 passed** (Task 18/19 regression intact).
+* Offline `ScriptDirectory` head check → `heads == ['0001']`, one revision.
+* Baseline regeneration check → 35/35 statements and the table order are
+  identical to the frozen `baseline_schema.py`.
+* Still BLOCKED: anything requiring live PostgreSQL (unchanged from above).
+
+---
+
+# 23. Git Verification Checklist
 # 23. Git Verification Checklist
 
 After every implementation:
