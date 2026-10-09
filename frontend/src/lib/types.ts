@@ -1,81 +1,14 @@
-export interface PhysicalAttributes {
-  weight_kg: number;
-  dimensions_cm: string;
-  condition: string;
-}
+export type EquivalenceTier = "Tier-1" | "Tier-2" | "Tier-3";
+export type SafetyTier = EquivalenceTier | "Tier-4-Reject";
 
-export interface DynamicCompatibilityTier {
-  tier: number;
-  description: string;
-}
-
-export interface PropertyScorecard {
-  property: string;
-  score: number;
-  details: string;
-}
-
-export interface InventoryItemResponse {
-  id: string;
-  name: string;
-  description: string;
-  status: string;
-  quantity: number;
-  attributes: PhysicalAttributes;
-  compatibility_tier?: DynamicCompatibilityTier;
-  scorecard?: PropertyScorecard[];
-}
-
-export interface RequisitionCreateRequest {
-  item_id: string;
-  quantity: number;
-  reason: string;
-}
-
-export interface AuditLogEntry {
-  id: string;
-  action: string;
-  timestamp: string;
-  user_id: string;
-  details: string;
-}
-
-export interface User {
-  id: number;
-  username: string;
-  full_name: string;
-  email?: string;
-  role: string;
-  cpse: string;
-  depot_id: string;
-  is_active: boolean;
-  is_approved: boolean;
-}
-
-export interface SeedUser {
-  username: string;
-  full_name: string;
-  role: string;
-  cpse: string;
-  depot_id: string;
-  email: string;
-  description: string;
-}
-
-export interface AuthTokenResponse {
-  access_token: string;
-  token_type: string;
-  user: User;
-}
-
-export interface UserSignupRequest {
-  username: string;
-  password: string;
-  full_name: string;
-  email: string;
-  role: string;
-  cpse: string;
-  depot_id: string;
-}
-
-
+export interface ExtractedMaterialAttributes { raw_description?: string; item_type?: string | null; size_nb_mm?: number | null; pressure_class?: number | null; metallurgy?: string | null; facing_end?: string | null; standard?: string | null; material_grade?: string | null; indian_standard?: string | null; oisd_standard?: string | null; eil_specification?: string | null; gem_category?: string | null; gem_bid_number?: string | null; cppp_tender_id?: string | null; mesc_code?: string | null; manufacturer?: string | null; product_form?: string | null; coating?: string | null; inspection_class?: string | null; document_number?: string | null; project?: string | null; end_connection?: string | null; temperature_rating?: number | null; purchase_order?: string | null; certificate_number?: string | null; bid_number?: string | null; inspection_agency?: string | null; }
+export interface MTCRecord { doc_type: string; cert_no?: string | null; po_no?: string | null; description?: string | null; standard?: string | null; material_grade?: string | null; heat_no?: string | null; qty?: string | null; chemical_composition: Array<{ element: string; value?: number | null; unit?: string | null }>; mechanical_properties: Array<{ property: string; value?: number | null; unit?: string | null }>; }
+export interface OCRPage { page: number; text: string; blocks: Array<Record<string, unknown>>; regions: Array<Record<string, unknown>>; extraction_method?: string | null; ocr_engine?: string | null; raster_dpi?: number | null; }
+export interface OCRProfile { routing: string; raster_dpi: number; preprocessing: string[]; primary_engine: string; fallback_engine: string; mtc_intelligence: boolean; chemistry_extraction: boolean; }
+export interface IngestResponse { filename?: string | null; source_type: string; extraction_method: string; raw_text: string; text: string; pages: OCRPage[]; mtc: MTCRecord; }
+export interface IngestResult { filename: string | null; raw_text: string; parsed_metadata: Record<string, unknown> & { chemical_composition?: MTCRecord["chemical_composition"]; mechanical_properties?: MTCRecord["mechanical_properties"]; engineering_attributes?: ExtractedMaterialAttributes; manufacturer_list?: string[]; tpi_list?: string[] }; confidence: number; extraction_method: string; page_count: number; pages?: OCRPage[]; ocr_profile?: OCRProfile; }
+export interface CandidateMatch { canonical_id: string; similarity: number; item_type?: string | null; size_nb_mm?: number | null; pressure_class?: number | null; metallurgy?: string | null; facing_end?: string | null; standard?: string | null; canonical_description?: string | null; indian_standard?: string | null; oisd_standard?: string | null; eil_specification?: string | null; gem_category?: string | null; gem_bid_number?: string | null; cppp_tender_id?: string | null; mesc_code?: string | null; manufacturer?: string | null; product_form?: string | null; coating?: string | null; inspection_class?: string | null; document_number?: string | null; project?: string | null; end_connection?: string | null; temperature_rating?: number | null; purchase_order?: string | null; certificate_number?: string | null; bid_number?: string | null; inspection_agency?: string | null; tier?: SafetyTier; violations?: string[]; reasons?: string[]; domain_scores?: Record<string, number>; }
+export interface MatchResult { raw_description: string; tier: SafetyTier; confidence: number; candidate?: CandidateMatch | null; matches: CandidateMatch[]; routing: string; reasons: string[]; }
+export interface ReviewQueueItem { id: string; query: string; candidate: CandidateMatch; uncertainty: number; cosine: number; created_at: string; }
+export interface HitlResolution { status: string; training_example: { query: string; candidate: string; label: number; cosine: number }; }
+export interface DashboardSummary { vector_search: { ready: boolean; message: string }; embedding_model_ready: boolean; reranker_model_ready: boolean; pending_reviews: number; resolved_reviews: number; review_capacity: number; capabilities: { industry_metadata: boolean; mtc_chemistry: boolean; named_vector_domains: string[]; active_learning: boolean }; ocr: { routing: string; raster_dpi: number; preprocessing: string[]; primary_engine: string; primary_engine_ready: boolean; fallback_engine: string; fallback_engine_ready: boolean; mtc_intelligence: boolean; chemistry_extraction: boolean; manufacturer_tpi_extraction: boolean }; }

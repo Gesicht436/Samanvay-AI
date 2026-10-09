@@ -1,0 +1,21 @@
+code,title,level,parent_code
+40000000,Industrial Manufacturing and Processing Machinery and Accessories,Segment,ROOT
+40140000,Fluid and gas distribution,Family,40000000
+40141600,Valves,Class,40140000
+40141611,Gate valves,Commodity,40141600
+40141604,Ball valves,Commodity,40141600
+40141602,Globe valves,Commodity,40141600
+40141601,Check valves,Commodity,40141600
+40141603,Butterfly valves,Commodity,40141600
+40171500,Industrial pipe fittings,Class,40140000
+40171501,Pipe flanges,Commodity,40171500
+40171502,Pipe elbows,Commodity,40171500
+40171503,Pipe tees,Commodity,40171500
+40171504,Pipe reducers,Commodity,40171500
+31000000,Manufacturing Components and Supplies,Segment,ROOT
+31160000,Hardware and fasteners,Family,31000000
+31161500,Bolts,Class,31160000
+31161501,Stud bolts,Commodity,31161500
+31161600,Gaskets and seals,Class,31160000
+31161618,Spiral wound gaskets,Commodity,31161600
+31161601,Ring joint gaskets,Commodity,31161600

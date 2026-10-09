@@ -1,290 +1,314 @@
 # Samanvay-AI
 
-### Sovereign Cross-CPSE Spare Parts Interoperability, Dynamic Compatibility & Mutual Aid Logistics Mesh
-**Ministry of Petroleum & Natural Gas (MoPNG) | Smart India Hackathon (SIH26099)**
+Samanvay-AI is a material intelligence workspace for harmonizing procurement
+catalogs across Indian central public sector enterprises (CPSEs), with a focus
+on IOCL, ONGC, and BPCL. It combines document extraction, engineering
+attribute normalization, catalog retrieval, deterministic compatibility
+checks, and human review in one web application.
 
-[![Python: 3.14+](https://img.shields.io/badge/Python-3.14%2B-blue.svg)](pyproject.toml)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](backend/)
-[![Next.js: 16](https://img.shields.io/badge/Next.js-16.3%20(React%2019)-black.svg)](frontend/)
-[![Qdrant](https://img.shields.io/badge/Qdrant-v1.12.0-red.svg)](ml/embeddings/)
-[![Neo4j: 5.20](https://img.shields.io/badge/Neo4j-5.20-008CC1.svg)](graph/)
-[![Docker: 2.0.0-PROD](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](docker/)
+This repository is a contract-first monorepo: FastAPI/Pydantic contracts define
+the backend API, and the Next.js client mirrors the response types it consumes.
+The core matching and engineering rules are implemented in Python, Polars, and
+NumPy; this project does not require native C++ extensions.
 
----
+## What the application does
 
-## 1. Executive Summary
+- **Ingest certificates and other documents:** upload a PDF or supported image,
+  or submit certificate text directly. Native PDF text is extracted without
+  OCR. Scanned PDF pages and images use 300-DPI rendering, denoising, deskew,
+  contrast enhancement, PaddleOCR, and EasyOCR fallback.
+- **Extract material evidence:** parse certificate identifiers, purchase
+  orders, grades, standards, heat numbers, chemistry, mechanical properties,
+  manufacturer, TPI/inspection agency, and engineering attributes.
+- **Calculate and review chemistry:** calculate IIW carbon equivalent,
+  weldability category, and PREN when the required values are present. Current
+  chemistry conformance ranges are configured for A105 and A182 F316. Unknown
+  grades and incomplete or out-of-range chemistry are not marked verified and
+  require human review.
+- **Find catalog equivalents:** retrieve likely canonical materials from
+  Qdrant using dimensional, metallurgy, pressure/temperature, and
+  standards/procurement evidence, then apply deterministic compatibility and
+  safety rules. A compatibility reranker is used when requested and available.
+- **Capture human decisions:** queue uncertain match suggestions, accept or
+  correct them, and expose the resulting feedback examples for future learning.
+  The current feedback queue is in memory and is cleared when the API process
+  restarts.
 
-India's 7 major public sector oil, gas, and petrochemical enterprises (**OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL**) collectively hold over **₹15,000–18,000 Crore** in maintenance, repair, and overhaul (MRO) spare parts. Simultaneously, unplanned refinery shutdowns and emergency unit trips cost Indian Public Sector Undertakings (PSUs) **₹5–20 Crore per day**, largely driven by lengthy 6–18 month OEM procurement lead times.
+## User workflow
 
-**Samanvay-AI** solves this systemic challenge through a sovereign, air-gapped, cross-CPSE mutual aid mesh. Without disrupting legacy ERP systems (SAP S/4HANA, Oracle ERP, Maximo), Samanvay-AI enables:
-1. **Intelligent MTC & Catalog Intake**: Sub-50ms vector PDF extraction and OCR parsing of EN 10204 3.1/3.2 Material Test Certificates with direct catalog persistence (`POST /inventory/`).
-2. **Deterministic Physics & Safety Core**: 21 codified mechanical and metallurgical engineering standards (ASME, ASTM, API, TEMA, NACE, ISO) that maintain unilateral veto power over AI predictions.
-3. **Dynamic Tri-Tier Compatibility**: Runtime material parity evaluation relative to specific target specifications with zero static tier assumptions.
-4. **Multi-Property Engineering Discovery**: Detailed tolerance matching across nominal bore, pressure class, schedule, metallurgy, IIW weldability, sour service (NACE MR0175), facing ends, and valve trims.
-5. **Decoupled Matching & Ranking Architecture**: Dedicated `match_service.py` coordinating normalization, candidate filtering, rule evaluation, ML cross-scoring, and commercial privacy masking.
-6. **Multi-Tenant Consignment Isolation & RBAC**: Strict consignment scoping (requesters see only their own demands and incoming depot requests; cross-tenant items are shielded) with locked organization badges and cryptographic segregation of duties.
-7. **25+ Pre-Seeded Evaluation Personas**: 1-Click login hub covering all 7 CPSEs, Central MoPNG Vigilance Auditor, and Super Admin.
-8. **Real-Time Logistics Topology & Star Graph**: Neo4j 5.20 knowledge graph modeling 19 CPSE refinery depots across India, road tortuosity ($1.28\times$), transit hours, and carbon footprint ($CO_2$) savings.
-9. **Sovereign Audit Ledger & CISF Pass**: Tamper-evident SHA-256 chained audit blocks with Merkle verification, accessible modal dialogues, and 100% offline air-gapped SVG QR code gate passes.
-10. **Modern Industrial Command Center**: Next.js 16 App Router with React Server Components, staged parallel loading, 5-card KPI strip with HITL review pulse, and 6 role-tailored operational workspaces.
+1. Open **Document intake** (`/ingest`) to capture a certificate, upload a
+   document, or paste text.
+2. The browser sends the input to the FastAPI service. Document uploads are
+   sent as bytes to `POST /v1/ingest/document`; the backend returns OCR pages,
+   extraction metadata, parsed fields, chemistry results, conformance warnings,
+   and whether human review is required.
+3. Review extracted certificate fields and page-level OCR routing/engine
+   information. Unverified chemistry is flagged for human review.
+4. Open **Material matching** (`/deduplication`) and enter a catalog or
+   engineering description to retrieve ranked canonical candidates.
+5. Review candidate attributes, compatibility tier, and safety reasons. Resolve
+   uncertain suggestions in **Review queue** (`/hitl`); the queue and captured
+   feedback are currently process-local.
+6. Use **Dashboard** (`/dashboard`) for API-reported OCR-engine readiness,
+   matching-service readiness, review counts, and available capabilities.
 
-For deep architectural specifications, see **[architecture.md](architecture.md)**.
+## Architecture and data flow
 
----
-
-## 2. Master Repository Navigation Directory
-
-Every directory in **Samanvay-AI** is modular, isolated, and documented with its own standalone `README.md`. Use this master index to jump directly into specific module documentation:
-
+```text
+Next.js browser UI
+  ├── /ingest          → POST /v1/ingest/document or /v1/ingest/text
+  ├── /deduplication   → POST /v1/match
+  ├── /hitl            → /v1/match/hitl-queue and /v1/match/hitl-resolve
+  └── /dashboard       → GET /v1/dashboard/summary
+                              │
+                              ▼
+FastAPI routers → Pydantic contracts → application services
+  ├── OCR/pipeline.py
+  │     ├── native PDF text extraction per page
+  │     └── 300-DPI OCR + preprocessing → PaddleOCR → EasyOCR fallback
+  ├── backend/app/ingestion/
+  │     ├── certificate.py parses MTC fields, chemistry, and mechanical tests
+  │     ├── chemistry.py calculates CE/PREN and checks supported grade ranges
+  │     └── document.py composes OCR + MTC + chemistry + review status
+  └── backend/app/matching/ + machine_learning/
+        ├── attribute normalization and deterministic safety/tolerance rules
+        ├── Qdrant named-vector candidate retrieval
+        ├── optional compatibility reranker and NER model
+        └── in-memory active-learning/HITL queue
 ```
-Samanvay-AI/
-├── backend/                      # FastAPI Gateway, Services & Concurrency Core
-│   ├── app/                      # Application Layer Root
-│   │   ├── api/                  # REST Controllers & Dependencies
-│   │   │   └── routers/          # API Route Definitions (Match, Ingest, Requisition, etc.)
-│   │   ├── core/                 # App Settings, Security, Hashing & Exceptions
-│   │   ├── models/               # SQLAlchemy 2.0 Database ORM Models
-│   │   ├── schemas/              # Pydantic Schemas & Transfer Objects
-│   │   └── services/             # Business Logic (Requisitions, Matching, Audit, CDC, Seeder)
-├── rules/                        # 21 Codified Mechanical Safety Standards Engine
-│   ├── asme/                     # ASME B16.5, B16.34, B16.11, B16.47, B16.48, B16.20
-│   ├── astm/                     # ASTM Metallurgy DAG, A193/A194 Fasteners, LME Cracking
-│   ├── equipment/                # TEMA Heat Exchangers, API 2000 Tanks, C795 Insulation
-│   ├── piping/                   # ASME B36.10M Schedules, API 5L Line Pipe, NACE MR0175
-│   ├── rotating/                 # API 610 Pumps, API 682 Seals, API 618 Compressors, Motors
-│   └── valves/                   # API 6D Bore, API 607 Fire-Safe, API 526 PSV, Trims
-├── ml/                           # Machine Learning, Vision & NLP Pipeline
-│   ├── active_learning/          # HITL Bootstrapping & Prediction Caching
-│   ├── embeddings/               # BAAI/bge-m3 1024-dim Encoders & Qdrant HNSW Client
-│   ├── ner/                      # Dialect Normalizer & DeBERTa Slot Tagger
-│   ├── ranking/                  # Feature Extraction, XGBoost Ranker & TreeSHAP
-│   └── vision/                   # Dual-Path OCR, Chemistry, IIW CE & MTC Parsers
-├── graph/                        # Neo4j Knowledge Graph & Inter-Depot Logistics Topology
-├── docker/                       # Container Infrastructure, Docker Compose & Init Scripts
-│   └── init-db/                  # PostgreSQL Extensions (uuid-ossp, pgcrypto)
-├── scripts/                      # Operational Daemons, Database Seeders & Smoke Tests
-├── datasets/                     # Master 5,000-Item Catalogs & Golden Benchmarks
-│   └── generators/               # Dialect Simulators & Dataset Generation Scripts
-├── frontend/                     # Next.js 16 App Router, React 19 & Tailwind UI Portal
-└── tests/                        # Comprehensive Automated Test Suites
-    ├── api/                      # REST API Endpoints & Privacy Filtering Tests
-    ├── integration/              # 150 Golden Benchmark Validation Tests
-    ├── ml/                       # NLP Tokenization & Slot Tagging Tests
-    └── unit/                     # Focused Math, Safety Tolerance & Hashing Tests
-```
 
-### Complete Subsystem README Links:
+The OCR profile and page-level method, OCR engine, and raster DPI are part of
+the document response. The backend response contracts live in
+[`backend/app/contracts/`](./backend/app/contracts/); matching, ingestion, and
+dashboard details are mirrored by the frontend types in
+[`frontend/src/lib/types.ts`](./frontend/src/lib/types.ts).
 
-| Module / Layer | Path | Documentation Scope & Core Focus |
-|---|---|---|
-| **Backend Root** | [backend/README.md](backend/README.md) | FastAPI architecture, async lifecycle, router bindings, dependencies |
-| **Backend App Core** | [backend/app/README.md](backend/app/README.md) | High-level application architecture and service decomposition |
-| **API Controllers** | [backend/app/api/README.md](backend/app/api/README.md) | REST contract standards, HTTP status codes, tenant header auth |
-| **API Routers** | [backend/app/api/routers/README.md](backend/app/api/routers/README.md) | Endpoint specifications: `/match`, `/inventory`, `/requisition`, `/graph`, `/audit`, `/ingest` |
-| **Security & Config** | [backend/app/core/README.md](backend/app/core/README.md) | Chained SHA-256 hashing, HMAC gate seals, Pydantic settings, custom exceptions |
-| **Relational Models** | [backend/app/models/README.md](backend/app/models/README.md) | PostgreSQL 16 schema: Inventory, Requisitions, Locks, Gate Passes, Audit, Outbox |
-| **Pydantic Schemas** | [backend/app/schemas/README.md](backend/app/schemas/README.md) | Data transfer contracts, Dynamic Compatibility Tiers, privacy filtering schemas |
-| **Core Services** | [backend/app/services/README.md](backend/app/services/README.md) | Multi-stage matching, pessimistic locking, audit chain verification, outbox CDC listeners with advisory locking, catalog seeder |
-| **Rules Engine Root** | [rules/README.md](rules/README.md) | Master orchestrator, hard safety gate invariant, universal property scorecard |
-| **ASME Rules** | [rules/asme/README.md](rules/asme/README.md) | Pressure classes, flange facings, cast iron ear cracking, Series A/B, gaskets |
-| **ASTM Rules** | [rules/astm/README.md](rules/astm/README.md) | Metallurgy DAG, cryogenic brittle fracture, stud/nut pairing, Liquid Metal Embrittlement |
-| **Equipment Rules** | [rules/equipment/README.md](rules/equipment/README.md) | TEMA heat exchangers, API 2000 tank vacuum collapse, ASTM C795 CUI chlorides |
-| **Piping Rules** | [rules/piping/README.md](rules/piping/README.md) | ASME B36.10M wall schedules, API 5L PSL 1/2, NACE MR0175 sour duty ($\le 22$ HRC) |
-| **Rotating Rules** | [rules/rotating/README.md](rules/rotating/README.md) | API 610 pumps, API 682 seal plans, API 618 valves, ISO 15 bearings, Ex d motors |
-| **Valves Rules** | [rules/valves/README.md](rules/valves/README.md) | API 6D full vs reduced bore, API 607 fire-safe, API 526 PSV orifice, trim ladder |
-| **ML Subsystem Root** | [ml/README.md](ml/README.md) | Multimodal AI pipeline: Fast-path OCR, dialect normalization, XGBoost ranking |
-| **Active Learning** | [ml/active_learning/README.md](ml/active_learning/README.md) | HITL engineer feedback loops, prediction caching, synthetic bootstrapping |
-| **Dense Embeddings** | [ml/embeddings/README.md](ml/embeddings/README.md) | BGE-M3 1024-dim dense representation, Qdrant HNSW cosine indexing |
-| **NER & Dialects** | [ml/ner/README.md](ml/ner/README.md) | 40+ acronym CPSE dialect normalizer (IOCL, ONGC, metric SAP) and slot tagger |
-| **Ranker & Scoring** | [ml/ranking/README.md](ml/ranking/README.md) | 4 domain subvectors, XGBoost ranking, TreeSHAP explainability |
-| **Vision & OCR** | [ml/vision/README.md](ml/vision/README.md) | Dual-Path OCR ($<50$ms fast-path), IIW Carbon Equivalent ($CE$), PREN, MTC parsing |
-| **Knowledge Graph** | [graph/README.md](graph/README.md) | Neo4j 5.20 star graph, 19 refinery depot GPS coords, Haversine, road tortuosity, $CO_2$ |
-| **Docker Engine** | [docker/README.md](docker/README.md) | Multi-container compose (Postgres, Qdrant, Neo4j, Backend, Frontend, CDC worker) |
-| **Database Init** | [docker/init-db/README.md](docker/init-db/README.md) | Initial SQL scripts, UUID v4 extension, `pgcrypto`, outbox triggers |
-| **Scripts & Workers** | [scripts/README.md](scripts/README.md) | Standalone CDC worker, database seeder, live API verification smoke test |
-| **Datasets Root** | [datasets/README.md](datasets/README.md) | Master inventory catalog (5,000 items), golden benchmarks, OCR payloads |
-| **Dataset Generators** | [datasets/generators/README.md](datasets/generators/README.md) | Procedural synthetic ERP generator with realistic dialect noise and 15% sparsity |
-| **Frontend Portal** | [frontend/README.md](frontend/README.md) | Next.js 16 App Router, React Server Components, 6 role workspaces, interactive modals, zero-mock live API integration |
-| **Test Suite Root** | [tests/README.md](tests/README.md) | Test architecture, test running instructions, coverage reporting |
-| **API Tests** | [tests/api/README.md](tests/api/README.md) | FastAPI TestClient integration tests for all 6 router controllers |
-| **Integration Tests** | [tests/integration/README.md](tests/integration/README.md) | Parameterized validation against 150 ground-truth Golden Benchmarks |
-| **ML Tests** | [tests/ml/README.md](tests/ml/README.md) | NER tokenization, dialect expansion, and slot tagging tests |
-| **Unit Tests** | [tests/unit/README.md](tests/unit/README.md) | Deterministic unit tests: 21 safety modules, $CE_{\text{IIW}}$, logistics, hashing |
+## Repository map
 
----
+| Path | Purpose |
+| --- | --- |
+| [`frontend/`](./frontend/) | Next.js 16 / React 19 procurement workspace |
+| [`backend/app/api/v1/`](./backend/app/api/v1/) | FastAPI endpoints for ingest, matching, HITL, graph, auth, and dashboard |
+| [`backend/app/contracts/`](./backend/app/contracts/) | Pydantic API and domain contracts |
+| [`backend/app/ingestion/`](./backend/app/ingestion/) | MTC parsing, document orchestration, and chemistry calculations |
+| [`backend/app/matching/`](./backend/app/matching/) | Deterministic tolerance and safety classifications |
+| [`OCR/`](./OCR/) | OCR engines, PDF/image extraction, layout, and text normalization |
+| [`machine_learning/`](./machine_learning/) | NER, vector retrieval, reranking, active learning, and training |
+| [`data/`](./data/) | Source documents, catalogs, taxonomies, and training inputs |
+| [`deployment/`](./deployment/) | Local Qdrant, Neo4j, and PostgreSQL compose services |
+| [`tests/`](./tests/) | API, ingestion, OCR, matching, and ML tests |
+| [`docs/`](./docs/) | Focused architecture, OCR, matching, ML, graph, and deployment notes |
 
-## 3. Technology Stack
+## Requirements
 
-| Subsystem | Technology | Version | Purpose |
-|---|---|---|---|
-| **API Gateway** | **FastAPI** | `^0.110.0` | High-performance asynchronous REST API framework |
-| **Web Portal** | **Next.js / React** | `16.3 / 19.0` | Executive Command Center, MTC Review, Gate Pass UI |
-| **Styling** | **Tailwind CSS** | `v4.0.0` | Industrial UI design system with print stylesheet support |
-| **Relational DB** | **PostgreSQL** | `16-alpine` | ACID transactions, pessimistic locks, audit ledger, CDC outbox |
-| **Vector Engine** | **Qdrant** | `v1.12.0` | 1024-dim HNSW cosine vector similarity search |
-| **Knowledge Graph** | **Neo4j** | `5.20-community` | Multi-CPSE property star graph & transit topology |
-| **Dense Embeddings** | **BAAI/bge-m3** | PyTorch / ONNX | 1024-dimensional multilingual industrial text representations |
-| **Fast Path OCR** | **PyMuPDF (fitz)** | `^1.24.0` | Sub-50ms vector PDF direct text and table stream extraction |
-| **Raster OCR** | **PaddleOCR / EasyOCR** | OpenCV / PIL | High-resolution 300 DPI deskewed scan extraction |
-| **Machine Learning** | **XGBoost / LightGBM**| `^2.0.0` | Pairwise ranking cross-encoder with TreeSHAP explainability |
-| **Packaging** | **uv** | `^0.12.0` | Fast Python package management and virtual environment tooling |
+- Windows, macOS, or Linux
+- Python **3.11 or 3.12** (Python 3.14 is not supported)
+- Node.js and npm for the frontend
+- Git if you need to sync upstream catalog/training data
+- Docker Desktop only if you want to run the optional compose services
 
----
+## Local setup
 
-## 4. Quick Start: Running Locally
+### 1. Create and install the Python environment
 
-### Prerequisites
-- **Docker Desktop** (running on Windows/Linux/macOS)
-- **Python 3.14+** (managed via `uv` or standard Python)
-- **Node.js 20+** & `npm`
+From the repository root, in PowerShell:
 
----
-
-### Option A: Hybrid Development Mode (Recommended for Development & Hot-Reload)
-
-In Hybrid Mode, the database containers run in Docker, while the backend and frontend run natively for immediate hot-reloading.
-
-#### 1. Start Database Infrastructure
 ```powershell
-# In project root, launch Postgres, Qdrant, and Neo4j
-docker compose -f docker/docker-compose.yml up -d postgres qdrant neo4j
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-Verify that all three databases are healthy:
+To install document OCR and the optional ML stack, install the `ml` extra as
+well:
+
 ```powershell
-docker ps
+.\.venv\Scripts\python.exe -m pip install -e ".[ml,dev]"
 ```
 
-#### 2. Configure Environment
+The `ml` extra includes PaddleOCR, PaddlePaddle, EasyOCR, Pillow, and the
+optional model-training/retrieval packages. OCR installation can be large.
+Without it, native-text PDF ingestion and non-ML API functionality remain
+available, but scanned-document OCR and model-backed matching may not be.
+
+To use the project bootstrap script instead, run:
+
 ```powershell
-Copy-Item .env.example .env
+.\scripts\setup.ps1
 ```
 
-#### 3. Seed Database & Vector Store
+It creates `.venv` if needed, installs the development extra, and runs tests.
+Install `.[ml,dev]` afterward when OCR/ML capabilities are needed.
+
+### 2. Start the backend
+
+In a terminal at the repository root:
+
 ```powershell
-# Seeds 5,000 items, Genesis audit blocks, and Qdrant embeddings
-uv run python scripts/seed_database.py
+.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
 ```
 
-#### 4. Launch FastAPI Backend Gateway (Terminal 1)
-```powershell
-uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
-- API Docs (Swagger): **`http://localhost:8000/docs`**
-- Healthcheck: **`http://localhost:8000/health`**
+The API runs at `http://localhost:8000`. Interactive OpenAPI documentation is
+at `http://localhost:8000/docs`; health check:
 
-#### 5. Launch Next.js Web Portal (Terminal 2)
 ```powershell
-cd frontend
+Invoke-RestMethod http://localhost:8000/health
+```
+
+### 3. Start the frontend
+
+In another terminal:
+
+```powershell
+Set-Location frontend
 npm install
 npm run dev
 ```
-- Web Application: **`http://localhost:3000`**
 
----
+Open `http://localhost:3000`. By default the browser client calls the API on
+port 8000 using the current hostname. To use another API host, create
+`frontend/.env.local`:
 
-### Option B: Full Docker Deployment (Production Emulation)
-
-To launch all 5 services (PostgreSQL 16, Qdrant, Neo4j, Backend Gateway, and Next.js Frontend) in Docker:
-
-```powershell
-# 1. Clean launch / Reset all persistent volumes
-docker compose -f docker/docker-compose.yml down -v
-
-# 2. Build & launch stack with production environment variables
-docker compose -f docker/docker-compose.yml --env-file docker/.env.docker up -d --build
+```dotenv
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
----
+Restart the frontend after changing the environment file.
 
-## 5. Manual Testing & Feature Walkthrough
+## Optional data, models, and infrastructure
 
-Once running, open **`http://localhost:3000`** (or your live Cloudflare Tunnel URL) to test each feature:
+### Data
 
-### 1. Sovereign Identity & 1-Click Evaluation Hub (`/login`)
-- **Judge & Auditor Directory**: Access 25+ pre-configured personas across all 7 CPSEs (**OIL, IOCL, ONGC, BPCL, HPCL, GAIL, NRL**), Central MoPNG Auditor, and Super Admin.
-- **1-Click Authentication**: Tap any persona card to auto-populate credentials and sign in instantly (Default password: `Samanvay@2026`).
-- **Core Evaluation Personas**:
-  - `iocl_eng` (or `engineer_iocl`): IOCL Panipat Site Engineer &mdash; Procurement requester.
-  - `ongc_mm` (or `stores_ongc`): ONGC Uran Materials Manager &mdash; Surplus approver.
-  - `ongc_sec` (or `cisf_ongc`): ONGC Uran CISF Security Officer &mdash; Gate pass issuer.
-  - `mopng_auditor` (or `auditor`): MoPNG Chief Vigilance Officer &mdash; Statutory audit verifier.
-  - `super_admin` (or `admin`): Ministry Super Admin &mdash; Global multi-tenant switcher.
-
-### 2. Executive Command Center (`/dashboard`)
-- **Staged Loading & 5-Metric KPI Strip**: Real-time aggregate telemetry across 5 core indicators: Total Cataloged, Available Surplus, Locked Reserved, Allocated Capital, and an animated pulse indicator for items awaiting Human-In-The-Loop (HITL) engineering review.
-- **6 Role-Tailored Operational Workspaces**: Dynamically serves targeted operational consoles for Site Engineers, Materials Managers, Technical Authorities, CISF Officers, Vigilance Auditors, and Super Admins.
-- **Interactive Geo Radar**: Click on any refinery depot dot on the Indian subcontinent map (e.g., *Panipat*, *Uran*, *Visakh*) to inspect local inventory counts and unlocked capital in real time.
-- **Active Logistics Corridors**: Review active emergency consignments and pulse transit markers across National Highway corridors (NH-44, NH-16).
-- **Locked Organization Header**: Notice that non-admin officers have an un-editable locked badge showing their assigned CPSE and Depot (e.g., `[IOCL] Panipat Refinery Stores`). Only `admin` sees the global CPSE and Depot switcher.
-
-### 3. Surplus Discovery & Multi-Property Specification Search (`/discover`)
-- **Multi-Property Specification Search**: Click **"Advanced Engineering Specification"** to expand the engineering drawer.
-- **Flexible Filter Ingestion**: Search by Nominal Bore (`size_nb_mm`), ASME Pressure Class, Pipe Schedule, ASTM Metallurgy, IIW Weldability class (`HIGH_WELDABILITY`, `STANDARD`, `NON_WELDABLE`), NACE MR0175 sour service wet $H_2S$ compliance, facing ends, valve trims, and transit radius limit (`max_distance_km`).
-- **Zero Static Tiers**: Neutral unsearched catalog view with dynamic tri-tier calculation upon search execution.
-- **Inspect Safety Rules**: Click **"Inspect Safety Rules"** on any candidate to inspect the **21-Rule Scorecard** evaluated against ASME B16.5, ASTM DAG, and API 600.
-- Click **"Compose Requisition"** to submit an inter-CPSE transfer request.
-
-### 4. Consignments & Segregation of Duties (`/requests`)
-- **Multi-Tenant Isolation**: Standard users see only their own demands and incoming requests for their depot. Cross-tenant consignments from unrelated CPSEs are completely shielded.
-- **Persona Scoped Tabs**:
-  - **"My Outgoing Requisitions"**: Requisitions created by the user for their plant. Shows "Awaiting Supplying Approval".
-  - **"Incoming Depot Requests"**: Mutual-aid demands from sister CPSEs to draw surplus from this user's depot.
-- **Segregation of Duties Enforcement**: Requesters are blocked (`403 Forbidden`) from approving their own demands. Switch to the supplying CPSE Materials Manager (`stores_ongc`) to approve, and CISF Security (`cisf_ongc`) to generate the statutory gate pass.
-- **Interactive Accessible Modals**: Requisition rejection requires mandatory justification via a dedicated `<Modal>` dialog; CISF gate pass entry captures vehicle number, driver name, and carrier details before generating the seal.
-- Inspect the **Printable CISF Gate Pass** with self-contained SVG QR code and SHA-256 seal.
-
-### 5. Smart Document Intake & MTC Review (`/upload`)
-- Test using the 4 built-in production presets:
-  - **Preset 1 (L&T Hazira ASTM A105 Flange)**: Fast-path vector extraction, $CE_{\text{IIW}} = 0.41\%$, `STANDARD_WELDABLE`, auto-approved.
-  - **Preset 2 (BHEL Trichy Cryogenic Valve)**: A350 LF2 body, $CE = 0.45\%$ triggers `PREHEAT_REQUIRED`, Charpy impact at $-46^\circ\text{C}$ verified.
-  - **Preset 3 (Pennar F316L Flange)**: Marine duty stainless steel, computes $\text{PREN} = 25.02$.
-  - **Preset 4 (Vendor X Smudged Scan - Out of Spec)**: Degraded scan, out-of-spec carbon ($0.38\% > 0.35\%$), $CE = 0.67\%$, routes to **HITL Triage Queue**.
-- **Direct Catalog Commit**: On `/upload/review`, clicking "Commit to Inventory" issues a live `POST /api/v1/inventory/` call that persists the parsed SKU into PostgreSQL and writes an immutable `CREATE_INVENTORY` block into the Sovereign Audit Ledger.
-
-### 6. Sovereign Cryptographic Audit Trail (`/audit`)
-- Inspect chronological ledger blocks, parent hash links ($H_{i-1} \to H_i$), and consensus witness nodes.
-- Click **"Verify Merkle Chain"** to execute real-time anti-tamper integrity verification across all blocks.
-- Export statutory compliance records formatted in strict RFC 4180 CSV with cryptographic seal headers.
-
----
-
-## 6. Verification & Automated Test Suites
-
-To verify backend physics, safety rules, and CDC replication through the CLI:
+Catalogs, taxonomies, example documents, and training inputs live under
+[`data/`](./data/). Data is source input; application commands should not
+regenerate `data/ml_training/` or `data/mock_cpes_catalogs/`. If the upstream
+Samanvay-AI data is needed, sync it on Windows with:
 
 ```powershell
-# 1. Run live API integration smoke test
-uv run python scripts/verify_live_api.py
-
-# 2. Run real-time PostgreSQL-to-Neo4j CDC verification test
-uv run python scripts/test_live_cdc.py
-
-# 3. Run all 150 Golden Benchmark test cases (Tier 1, Tier 2, and 21 fatal hazard traps)
-uv run pytest tests/integration/test_benchmarks.py -v
-
-# 4. Run the 21 deterministic engineering safety unit tests
-uv run pytest tests/unit/test_tolerance.py -v
-
-# 5. Run the complete test suite with coverage
-uv run pytest tests/ --cov=backend/app --cov=rules --cov=ml --cov=graph
+.\scripts\sync-upstream-data.ps1
 ```
 
----
+The script downloads/copies the upstream data from the project repository;
+review its behavior before running it in a restricted environment.
 
-## 7. Key Operational Standards & Formulas
+### Catalog matching
 
-- **IIW Carbon Equivalent Formula**:
-  $$CE_{\text{IIW}} = C + \frac{Mn}{6} + \frac{Cr + Mo + V}{5} + \frac{Ni + Cu}{15}$$
-  - $CE \le 0.43\%$: Standard weldable without preheat.
-  - $0.43\% < CE \le 0.48\%$: Minimum $100^\circ\text{C}$ preheat mandated per ASME Section IX.
-  - $CE > 0.48\%$: High cracking risk; requires post-weld heat treatment.
+Matching requires the canonical catalog, a configured embedding model, and an
+available Qdrant index. Model weights are not automatically downloaded by this
+application. Follow the procedure in
+[`docs/deployment.md`](./docs/deployment.md) and
+[`docs/ml.md`](./docs/ml.md) to obtain the configured `BAAI/bge-m3` model,
+configure `MODEL_WEIGHTS_PATH` if needed, and index
+`data/taxonomies/canonical_master.csv`.
 
-- **Pitting Resistance Equivalent Number (PREN)**:
-  $$\text{PREN} = \%Cr + 3.3(\%Mo) + 16(\%N)$$
+The index command is:
 
-- **BEE Freight Carbon Footprint**:
-  $$\text{CO}_2\text{ Saved (kg)} = \text{Distance (km)} \times \text{Weight (Metric Tonnes)} \times 0.062\text{ kg CO}_2/\text{tonne-km}$$
+```powershell
+.\.venv\Scripts\python.exe -m scripts.index_canonical_master
+```
 
-- **Cryptographic Audit Block Hashing**:
-  $$H_i = \text{SHA256}(H_{i-1} \parallel \text{block\_height} \parallel \text{actor\_id} \parallel \text{action} \parallel \text{timestamp} \parallel \text{payload\_json})$$
+Without a ready model/index, matching reports service unavailability rather
+than returning fabricated catalog results. The dashboard reports the live
+matching readiness.
+
+### Local infrastructure
+
+Qdrant, Neo4j, and PostgreSQL can be started with Docker Compose:
+
+```powershell
+docker compose -f deployment/docker-compose.yml up -d
+```
+
+Default local settings are defined in
+[`backend/app/config.py`](./backend/app/config.py): Qdrant uses
+`localhost:6333` (with embedded local storage as a fallback), Neo4j uses
+`bolt://localhost:7687`, and PostgreSQL uses `localhost:5432`. Override
+settings through environment variables or a root `.env` file. The compose
+credentials are development defaults only; do not use them in production.
+
+## API overview
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | API liveness |
+| `POST` | `/v1/ingest/document` | Upload a PDF or supported image (maximum 15 MB) |
+| `POST` | `/v1/ingest/text` | Parse pasted certificate text |
+| `POST` | `/v1/match` | Retrieve and classify material candidates |
+| `GET` | `/v1/match/hitl-queue` | List pending match-review items |
+| `POST` | `/v1/match/hitl-resolve` | Accept/reject or correct a review item |
+| `GET` | `/v1/match/hitl-training-examples` | Read captured review examples |
+| `POST` | `/v1/match/hitl-bootstrap` | Seed review examples |
+| `GET` | `/v1/dashboard/summary` | Read service readiness and capabilities |
+| `GET` | `/v1/graph/spare-locator` | Spare locator route |
+| `GET` | `/v1/graph/visualize` | Graph visualization route |
+| `GET` | `/v1/auth/me` | Current-user route |
+
+### Example: ingest a document from PowerShell
+
+```powershell
+curl.exe -X POST "http://localhost:8000/v1/ingest/document" `
+  -F "file=@data/raw/sample_mtc_flange_01.pdf"
+```
+
+The response includes OCR `pages`, `parsed_metadata`, an optional structured
+`mtc` record, `chemistry`, `astm_conformance`, `ocr_profile`, confidence, and
+`requires_hitl`. See the schema in
+[`backend/app/contracts/ingestion.py`](./backend/app/contracts/ingestion.py).
+
+### Example: request a material match
+
+```powershell
+curl.exe -X POST "http://localhost:8000/v1/match" `
+  -H "Content-Type: application/json" `
+  -d '{"raw_description":"Gate valve DN100 PN16 ASTM A216 WCB API 600","top_k":5,"rerank":true}'
+```
+
+Match output includes ranked candidates, engineering attributes, domain scores,
+reasons, and a safety/tolerance tier. Unsafe or under-specified matches should
+be reviewed rather than treated as automatic equivalencies.
+
+## Development and validation
+
+Run the complete Python test suite from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Run focused ingestion tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\test_document_ingest.py tests\test_ingest_api.py tests\test_ingestion.py tests\test_mtc_chemistry.py -q
+```
+
+Run Ruff on Python files:
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check .
+```
+
+Build/type-check the frontend:
+
+```powershell
+Set-Location frontend
+npm run build
+```
+
+## Current scope and operational notes
+
+- MTC chemistry conformance currently has configured chemistry ranges for
+  **A105** and **A182 F316**. Unsupported grades, missing required chemistry,
+  or out-of-range values return warnings and set `requires_hitl`; they are not
+  silently declared conforming.
+- The active-learning review queue is in memory. Persist feedback in an
+  application database before relying on it across API restarts.
+- The graph routes are present, but the current route implementations return
+  placeholder node/item arrays; treat graph visualization and spare-locator
+  results as scaffolding until connected to populated graph/inventory data.
+- The frontend requires the backend for live ingestion, matching, and status.
+  An unavailable API is reported as an error rather than implying a live result.
+- See [`docs/architecture.md`](./docs/architecture.md),
+  [`docs/ocr.md`](./docs/ocr.md), [`docs/ingestion.md`](./docs/ingestion.md),
+  [`docs/matching.md`](./docs/matching.md), [`docs/ml.md`](./docs/ml.md),
+  [`docs/graph.md`](./docs/graph.md), and
+  [`docs/deployment.md`](./docs/deployment.md) for deeper implementation notes.

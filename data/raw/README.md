@@ -1,0 +1,1 @@
+Place source PDFs and ground-truth MTC fixtures here. Do not regenerate supplied fixtures.

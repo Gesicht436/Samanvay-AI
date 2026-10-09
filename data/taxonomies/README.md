@@ -1,0 +1,1 @@
+Copy canonical_master.csv, unspsc_v26.csv, and gem_categories.csv from the upstream data repository.

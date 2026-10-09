@@ -1,0 +1,14 @@
+category_id,name,parent_id
+GEM-IND-001,Industrial Goods & Mechanical Spares,ROOT
+GEM-VALVE-001,Industrial Valves,GEM-IND-001
+GEM-VALVE-GATE,Gate Valves - Cast & Forged Steel,GEM-VALVE-001
+GEM-VALVE-BALL,Ball Valves - High Pressure Hydrocarbon,GEM-VALVE-001
+GEM-VALVE-GLOBE,Globe Valves - Industrial Process,GEM-VALVE-001
+GEM-FLANGE-001,Steel Pipe Flanges & Fittings,GEM-IND-001
+GEM-FLANGE-WN,Weld Neck Flanges - ASME B16.5,GEM-FLANGE-001
+GEM-FLANGE-BL,Blind Flanges - ASME B16.5,GEM-FLANGE-001
+GEM-FLANGE-SO,Slip-On Flanges - ASME B16.5,GEM-FLANGE-001
+GEM-GASKET-001,Industrial Gaskets & Jointing Materials,GEM-IND-001
+GEM-GASKET-SW,Spiral Wound Gaskets Metallic,GEM-GASKET-001
+GEM-FASTENER-001,High Tensile Fasteners & Studs,GEM-IND-001
+GEM-BOLT-STUD,Alloy Steel Stud Bolts with Nuts - ASTM A193,GEM-FASTENER-001
