@@ -1067,7 +1067,81 @@ plain non-partial index — all DB-free.
 
 ---
 
-# 23. Git Verification Checklist
+## Task 22 — Legacy JWT/OIDC Removal Verification (Steps 1–2)
+
+### Audit findings (Step 1, read-only)
+* **F1 — dead code:** `get_optional_user` in `backend/app/api/dependencies.py`
+  was a JWT-era leftover. Its implementation had already been migrated to
+  the session cookie (fail-closed: absent cookie -> `None`; presented
+  malformed/expired/revoked/inactive -> 401 + cookie clear), so it was NOT
+  an authentication weakness — but it had **zero callers** in routers,
+  tests, scripts, ML/graph code, or the frontend.
+* **F2 — stale documentation:** four in-tree READMEs still described the
+  pre-migration system as current: `backend/app/api/README.md` (Bearer
+  JWT mermaid flow, `HTTPAuthorizationCredentials`/`jwt_secret_key`/HS256,
+  `get_optional_user`, `X-CPSE-ID`-derived tenancy),
+  `backend/app/api/routers/README.md` (JWT-issuing login, `POST /auth/signup`,
+  `POST /auth/seed`, seed-users "with the default password"),
+  `backend/app/README.md` (JWT in mermaid/Security/directory comments), and
+  `frontend/README.md` (one-click persona "JWT Bearer token injection",
+  "AuthContext JWT storage", `/signup` JWT issuance, `PUT /admin/users`).
+* Harmless/verified-clean (no action, recorded not to re-flag): all
+  executable surfaces (backend `*.py`, frontend `src`, scripts, deps,
+  env/docker config) contain no JWT/OIDC/Bearer machinery; `.kilo/`
+  worktrees hold old code but are untracked, unreachable, and excluded
+  from Docker images by COPY scoping; `architecture.md`/`context.md`/
+  `MATCH_ENDPOINT_AUDIT_REPORT.md`/`docs/authentication/*` are historical
+  or migration records; `/docs/oauth2-redirect` is FastAPI scaffolding
+  (known false positive, section 21-era note).
+* Out-of-approved-scope observation (reported, NOT edited):
+  `backend/app/core/README.md` still documents `jwt_secret_key`,
+  `jwt_algorithm`, `jwt_access_token_expire_minutes`,
+  `create_access_token`/`decode_access_token` — none of which exist in
+  `backend/app/core/security.py` or `config.py`. Candidate for a future
+  docs-only task.
+
+### Changes made (Step 2 — 6 approved files)
+* `backend/app/api/dependencies.py`: removed the unused `get_optional_user`
+  function only. Pre-edit grep across backend/tests/scripts/ml/graph/
+  frontend confirmed the definition was the sole reference; post-edit
+  import check confirms the module loads and the symbol is gone. No imports
+  orphaned (`Request`, `settings`, `Optional`, `session_service` all still
+  used by remaining functions); `get_current_session`, `get_current_user`,
+  session validation, cookie-clearing, `require_permission`,
+  `require_any_permission`, `require_csrf`, `validate_idempotency_key`,
+  `verify_cpse_access`, and `require_roles` untouched.
+* `backend/app/api/README.md`: intro wording; mermaid request-lifecycle
+  flow rewritten to the session-cookie + CSRF + permission model; section B
+  now documents `get_current_session`/`get_current_user` and states no
+  optional-auth helper exists; section C documents `require_permission`,
+  legacy `require_roles`, and `require_csrf` with the real 403 error codes;
+  section E documents session-derived `verify_cpse_access` (X-CPSE-ID never
+  establishes tenant authority); auth router row updated (logout/csrf/
+  provisioning endpoints; signup retired).
+* `backend/app/api/routers/README.md`: section A rewritten — session-cookie
+  login (generic 401, rate-limited), CSRF-protected idempotent logout,
+  cookie-only `/me`, session-bound `/csrf`, credential-free `seed-users`
+  (404 in production), `SYSTEM_ADMIN` listing, `ACCOUNT_PROVISION`/
+  `ACCOUNT_APPROVE`/`ACCOUNT_REJECT` + CSRF operations, and explicit 404
+  status of `/auth/signup` and `/auth/seed`. Permission identifiers
+  verified against `auth.py:316,331,404,433` before writing.
+* `backend/app/README.md`: five JWT references replaced (mermaid Security
+  label, api-layer header description, `security.py` description, and the
+  directory-layout comments for `dependencies.py`/`auth.py`/`security.py`/
+  schemas `auth.py`).
+* `frontend/README.md`: persona-hub paragraph rewritten (username prefill
+  only, operator-typed password, hidden in production, HttpOnly session
+  cookie, memory-only identity, `/auth/me` restore, CSRF on unsafe
+  requests); directory comments for `login/`, `signup/`, `AuthContext.tsx`;
+  route table rows for `/login`, `/signup` (retired), and `/admin/users`
+  (corrected to `GET /auth/users`, `POST /auth/users/{id}/approve|reject`).
+* `docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md`: this entry.
+* No router, model, migration, dependency, lockfile, env, or Docker file
+  changed; no package installed; no service started; no `.kilo/`,
+  `architecture.md`, `context.md`, `MATCH_ENDPOINT_AUDIT_REPORT.md`, or
+  `docs/authentication/*` design record touched.
+
+
 # 23. Git Verification Checklist
 
 After every implementation:

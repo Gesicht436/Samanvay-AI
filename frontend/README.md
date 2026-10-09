@@ -71,7 +71,7 @@ Located directly on the `/login` portal, the **1-Click Evaluation Hub** allows e
 | **NRL** (Numaligarh Refinery Limited)| Numaligarh Complex, Golaghat, Assam | Piping Project Lead, Warehouse Controller, CISF Gate Inspector | `engineer_nrl`, `stores_nrl`, `cisf_nrl` |
 | **MoPNG Central Oversight** | Shastri Bhawan, New Delhi | Technical Authority, Vigilance Auditor (CAG), Super Admin | `tech_authority`, `auditor`, `admin` |
 
-Clicking any persona card automatically injects authenticated credentials (`Samanvay@2026`), generates a cryptographic JWT Bearer token, binds multi-tenant claims, and routes the user into the authorized operational dashboard.
+Selecting a persona card only prefills the username; the operator always types the password themselves — no default password exists anywhere in the client bundle, and the persona hub is hidden in production builds. Sign-in is a username/password `POST /auth/login` that establishes an HttpOnly server-side session cookie; the client keeps identity in memory only (no token storage) and restores it on reload through `GET /auth/me`, with the session-bound CSRF token attached to unsafe requests.
 
 ---
 
@@ -161,8 +161,8 @@ frontend/
     │   ├── audit/            # Sovereign Audit Trail: SHA-256 chain verification & CSV export
     │   ├── upload/           # Document Intake: PyMuPDF / PaddleOCR intake list
     │   │   └── review/       # MTC Inspection: chemical breakdown, CE_IIW calculation, direct POST
-    │   ├── login/            # 1-Click Evaluation Hub (25+ personas across 7 CPSEs)
-    │   ├── signup/           # CPSE Officer Registration & immediate JWT issuance
+    │   ├── login/            # Seed persona directory (dev builds) + username/password sign-in
+    │   ├── signup/           # Informational page — public self-registration is retired
     │   └── admin/            # Multi-Tenant Administration & user approval
     ├── components/           # Reusable UI primitives
     │   ├── AppShell.tsx      # Master layout frame, locked header badge, mobile drawer
@@ -185,7 +185,7 @@ frontend/
     │   │       └── SuperAdminWorkspace.tsx
     │   └── ui/               # Modal, Card, KpiCard, StatusBadge, SideDrawer, Skeleton primitives
     ├── context/
-    │   └── AuthContext.tsx   # Authentication context, JWT storage, seed persona injection
+    │   └── AuthContext.tsx   # Authentication context: memory-only identity, HttpOnly session-cookie restore via /auth/me, seed persona list
     └── lib/
         ├── api.ts            # Typed REST API client targeting /api/v1/* proxy endpoints
         ├── constants.ts      # CPSE depots, status colors, standard categories
@@ -209,9 +209,9 @@ frontend/
 | `/audit` | **Audit Trail** | `GET /audit/`<br>`GET /audit/verify`<br>`GET /audit/export-csv` | Sovereign SHA-256 Merkle chain verification, CSV export for audit authorities, category/CPSE filters, and block transaction payload inspector. |
 | `/upload` | **Document Intake** | `POST /ingest/document`<br>`GET /ingest/documents` | Upload PDF or image Material Test Certificates (MTCs), delivery challans, and invoices for dual-path OCR parsing. Displays recent intake ledger. |
 | `/upload/review` | **MTC Inspection** | `sessionStorage`<br>`POST /inventory/` | Visual chemical analysis breakdown ($\%C, \%Mn, \%Si, \%P, \%S$), IIW Carbon Equivalent ($CE_{\text{IIW}}$) calculation, weldability classification, and direct SKU creation into PostgreSQL ledger via `POST /inventory/`. |
-| `/login` | **1-Click Eval Hub** | `GET /auth/seed-users`<br>`POST /auth/login` | 25+ seed personas across 7 CPSEs + Central Ministry, one-click authentication, and manual credential sign-in. |
-| `/signup` | **Officer Registration** | `POST /auth/signup` | Self-service registration for CPSE engineers and stores superintendents with immediate JWT Bearer issuance. |
-| `/admin/users` | **User Approvals** | `GET /admin/users`<br>`PUT /admin/users/{id}/approve` | Administrative console for Super Admin to review pending user accounts and manage permissions. |
+| `/login` | **Sign-In Portal** | `GET /auth/seed-users`<br>`POST /auth/login`<br>`GET /auth/me`<br>`GET /auth/csrf` | Username/password sign-in establishing the HttpOnly server-side session cookie (persona directory prefills usernames in non-production builds only). |
+| `/signup` | **Registration Notice** | — (retired) | Informational "registration unavailable" page. Public self-registration is disabled; accounts are created only through authenticated administrative provisioning (`POST /auth/users`). |
+| `/admin/users` | **User Approvals** | `GET /auth/users`<br>`POST /auth/users/{id}/approve`<br>`POST /auth/users/{id}/reject` | Administrative console for the Super Admin to list accounts and approve or reject pending provisioning requests. |
 
 ---
 

@@ -47,18 +47,20 @@ sequenceDiagram
 
 ---
 
-### A. [`auth.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/auth.py) — Authentication & RBAC Governance
-Coordinates enterprise user onboarding, credential authentication, and issuance of signed JWT tokens containing multi-tenant enterprise claims (`sub`, `user_id`, `role`, `cpse`, `depot_id`, `full_name`).
+### A. [`auth.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/auth.py) — Session Authentication & Account Governance
+Coordinates organizational username/password sign-in, server-side session lifecycle, CSRF token issue, and administrative account provisioning. Login sets an HttpOnly session cookie and returns the user profile only — no JWT, access token, or bearer credential is ever issued or accepted. Public signup is retired.
 
 - **Endpoints:**
-  - `POST /api/v1/auth/login`: Authenticates credentials via bcrypt, checks `is_active` and `is_approved`, and issues a 24-hour signed JWT bearer token. Automatically bootstraps seed accounts if the table is empty.
-  - `POST /api/v1/auth/signup`: Registers new CPSE personnel into [`User`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L249-L270), seals the registration in [`SovereignAuditLedger`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L182-L200), and issues a JWT token.
-  - `GET /api/v1/auth/me`: Returns the authenticated user profile and claims extracted from the JWT token.
-  - `GET /api/v1/auth/seed-users`: Returns the list of all 25 pre-configured demo persona accounts across 7 CPSEs + MoPNG with the default password `Samanvay@2026`.
-  - `POST /api/v1/auth/seed`: Idempotently populates the database with seed persona accounts.
-  - `GET /api/v1/auth/users`: Lists all system users (restricted to `SUPER_ADMIN`).
-  - `POST /api/v1/auth/users/{user_id}/approve`: Approves a pending user account (restricted to `SUPER_ADMIN`).
-  - `POST /api/v1/auth/users/{user_id}/reject`: Rejects and deletes a pending user account (restricted to `SUPER_ADMIN`).
+  - `POST /api/v1/auth/login`: Authenticates username/password (bcrypt), enforces `is_active` and `is_approved`, creates a revocable server-side session, and sets the HttpOnly session cookie. Returns a generic `401` for unknown, incorrect, inactive, or unapproved credentials and is rate-limited per client.
+  - `POST /api/v1/auth/logout`: Revokes the server-side session and clears the cookie. CSRF-protected (strict `Origin` allowlist plus session-bound `X-CSRF-Token`); idempotent — a missing or already-dead session still returns `204` with the cookie cleared.
+  - `GET /api/v1/auth/me`: Returns the profile resolved exclusively from the session cookie (`401` without a live session; no Bearer fallback).
+  - `GET /api/v1/auth/csrf`: Issues the session-bound synchronizer CSRF token (session required; `Cache-Control: no-store`; never persisted server-side).
+  - `GET /api/v1/auth/seed-users`: Lists the pre-configured demo personas without disclosing any password; returns `404` in production.
+  - `GET /api/v1/auth/users`: Lists all system users (requires the `SYSTEM_ADMIN` permission).
+  - `POST /api/v1/auth/users`: Provisions a new account (requires the `ACCOUNT_PROVISION` permission and CSRF). The account starts unapproved; no session is created for it until approval.
+  - `POST /api/v1/auth/users/{user_id}/approve`: Approves a pending account (`ACCOUNT_APPROVE` + CSRF).
+  - `POST /api/v1/auth/users/{user_id}/reject`: Rejects and removes a pending account (`ACCOUNT_REJECT` + CSRF).
+  - The legacy public self-registration route (`POST /api/v1/auth/signup`) and the old `POST /api/v1/auth/seed` route do not exist (`404`).
 
 ---
 

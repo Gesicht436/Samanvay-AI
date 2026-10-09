@@ -37,7 +37,7 @@ graph TD
 
     subgraph "Layer 5: Core Primitives & Config (backend/app/core/)"
         Config["BaseSettings & SLAs"]
-        Security["SHA-256 Chaining, Gate Pass Seals & JWT"]
+        Security["SHA-256 Chaining, Gate Pass Seals & Password Hashing"]
         Exceptions["Zero-Mock HTTP Exceptions (404, 422, 409, 403)"]
     end
 
@@ -63,7 +63,7 @@ graph TD
 
 1. **`api/` (Presentation & HTTP Transport):**
    - Implements FastAPI endpoint routers mounted under `/api/v1/`.
-   - Manages request headers (`Authorization: Bearer <token>`, `X-CPSE-ID`, `Idempotency-Key`).
+   - Manages the HttpOnly session cookie and request headers (`X-CSRF-Token` for unsafe methods, `Idempotency-Key`).
    - Injects database sessions ([`get_db_session`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/dependencies.py#L13-L19)) and authenticated personnel ([`get_current_user`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/dependencies.py#L21-L60)).
    - Enforces RBAC permissions via [`require_roles`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/dependencies.py#L77-L86).
 
@@ -84,7 +84,7 @@ graph TD
 
 5. **`core/` (Foundational Services & Security):**
    - [`Settings`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/core/config.py#L14-L112): Centralized environment configuration with SLA bounds and thresholds.
-   - [`Security`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/core/security.py): Cryptographic SHA-256 chain calculation, CISF gate pass seals, JWT encoding/decoding, and bcrypt password hashing.
+   - [`Security`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/core/security.py): Cryptographic SHA-256 chain calculation, CISF gate pass seals, and bcrypt password hashing (no JWT encoding/decoding exists).
    - [`Exceptions`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/core/exceptions.py): Pure HTTP 404, 422, 409, 403, and 503 error contracts — strictly prohibiting mock fallback responses.
 
 ---
@@ -97,9 +97,9 @@ backend/app/
 ├── README.md             # Application module documentation (this file)
 ├── api/                  # [api/README.md](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/README.md) Presentation Layer
 │   ├── __init__.py
-│   ├── dependencies.py   # [dependencies.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/dependencies.py) JWT auth, RBAC guards, Idempotency-Key validator
+│   ├── dependencies.py   # [dependencies.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/dependencies.py) Session-cookie auth, CSRF & RBAC guards, Idempotency-Key validator
 │   └── routers/          # [routers/README.md](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/README.md) Endpoint Routers
-│       ├── auth.py       # [auth.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/auth.py) Authentication, signup, seed personas, admin user management
+│       ├── auth.py       # [auth.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/auth.py) Session login/logout/CSRF, seed personas, admin provisioning (signup retired)
 │       ├── match.py      # [match.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/match.py) Dynamic compatibility ranker S(Q,C), golden benchmark
 │       ├── requisition.py# [requisition.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/requisition.py) Inter-CPSE requisitions, SoD approval, gate passes
 │       ├── inventory.py  # [inventory.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/api/routers/inventory.py) Master inventory catalog, surplus radar, HITL triage
@@ -109,7 +109,7 @@ backend/app/
 ├── core/                 # [core/README.md](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/core/README.md) Core Infrastructure & Security
 │   ├── __init__.py
 │   ├── config.py         # [config.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/core/config.py) Pydantic BaseSettings, database URLs, ML paths, SLAs
-│   ├── security.py       # [security.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/core/security.py) SHA-256 chaining, gate pass digital seal, JWT & bcrypt
+│   ├── security.py       # [security.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/core/security.py) SHA-256 chaining, gate pass digital seal, bcrypt password hashing
 │   └── exceptions.py     # [exceptions.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/core/exceptions.py) Standardized HTTP domain exceptions
 ├── models/               # [models/README.md](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/README.md) Relational Persistence Layer
 │   ├── __init__.py
@@ -117,7 +117,7 @@ backend/app/
 │   └── tables.py         # [tables.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py) 10 Declarative database models
 ├── schemas/              # [schemas/README.md](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/schemas/README.md) Validation & Serialization Schemas
 │   ├── __init__.py
-│   ├── auth.py           # [auth.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/schemas/auth.py) UserRole enum, Login/Signup DTOs, 25 seed accounts
+│   ├── auth.py           # [auth.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/schemas/auth.py) UserRole enum, Login/Provisioning/CSRF DTOs, 25 seed accounts
 │   ├── material.py       # [material.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/schemas/material.py) DynamicCompatibilityTier, ExtractedMaterialAttributes
 │   ├── inventory.py      # [inventory.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/schemas/inventory.py) InventoryStatus enum, public/private item views
 │   ├── requisition.py    # [requisition.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/schemas/requisition.py) RequisitionStatus, UrgencyLevel, GatePass DTOs

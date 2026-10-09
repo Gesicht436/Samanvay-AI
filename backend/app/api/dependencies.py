@@ -99,33 +99,6 @@ def get_current_user(
     return user
 
 
-def get_optional_user(
-    request: Request,
-    db: Session = Depends(get_db_session),
-) -> Optional[User]:
-    """Optional authentication for explicitly public routes only.
-
-    Absent cookie -> anonymous (``None``). A presented cookie that is malformed,
-    unknown, expired, revoked, or belongs to an inactive/unapproved account fails
-    closed with 401; invalid credentials never silently become anonymous.
-    """
-    raw = request.cookies.get(settings.session_cookie_name)
-    if not raw:
-        return None
-    session, outcome = session_service.resolve_session_with_outcome(db, raw)
-    if outcome != "live":
-        ip, user_agent = _client_meta(request)
-        session_service.record_invalid_session_attempt(
-            db, outcome=outcome, session=session, ip_address=ip, user_agent=user_agent
-        )
-        raise _invalid_session_unauthorized()
-    user = db.query(User).filter(User.id == session.user_id).first()
-    if user is None or not user.is_active or not user.is_approved:
-        raise _unauthorized("Authentication required.")
-    session_service.touch_session(db, session)
-    return user
-
-
 def _record_authorization_failure(db: Session, current_user: User, permission: str, reason_code: str) -> None:
     try:
         session_service.record_security_event(
