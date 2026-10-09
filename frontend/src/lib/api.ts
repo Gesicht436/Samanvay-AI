@@ -35,6 +35,19 @@ export function clearSessionCsrfToken(): void {
   sessionCsrfToken = null;
 }
 
+// Mid-session 401 notification. AuthProvider registers a handler so a stale
+// in-memory identity (and its CSRF token) is cleared whenever the server
+// rejects the session with 401 on any request except the login attempt
+// itself, whose 401 is a credential error owned by the login flow. The
+// callback-registration pattern keeps this module free of a circular import
+// of the AuthContext. Handlers must be idempotent; they perform no
+// navigation, so concurrent 401 responses cannot create redirect loops.
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
 function isUnsafeMethod(method?: string): boolean {
   const m = (method || 'GET').toUpperCase();
   return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
@@ -89,6 +102,18 @@ async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise
       errorDetail = typeof rawDetail === 'string' ? rawDetail : JSON.stringify(rawDetail);
     } catch {
       // Ignore text parse failure
+    }
+    // Mid-session 401: notify the registered handler (AuthProvider) so the
+    // stale in-memory identity and CSRF token are cleared. The login
+    // request's own 401 is a credential error and never triggers it.
+    // Network failures never reach this branch, and 403 CSRF/Origin
+    // failures deliberately do not sign the user out.
+    if (response.status === 401 && endpoint !== '/auth/login' && unauthorizedHandler) {
+      try {
+        unauthorizedHandler();
+      } catch {
+        // A handler failure must never mask the original API error.
+      }
     }
     throw new ApiError(response.status, errorDetail);
   }
@@ -257,7 +282,6 @@ export const api = {
     }),
   getMe: () => fetchAPI<User>('/auth/me'),
   getSeedUsers: () => fetchAPI<{ users: SeedUser[] }>('/auth/seed-users'),
-  seedUsers: () => fetchAPI<{ status: string; total_users: number }>('/auth/seed', { method: 'POST' }),
 
   getUsers: () => fetchAPI<User[]>('/auth/users'),
   approveUser: (userId: number) => fetchAPI<User>(`/auth/users/${userId}/approve`, { method: 'POST' }),

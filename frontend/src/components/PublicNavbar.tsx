@@ -9,6 +9,8 @@ import { ArrowRight, UserCheck, KeyRound, UserPlus } from 'lucide-react';
 // AUTH-006 Phase 2: production builds must not offer public signup. The
 // build-mode flag reuses the framework's existing NODE_ENV mechanism.
 const isProductionBuild = process.env.NODE_ENV === 'production';
+
+export function PublicNavbar() {
   const { user, isAuthenticated } = useAuth();
 
   return (

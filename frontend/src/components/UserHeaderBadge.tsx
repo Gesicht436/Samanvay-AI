@@ -7,6 +7,7 @@ import { User, LogIn, LogOut, Shield } from 'lucide-react';
 
 export function UserHeaderBadge() {
   const { user, isAuthenticated, logout } = useAuth();
+  const router = useRouter();
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
   if (!isAuthenticated || !user) {

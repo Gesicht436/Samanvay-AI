@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { User, SeedUser } from '@/lib/types';
-import { api, clearSessionCsrfToken, isAuthenticationFailure } from '@/lib/api';
+import { api, clearSessionCsrfToken, isAuthenticationFailure, setUnauthorizedHandler } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -35,6 +35,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearSessionCsrfToken();
     setUser(null);
   }, []);
+
+  // Mid-session 401 handling: any API 401 (except the login credential
+  // attempt, excluded inside api.ts) clears the stale in-memory identity and
+  // its CSRF token, so ProtectedRoute renders the unauthenticated state.
+  // clearIdentity is idempotent, so concurrent 401s are harmless; no
+  // navigation happens here, so no redirect loop is possible. Network errors
+  // and 403 CSRF/Origin failures never invoke it.
+  useEffect(() => {
+    setUnauthorizedHandler(clearIdentity);
+    return () => setUnauthorizedHandler(null);
+  }, [clearIdentity]);
 
   // Load available seed personas from backend
   const loadSeedUsers = async () => {

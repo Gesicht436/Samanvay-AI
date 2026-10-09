@@ -37,6 +37,7 @@ export function Sidebar({
   const pathname = usePathname();
   const { cpse } = useTheme();
   const { user, logout } = useAuth();
+  const router = useRouter();
   const [internalCollapsed, setInternalCollapsed] = useState<boolean>(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
@@ -240,7 +241,9 @@ export function Sidebar({
                     router.push('/login');
                   } catch {
                     // Non-401/retryable logout failure: identity is not cleared
-                    // and no redirect is performed.
+                    // and no redirect is performed. Surface the failure so the
+                    // operator knows the sign-out did not complete.
+                    setLogoutError('Failed to sign out. Please try again.');
                   }
                 }}
                 className={`p-1 rounded transition-colors cursor-pointer ${logoutError

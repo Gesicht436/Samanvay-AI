@@ -980,6 +980,93 @@ plain non-partial index — all DB-free.
 
 ---
 
+## Task 21 — Frontend Authentication Cutover (Steps 1–2)
+
+### Audit findings (Step 1, read-only)
+* Commit `175e4ae` ("auth: harden frontend session auth UX (AUTH-006)")
+  deleted the `export function PublicNavbar() {` /
+  `export function LandingAuthCTA() {` wrapper lines while adding the
+  `isProductionBuild` signup gating, leaving `useAuth()` and the top-level
+  `return` outside any function — a hard compile error in modules imported
+  by `AppShell`/root `page.tsx`, so the entire frontend failed to build.
+* The same commit added `router.push('/login')` to `Sidebar.tsx` and
+  `UserHeaderBadge.tsx` without `const router = useRouter();` ("Cannot
+  find name 'router'").
+* `Sidebar.tsx` logout catch was empty (silent failure) although its
+  `logoutError` state existed; `UserHeaderBadge` already surfaced it.
+* `api.seedUsers()` targeted the retired `POST /auth/seed` route (404)
+  and had zero call sites.
+* No mid-session 401 handling existed: a session revoked/expired after
+  page load left a stale in-memory identity and CSRF token until reload.
+* Verified already aligned (no change needed): login/me/csrf/logout
+  request-response shapes, cookie-only identity, `credentials:'include'`,
+  CSRF acquisition + `X-CSRF-Token` transmission, ProtectedRoute
+  loading/authenticated/unauthenticated states, signup retirement,
+  production gating of seed/persona surfaces.
+
+### Changes made (Step 2 — 6 files, frontend only)
+* `frontend/src/components/PublicNavbar.tsx`,
+  `frontend/src/components/LandingAuthCTA.tsx`: restored the deleted
+  component wrapper lines; the `isProductionBuild` const and the
+  `{!isProductionBuild && ...}` signup gating are kept intact.
+* `frontend/src/components/Sidebar.tsx`: added
+  `const router = useRouter();`; logout catch now calls
+  `setLogoutError('Failed to sign out. Please try again.')`, matching
+  `UserHeaderBadge` behavior.
+* `frontend/src/components/UserHeaderBadge.tsx`: added
+  `const router = useRouter();`.
+* `frontend/src/lib/api.ts`: removed the dead `seedUsers()` method
+  (provisioning methods `getUsers`/`approveUser`/`rejectUser` untouched);
+  added module-level `setUnauthorizedHandler` registration and a 401
+  notification in `fetchAPI` that fires for every 401 EXCEPT
+  `POST /auth/login` (the login 401 is a credential error owned by the
+  login flow). 403 CSRF/Origin failures and network errors never trigger
+  it; handler exceptions are swallowed so they cannot mask the API error.
+* `frontend/src/context/AuthContext.tsx`: `AuthProvider` registers
+  `clearIdentity` through `setUnauthorizedHandler` (and unregisters on
+  unmount), clearing stale identity + CSRF token on any mid-session 401.
+  The handler is idempotent (safe under concurrent 401s) and performs no
+  navigation (no redirect loops); `ProtectedRoute` then renders the
+  unauthenticated state. Startup restore, login and logout semantics are
+  unchanged.
+* No backend, migration, schema, dependency, lockfile or configuration
+  change; no package installed; no service started.
+
+### Test outcomes (actual)
+* `python -m pytest tests/unit/test_csrf_origin.py
+  tests/unit/test_session_security.py tests/unit/test_security.py -q`
+  → **34 passed** (Task 18/19 regression intact).
+* `tests/api/test_session_lifecycle.py` DB-free static subset
+  (missing-cookie 401, Bearer-is-not-auth, legacy-route audit,
+  backend/frontend JWT-Bearer machinery audit, no dependency overrides)
+  → **6 passed, 3 deselected**.
+* `tests/api/test_signup_api.py` → **2 passed** (public signup retired).
+* `tests/api/test_auth_api.py` static subset (seed-users,
+  me-unauthorized, seed-route-retired) → **3 passed, 4 deselected**.
+* DB-backed lifecycle/auth tests (`test_successful_authentication_...`,
+  `test_login_response_cookie_attributes`,
+  `test_raw_session_secret_is_never_stored_in_database`, the lifespan
+  auth tests) → **BLOCKED**: `psycopg2.OperationalError ... Connection
+  refused` at `localhost:5432` (Sections 4/16/22). Never claimed PASS;
+  no database setup performed.
+* Frontend `tsc --noEmit` / `next build` → **BLOCKED**: `node_modules` is
+  absent and installing dependencies is out of task scope. Substitute
+  structural scan over `frontend/src` (every `router.` use has a
+  `const router = useRouter`; every `useAuth()` consumer is an exported
+  component) → clean; the previously broken files parse per manual
+  diff review.
+
+### Error encountered and resolution (shell, Task 17 recurring class)
+* One pytest invocation was mangled by shell integration: the
+  `.venv\Scripts\python.exe` path lost its leading dot (invoked as
+  `venv\Scripts\python.exe` → "The module 'venv' could not be loaded")
+  and the output was not captured. Resolution: re-ran with the quoted
+  call operator `& '.\.venv\Scripts\python.exe' -m pytest ...`; the
+  command completed and the real results are reported above. No
+  application conclusion was drawn from the shell failure.
+
+---
+
 # 23. Git Verification Checklist
 # 23. Git Verification Checklist
 
