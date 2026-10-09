@@ -663,6 +663,66 @@ A single-line byte-inspection command constructed during Task 17 contained inval
 
 ---
 
+## Known Recurring Error — Task 18 Session Lifecycle Verification
+
+### Issue A — Task 18 WIP found in `git stash`, not on the working tree
+
+At resume, `git status --short` was clean and the Task 18 files
+(`tests/unit/test_session_security.py`,
+`tests/api/test_session_lifecycle.py`, plus the implementation delta in
+`backend/app/services/auth_session_service.py`,
+`backend/app/api/dependencies.py`, `backend/app/api/routers/auth.py`)
+were absent from the working tree but present as
+`stash@{0}` ("WIP: Task 18 session lifecycle hardening"). The same files
+were referenced by stale `.pytest_cache` entries and orphaned
+`__pycache__` bytecode, which confirmed they had been executed before but
+never committed. No work was redone: the stash was popped and the
+untracked test files restored from the stash state, then verification
+continued from the checkpoint.
+
+Bare `stash@{0}` references fail under PowerShell (brace expansion splits
+the argument: "Too many revisions specified: 'stash@' ..."). Quote the
+ref (`'stash@{0}'`).
+
+### Issue B — legacy-route API test initially failed on FastAPI's own docs scaffolding
+
+`test_no_legacy_authentication_routes_registered` initially asserted that
+no registered route path matches `(oauth|oidc|google|sso|saml|jwks|/token)`
+and failed only because FastAPI registers its built-in
+`/docs/oauth2-redirect` Swagger-UI redirect route. That route is framework
+documentation scaffolding: it authenticates nothing, registers no OAuth
+flow, and disappears in production where docs are disabled (D-5J.3-4).
+The security boundary was NOT weakened to make the test pass — the test
+explicitly allowlists exactly that one framework route while still failing
+on any real legacy authentication endpoint.
+
+### Issue C — PostgreSQL-dependent session lifecycle tests are BLOCKED
+
+The DB-backed session lifecycle tests (`test_successful_authentication_...`,
+`test_login_response_cookie_attributes`,
+`test_raw_session_secret_is_never_stored_in_database`) error at the
+application-lifespan fixture with
+`psycopg2.OperationalError: connection to server at "localhost", port 5432
+failed: Connection refused`. Per Sections 4, 16 and 22 these are reported
+as BLOCKED by database availability, never as PASS or as implementation
+failures. The DB-free properties (15/15 unit primitives plus the 6 static
+API checks: missing-cookie 401, Bearer-is-not-auth, legacy-route audit,
+backend/frontend machinery audit, no dependency overrides) were executed
+and passed in this environment; the remaining end-to-end properties hold
+only via the committed test definitions plus code inspection until a
+database is available.
+
+### Prevention
+
+* Check `git stash list` when a checkpoint claims work exists but the tree
+  is clean; never re-implement before looking there.
+* Do not confuse FastAPI's built-in `/docs/oauth2-redirect` with an
+  authentication route.
+* Report DB-dependent session tests as BLOCKED while PostgreSQL is
+  unavailable; do not fake their results.
+
+---
+
 # 20. Test Reporting Convention
 
 Every test report should distinguish:

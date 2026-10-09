@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import (
+    _record_authorization_failure,
     get_current_session,
     get_current_user,
     get_db_session,
@@ -183,11 +184,68 @@ def login_user(
 )
 def logout_user(
     request: Request,
-    session: AuthSession = Depends(require_csrf),
     db: Session = Depends(get_db_session),
 ):
-    """Revoke the caller's session. Idempotent and CSRF/Origin protected."""
+    """Revoke the caller's session (AUTH-006 Section 2 logout flow).
+
+    Origin validation always applies. A live session additionally requires the
+    session-bound synchronizer token and is revoked atomically with its
+    ``SESSION_REVOKED`` + ``LOGOUT`` telemetry (503 on persistence failure
+    rather than a false success). An absent, malformed, unknown, expired or
+    already-revoked session is an idempotent no-op: 204 after Origin
+    validation, cookie cleared, and no duplicate revocation/logout events.
+    """
     ip, user_agent = _client_meta(request)
+
+    # 1. Origin allowlist validation — always the first gate for logout.
+    if not csrf_core.origin_allowed(
+        request.headers.get("origin"), settings.allowed_origins_list
+    ):
+        raw = request.cookies.get(settings.session_cookie_name)
+        live = session_service.resolve_session(db, raw) if raw else None
+        if live is not None:
+            user = db.query(User).filter(User.id == live.user_id).first()
+            if user is not None:
+                _record_authorization_failure(
+                    db,
+                    user,
+                    permission="CSRF_ORIGIN",
+                    reason_code="CSRF_ORIGIN_DENIED",
+                )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "CSRF_ORIGIN_DENIED"},
+        )
+
+    # 2. Resolve the presented session cookie (hash lookup; never a token).
+    raw = request.cookies.get(settings.session_cookie_name)
+    session = session_service.resolve_session(db, raw) if raw else None
+    if session is None:
+        # Idempotent logout: there is no live session to revoke, so no
+        # SESSION_REVOKED/LOGOUT events are emitted (no duplicates) and the
+        # dead/absent cookie is cleared.
+        resp = Response(status_code=status.HTTP_204_NO_CONTENT)
+        _clear_session_cookie(resp)
+        return resp
+
+    # 3. Live session: session-bound synchronizer token required.
+    if not csrf_core.verify_csrf_token(
+        session.session_token_hash, request.headers.get("x-csrf-token")
+    ):
+        user = db.query(User).filter(User.id == session.user_id).first()
+        if user is not None:
+            _record_authorization_failure(
+                db,
+                user,
+                permission="CSRF_TOKEN",
+                reason_code="CSRF_TOKEN_DENIED",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "CSRF_TOKEN_DENIED"},
+        )
+
+    # 4. Revoke + telemetry atomically; clear the cookie only after success.
     try:
         session_service.revoke_session_for_logout(
             db, session, ip_address=ip, user_agent=user_agent

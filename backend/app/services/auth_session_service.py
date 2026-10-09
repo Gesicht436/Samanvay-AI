@@ -217,26 +217,98 @@ def record_login_failure(
         db.rollback()
 
 
-def resolve_session(db: Session, secret: Optional[str]) -> Optional[AuthSession]:
-    """Resolve a live (non-revoked, non-expired) session by cookie-secret hash."""
+def record_invalid_session_attempt(
+    db: Session,
+    *,
+    outcome: str,
+    session: Optional[AuthSession] = None,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+) -> None:
+    """Record ``LOGIN_FAILURE`` for a presented-but-invalid session cookie.
+
+    Task 18 telemetry uses the frozen AUTH-006 Section 7 event vocabulary:
+    a presented session credential that fails to authenticate is a
+    ``LOGIN_FAILURE`` (no new event type is invented). ``outcome`` becomes a
+    sanitized metadata reason (``session_malformed`` / ``session_unknown`` /
+    ``session_expired`` / ``session_revoked``). When the rejected session row
+    is known, the event carries its ``user_id``/``session_id`` for attribution.
+    The raw secret and its hash are never passed here. A telemetry-write
+    failure must never change the caller's fail-closed 401 response.
+    """
+    record_security_event(
+        db,
+        EVENT_LOGIN_FAILURE,
+        user_id=session.user_id if session is not None else None,
+        session_id=session.id if session is not None else None,
+        success=False,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        metadata={"reason": f"session_{outcome}"},
+    )
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+def session_cookie_deletion_header() -> str:
+    """Build the ``Set-Cookie`` value that deletes the application session cookie.
+
+    Mirrors the attributes used when the cookie is set (``Path=/``, no
+    ``Domain``, ``HttpOnly``, ``SameSite=Lax``, ``Secure`` per configuration),
+    so the deletion stays valid for the ``__Host-`` prefix in production.
+    Used on fail-closed 401 responses where no ``Response`` object is in scope
+    (AUTH-006 Section 12: a presented-but-invalid session returns
+    ``401; clear cookie``).
+    """
+    header = (
+        f"{settings.session_cookie_name}=; Max-Age=0; "
+        "Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly; SameSite=Lax"
+    )
+    if settings.cookie_secure:
+        header += "; Secure"
+    return header
+
+
+def resolve_session_with_outcome(
+    db: Session, secret: Optional[str]
+) -> Tuple[Optional[AuthSession], str]:
+    """Resolve a presented session secret and classify the outcome.
+
+    Returns ``(session, outcome)``. ``outcome`` is ``"live"`` only when the
+    returned session is usable. Otherwise the outcome is one of the
+    AUTH-006 Section 12 rejection reasons — ``"malformed"``, ``"unknown"``,
+    ``"expired"`` or ``"revoked"`` — and the returned row (when present) is
+    the rejected session, kept only so callers can attribute failure
+    telemetry without ever handling the raw secret again.
+    """
     token_hash = hash_session_secret(secret)
     if token_hash is None:
-        return None
+        return None, "malformed"
     session = (
         db.query(AuthSession)
         .filter(AuthSession.session_token_hash == token_hash)
         .first()
     )
-    if session is None or session.revoked_at is not None:
-        return None
+    if session is None:
+        return None, "unknown"
+    if session.revoked_at is not None:
+        return session, "revoked"
     expires_at = session.expires_at
     if expires_at is None:
-        return None
+        return session, "expired"
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if _utcnow() >= expires_at:
-        return None
-    return session
+        return session, "expired"
+    return session, "live"
+
+
+def resolve_session(db: Session, secret: Optional[str]) -> Optional[AuthSession]:
+    """Resolve a live (non-revoked, non-expired) session by cookie-secret hash."""
+    session, outcome = resolve_session_with_outcome(db, secret)
+    return session if outcome == "live" else None
 
 
 def touch_session(db: Session, session: AuthSession) -> None:

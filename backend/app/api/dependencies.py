@@ -49,6 +49,20 @@ def _unauthorized(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
 
 
+def _invalid_session_unauthorized() -> HTTPException:
+    """401 for a presented-but-invalid session, clearing the dead cookie.
+
+    AUTH-006 Section 12 requires ``401; clear cookie`` for malformed, unknown,
+    expired or revoked presented sessions (a merely *missing* cookie is a plain
+    401 with no cookie to clear).
+    """
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid, expired, or revoked session.",
+        headers={"set-cookie": session_service.session_cookie_deletion_header()},
+    )
+
+
 def get_current_session(
     request: Request,
     db: Session = Depends(get_db_session),
@@ -56,14 +70,20 @@ def get_current_session(
     """Resolve the presented session cookie to a live ``AuthSession``, or 401.
 
     There is no ``Authorization``/Bearer fallback. A missing cookie, or a
-    malformed, unknown, expired or revoked session, fails closed.
+    malformed, unknown, expired or revoked session, fails closed. A presented
+    cookie that resolves to no live session also clears the dead cookie and
+    records sanitized ``LOGIN_FAILURE`` telemetry (never the raw secret).
     """
     raw = request.cookies.get(settings.session_cookie_name)
     if not raw:
         raise _unauthorized("Authentication required. Provide a valid session cookie.")
-    session = session_service.resolve_session(db, raw)
-    if session is None:
-        raise _unauthorized("Invalid, expired, or revoked session.")
+    session, outcome = session_service.resolve_session_with_outcome(db, raw)
+    if outcome != "live":
+        ip, user_agent = _client_meta(request)
+        session_service.record_invalid_session_attempt(
+            db, outcome=outcome, session=session, ip_address=ip, user_agent=user_agent
+        )
+        raise _invalid_session_unauthorized()
     return session
 
 
@@ -92,9 +112,13 @@ def get_optional_user(
     raw = request.cookies.get(settings.session_cookie_name)
     if not raw:
         return None
-    session = session_service.resolve_session(db, raw)
-    if session is None:
-        raise _unauthorized("Invalid, expired, or revoked session.")
+    session, outcome = session_service.resolve_session_with_outcome(db, raw)
+    if outcome != "live":
+        ip, user_agent = _client_meta(request)
+        session_service.record_invalid_session_attempt(
+            db, outcome=outcome, session=session, ip_address=ip, user_agent=user_agent
+        )
+        raise _invalid_session_unauthorized()
     user = db.query(User).filter(User.id == session.user_id).first()
     if user is None or not user.is_active or not user.is_approved:
         raise _unauthorized("Authentication required.")
