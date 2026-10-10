@@ -10,30 +10,33 @@ Conforms to the Dataset 1 Unified Architecture:
     └── [:HAS_SPECIFICATION]-> (:MaterialSpecification)
 """
 
-from .schema import NodeTypes, RelTypes, CompatEdges
+from .schema import NodeTypes, RelTypes, CompatEdges, VALID_CPSES
 from .logistics import (
     haversine_distance,
     road_distance,
     estimate_transit_hours,
     estimate_freight_cost_inr,
-    compute_co2_saved,
+    compute_co2_saved_per_tonne,
+    compute_co2_saved,          # deprecated alias — kept for backward compat
     get_nearest_depots,
     compute_route_summary,
     DEPOT_COORDINATES,
 )
 from .queries import GraphQuerier
 from .syncer import Neo4jSyncer, GraphSyncer
-from .seed_graph import GraphSeeder, extract_item_type
+from .seed_graph import GraphSeeder, extract_item_type, validate_cpse_name
 
 __all__ = [
     "NodeTypes",
     "RelTypes",
     "CompatEdges",
+    "VALID_CPSES",
     "haversine_distance",
     "road_distance",
     "estimate_transit_hours",
     "estimate_freight_cost_inr",
-    "compute_co2_saved",
+    "compute_co2_saved_per_tonne",
+    "compute_co2_saved",            # deprecated alias
     "get_nearest_depots",
     "compute_route_summary",
     "DEPOT_COORDINATES",
@@ -42,4 +45,5 @@ __all__ = [
     "GraphSyncer",
     "GraphSeeder",
     "extract_item_type",
+    "validate_cpse_name",
 ]

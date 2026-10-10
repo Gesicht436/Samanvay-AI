@@ -69,20 +69,20 @@ def test_cdc_mirroring():
     try:
         with driver.session() as session:
             res = session.run("""
-                MATCH (c:CPSE {name: 'IOCL'})-[:OPERATES]->(d:Depot)-[:HOLDS]->(i:InventoryItem {sku: $sku})
-                OPTIONAL MATCH (i)-[:HAS_PRESSURE_CLASS]->(pc:PressureClass)
-                OPTIONAL MATCH (i)-[:HAS_BODY_METALLURGY]->(mg:MaterialGrade)
-                RETURN i.sku AS sku, i.description AS desc, i.qty AS qty, i.status AS status,
-                       d.id AS depot_id, pc.value AS pressure_class, mg.value AS metallurgy
+                MATCH (i:InventoryItem {sku_code: $sku})-[:OPERATED_BY]->(c:CPSE {name: 'IOCL'})
+                OPTIONAL MATCH (i)-[:HAS_STOCK_INFO]->(s:StockInfo)
+                OPTIONAL MATCH (i)-[:STORED_AT]->(loc:Location)
+                OPTIONAL MATCH (i)-[:HAS_SPECIFICATION]->(spec:MaterialSpecification)
+                RETURN i.sku_code AS sku, i.nominal_bore_mm AS size_nb_mm, i.pressure_rating_bar AS pressure_rating_bar,
+                       s.quantity AS qty, loc.name AS location, spec.raw_description AS desc
             """, sku=sku).single()
 
             assert res is not None, f"Node for {sku} not found in Neo4j Knowledge Graph!"
             print(f"[OK] Neo4j Real-Time Graph Node Found:")
             print(f"     - SKU: {res['sku']}")
-            print(f"     - Depot: {res['depot_id']}")
-            print(f"     - Status: {res['status']}")
-            print(f"     - Pressure Class: {res['pressure_class']}")
-            print(f"     - Metallurgy: {res['metallurgy']}")
+            print(f"     - Location: {res['location']}")
+            print(f"     - Size NB (mm): {res['size_nb_mm']}")
+            print(f"     - Pressure Rating (bar): {res['pressure_rating_bar']}")
             print(f"     - Quantity: {res['qty']}")
 
         # 5. Test Live UPDATE
@@ -101,13 +101,12 @@ def test_cdc_mirroring():
 
         with driver.session() as session:
             updated_res = session.run("""
-                MATCH (i:InventoryItem {sku: $sku})
-                RETURN i.status AS status, i.qty AS qty
+                MATCH (i:InventoryItem {sku_code: $sku})-[:HAS_STOCK_INFO]->(s:StockInfo)
+                RETURN s.quantity AS qty
             """, sku=sku).single()
 
-            assert updated_res["status"] == "SURPLUS_DECLARED", f"Status not updated in Neo4j! Got {updated_res['status']}"
             assert updated_res["qty"] == 25, f"Quantity not updated in Neo4j! Got {updated_res['qty']}"
-            print(f"[OK] Neo4j Node updated in real time: status={updated_res['status']}, qty={updated_res['qty']}")
+            print(f"[OK] Neo4j Node updated in real time: qty={updated_res['qty']}")
 
     finally:
         driver.close()
@@ -121,7 +120,7 @@ def test_cdc_mirroring():
         # Verify deletion in Neo4j
         driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_password))
         with driver.session() as session:
-            del_res = session.run("MATCH (i:InventoryItem {sku: $sku}) RETURN count(i) as count", sku=sku).single()
+            del_res = session.run("MATCH (i:InventoryItem {sku_code: $sku}) RETURN count(i) as count", sku=sku).single()
             print(f"[OK] Cleaned up test item: Remaining Neo4j nodes matching {sku} = {del_res['count']}")
         driver.close()
     finally:

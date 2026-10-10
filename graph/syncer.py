@@ -19,23 +19,43 @@ from typing import Any, Dict, List, Optional
 
 from neo4j import GraphDatabase
 
-from graph.seed_graph import extract_item_type
+from graph.seed_graph import extract_item_type, validate_cpse_name
 
 logger = logging.getLogger("samanvay.graph.syncer")
 
 
-def _get_neo4j_config() -> tuple[str, str, str]:
+def _get_neo4j_config() -> tuple[str, str, str, dict]:
+    """
+    Returns (uri, user, password, driver_kwargs).
+
+    driver_kwargs contains supported neo4j-python-driver connection pool
+    and timeout settings. Credentials are never included in driver_kwargs.
+    """
     uri = None
     user = None
     password = None
+    driver_kwargs: dict = {}
 
     try:
         from backend.app.core.config import settings
         uri = getattr(settings, "neo4j_uri", None) or getattr(settings, "NEO4J_URI", None)
         user = getattr(settings, "neo4j_user", None) or getattr(settings, "NEO4J_USER", None)
         password = getattr(settings, "neo4j_password", None) or getattr(settings, "NEO4J_PASSWORD", None)
+        driver_kwargs = {
+            "connection_timeout": settings.neo4j_connection_timeout,
+            "max_connection_lifetime": settings.neo4j_max_connection_lifetime,
+            "max_connection_pool_size": settings.neo4j_max_connection_pool_size,
+            "connection_acquisition_timeout": settings.neo4j_connection_acquisition_timeout,
+        }
     except Exception:
-        pass
+        driver_kwargs = {
+            "connection_timeout": int(os.getenv("NEO4J_CONNECTION_TIMEOUT", "15")),
+            "max_connection_lifetime": int(os.getenv("NEO4J_MAX_CONNECTION_LIFETIME", "3600")),
+            "max_connection_pool_size": int(os.getenv("NEO4J_MAX_CONNECTION_POOL_SIZE", "50")),
+            "connection_acquisition_timeout": int(
+                os.getenv("NEO4J_CONNECTION_ACQUISITION_TIMEOUT", "60")
+            ),
+        }
 
     if not uri:
         uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
@@ -44,18 +64,22 @@ def _get_neo4j_config() -> tuple[str, str, str]:
     if not password:
         password = os.getenv("NEO4J_PASSWORD", "samanvay_graph")
 
-    return str(uri), str(user), str(password)
+    return str(uri), str(user), str(password), driver_kwargs
 
 
 class Neo4jSyncer:
     """Synchronizes relational database transactions (CDC) and manual updates into Neo4j."""
 
     def __init__(self, uri: Optional[str] = None, user: Optional[str] = None, password: Optional[str] = None):
-        c_uri, c_user, c_pwd = _get_neo4j_config()
+        c_uri, c_user, c_pwd, c_kwargs = _get_neo4j_config()
         self.uri = uri or c_uri
         self.user = user or c_user
         self.password = password or c_pwd
-        self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+        self.driver = GraphDatabase.driver(
+            self.uri,
+            auth=(self.user, self.password),
+            **c_kwargs,
+        )
 
     def close(self):
         if self.driver:
@@ -182,7 +206,8 @@ class Neo4jSyncer:
             it = i.get("item_type") or extract_item_type(raw_desc)
             loc = i.get("depot_location") or i.get("depot_id") or "Main Depot"
             state = i.get("location_state") or i.get("state") or "Assam"
-            cpse = i.get("cpse_name") or i.get("cpse") or "OIL"
+            raw_cpse = i.get("cpse_name") or i.get("cpse")
+            cpse = validate_cpse_name(raw_cpse)
             po = i.get("po_no") or "PO-GENERIC"
 
             prepared.append({
@@ -253,7 +278,64 @@ class Neo4jSyncer:
             session.run(query, **req).consume()
 
     # ---------------------------------------------------------
-    # 4. Outbox CDC Event Dispatcher
+    # 4. Delete Inventory Item with Orphan Cleanup
+    # ---------------------------------------------------------
+    def delete_inventory_item(self, sku_code: str) -> None:
+        """
+        Deletes an InventoryItem and its exclusively-owned leaf nodes
+        (StockInfo, MaterialSpecification), then safely cleans up
+        orphaned PurchaseOrders and CPPPTenders.
+
+        Safety guarantees
+        -----------------
+        - A PurchaseOrder is deleted **only** when no other InventoryItem
+          still references it via [:ORDERED_BY].
+        - A CPPPTender is deleted **only** when no PurchaseOrder still
+          references it via [:PART_OF_TENDER].
+        - All three steps run inside a single writable transaction to
+          prevent partial states.
+        """
+        # Step 1: collect the PO references before the item is gone.
+        # Step 2: delete the item and its exclusive leaf nodes.
+        # Step 3: delete any now-orphaned POs (no remaining [:ORDERED_BY] edges).
+        # Step 4: delete any now-orphaned Tenders (no remaining [:PART_OF_TENDER] edges).
+        query = """
+        // 1. Collect the PurchaseOrder(s) the item pointed to
+        OPTIONAL MATCH (item:InventoryItem {sku_code: $sku_code})-[:ORDERED_BY]->(po:PurchaseOrder)
+        WITH item, collect(po) AS pos
+
+        // 2. Delete item and its exclusively-owned leaf nodes
+        OPTIONAL MATCH (item)-[:HAS_STOCK_INFO]->(stock:StockInfo)
+        OPTIONAL MATCH (item)-[:HAS_SPECIFICATION]->(spec:MaterialSpecification)
+        DETACH DELETE item, stock, spec
+
+        // 3. For each collected PO: delete it if no InventoryItem still references it
+        WITH pos
+        UNWIND pos AS po
+        OPTIONAL MATCH (other_item:InventoryItem)-[:ORDERED_BY]->(po)
+        WITH po, count(other_item) AS still_referenced
+        // 3a. If this PO is now unreferenced, also collect its tenders before deletion
+        OPTIONAL MATCH (po)-[:PART_OF_TENDER]->(tender:CPPPTender)
+            WHERE still_referenced = 0
+        WITH po, tender, still_referenced
+        FOREACH (_ IN CASE WHEN still_referenced = 0 THEN [1] ELSE [] END |
+            DETACH DELETE po
+        )
+
+        // 4. Delete the tender only when no PurchaseOrder references it any more
+        WITH collect(tender) AS tenders
+        UNWIND tenders AS t
+        OPTIONAL MATCH (remaining_po:PurchaseOrder)-[:PART_OF_TENDER]->(t)
+        WITH t, count(remaining_po) AS po_count
+        FOREACH (_ IN CASE WHEN po_count = 0 THEN [1] ELSE [] END |
+            DETACH DELETE t
+        )
+        """
+        with self.driver.session() as session:
+            session.run(query, sku_code=sku_code).consume()
+
+    # ---------------------------------------------------------
+    # 5. Outbox CDC Event Dispatcher
     # ---------------------------------------------------------
     def sync_event(self, table_name: str, operation: str, payload: Dict[str, Any]):
         """Dispatches PostgreSQL transactional CDC events to Neo4j."""
@@ -263,16 +345,7 @@ class Neo4jSyncer:
                 return
 
             if operation.upper() == "DELETE":
-                with self.driver.session() as session:
-                    session.run(
-                        """
-                        MATCH (item:InventoryItem {sku_code: $sku})
-                        OPTIONAL MATCH (item)-[:HAS_STOCK_INFO]->(stock:StockInfo)
-                        OPTIONAL MATCH (item)-[:HAS_SPECIFICATION]->(spec:MaterialSpecification)
-                        DETACH DELETE item, stock, spec
-                        """,
-                        sku=sku,
-                    ).consume()
+                self.delete_inventory_item(sku)
             else:
                 self.batch_sync_inventory([payload])
 

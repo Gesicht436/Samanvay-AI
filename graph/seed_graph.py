@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional
 
 from neo4j import GraphDatabase
 
-from graph.schema import NodeTypes, RelTypes
+from graph.schema import NodeTypes, RelTypes, VALID_CPSES
 
 logger = logging.getLogger("samanvay.graph.seeder")
 
@@ -69,14 +69,25 @@ def get_neo4j_config() -> tuple[str, str, str]:
 def extract_item_type(raw_description: str) -> str:
     """
     Extracts high-level ItemType category from raw_description.
-    Supports standard abbreviations, hyphenated dialect forms, and keyword patterns.
+
+    Classification rules
+    --------------------
+    - Text is uppercased and collapsed before matching.
+    - Specific item types are checked before generic fallbacks.
+    - Word-boundary (\\b) anchors are applied to short or ambiguous tokens to
+      prevent false positives (e.g. "CAP" in "CAPACITY", "NUT" in "NUTS",
+      "RING" in "SPRING", "TUBE" in "TUBER").
+    - The function returns the most specific matching category or
+      "General Material" when no rule fires.
     """
     if not raw_description:
         return "General Material"
 
     text = " ".join(str(raw_description).upper().split())
 
-    # 1. Valves (check specific valve types first)
+    # ------------------------------------------------------------------
+    # 1. Valves — specific types before generic VLV fallback
+    # ------------------------------------------------------------------
     if any(k in text for k in ["BFV", "BUTTERFLY", "VLV-BFV", "VLV BFV"]):
         return "Butterfly Valve"
     if any(k in text for k in ["PSV", "SAFETY RELIEF", "RELIEF VALVE", "VLV-PSV", "VLV PSV"]):
@@ -96,84 +107,107 @@ def extract_item_type(raw_description: str) -> str:
     if any(k in text for k in ["NEEDLE VALVE", "VLV NDL", "VLV-NDL"]):
         return "Needle Valve"
 
+    # ------------------------------------------------------------------
     # 2. Pipe Fittings
-    if re.search(r"\bELB\b", text) or "ELBOW" in text or "ELB-90" in text:
+    # ------------------------------------------------------------------
+    # ELB / ELBOW — but avoid matching "ELBOW" inside longer words.
+    if re.search(r"\bELB\b", text) or re.search(r"\bELBOW\b", text) or "ELB-90" in text:
         return "Elbow"
+    # TEE — word-boundary to avoid matching e.g. "STEEL"
     if re.search(r"\bTEE\b", text) or "EQUAL TEE" in text or "REDUCING TEE" in text or "TEE-EQ" in text:
         return "Tee"
     if any(k in text for k in ["RED CONC", "RED-CONC", "CONCENTRIC REDUCER", "ECCENTRIC REDUCER", "RED ECC", "RED-ECC"]):
         return "Reducer"
-    if "NIPPLE" in text or "NIP" in text:
+    # NIPPLE — standalone; avoid matching inside longer tokens if they arise
+    if re.search(r"\bNIPPLE\b", text) or re.search(r"\bNIP\b", text):
         return "Nipple"
     if "COUPLING" in text or "CPLG" in text:
         return "Coupling"
-    if "UNION" in text:
+    if re.search(r"\bUNION\b", text):
         return "Union"
-    if "CAP" in text and "FITTING" in text:
+    # CAP — word-boundary only; avoids matching CAPACITY, CAPS, etc.
+    if re.search(r"\bCAP\b", text) and "FITTING" in text:
         return "Cap"
     if "BUTTWELD FITTING" in text or "BW FITTING" in text:
         return "Butt Weld Fitting"
 
+    # ------------------------------------------------------------------
     # 3. Gaskets & Seals
+    # ------------------------------------------------------------------
     if any(k in text for k in ["GSKT SWG", "GSKT-SWG", "SPIRAL WOUND GASKET"]):
         return "Spiral Wound Gasket"
     if any(k in text for k in ["GSKT RTJ", "GSKT-RTJ", "RING TYPE JOINT", "RTJ GASKET"]):
         return "Ring Type Joint Gasket"
-    if "GSKT" in text or "GASKET" in text:
+    if re.search(r"\bGSKT\b", text) or re.search(r"\bGASKET\b", text):
         return "Gasket"
     if any(k in text for k in ["MECH SEAL", "MECHANICAL SEAL", "MECH-SEAL"]):
         return "Mechanical Seal"
     if "O-RING" in text or "ORING" in text:
         return "O-Ring"
 
-    # 4. Flanges
+    # ------------------------------------------------------------------
+    # 4. Flanges — specific before generic FLG fallback
+    # ------------------------------------------------------------------
     if any(k in text for k in ["FLG WN", "FLG-WN", "WELD NECK"]):
         return "Weld Neck Flange"
     if any(k in text for k in ["FLG BL", "FLG-BL", "BLIND FLANGE"]):
         return "Blind Flange"
     if any(k in text for k in ["FLG SO", "FLG-SO", "SLIP ON"]):
         return "Slip-On Flange"
-    if "FLG" in text or re.search(r"\bFLANGE\b", text):
+    if re.search(r"\bFLG\b", text) or re.search(r"\bFLANGE\b", text):
         return "Flange"
 
+    # ------------------------------------------------------------------
     # 5. Pipes & Tubes
+    # ------------------------------------------------------------------
     if any(k in text for k in ["PIPE SMLS", "PIPE-SMLS", "LINE PIPE, SEAMLESS"]) or ("SEAMLESS" in text and "PIPE" in text):
         return "Seamless Pipe"
     if any(k in text for k in ["PIPE ERW", "PIPE-ERW", "LINE PIPE, ELECTRIC"]) or ("ERW" in text and "PIPE" in text):
         return "ERW Pipe"
-    if "PIPE" in text or "LINE PIPE" in text:
+    if re.search(r"\bPIPE\b", text) or "LINE PIPE" in text:
         return "Pipe"
-    if "TUBING" in text or "TUBE" in text:
+    # TUBE — word-boundary to avoid matching TUBER, TUBING (handled separately)
+    if "TUBING" in text or re.search(r"\bTUBE\b", text):
         return "Tube"
 
-    # 6. Pumps & Spares
+    # ------------------------------------------------------------------
+    # 6. Pumps & Spares — specific before generic pump fallback
+    # ------------------------------------------------------------------
     if "PUMP SHAFT SLEEVE" in text or "SHAFT SLEEVE" in text:
         return "Pump Shaft Sleeve"
     if "PUMP IMPELLER" in text or "IMPELLER" in text:
         return "Pump Impeller"
     if "PUMP CASING" in text:
         return "Pump Casing"
-    if "PUMP" in text or "CENTRIFUGAL" in text:
+    if re.search(r"\bPUMP\b", text) or "CENTRIFUGAL" in text:
         return "Centrifugal Pump"
 
+    # ------------------------------------------------------------------
     # 7. Fasteners
+    # ------------------------------------------------------------------
     if any(k in text for k in ["STUD BLT", "STUD-BLT", "STUD BOLT", "STUD"]):
         return "Stud Bolt"
     if re.search(r"\bBOLT\b", text) or "HEX BOLT" in text:
         return "Bolt"
+    # NUT — word-boundary to avoid matching NUTS (covered), NUTSHELL, etc.
     if re.search(r"\bNUTS?\b", text):
         return "Nut"
 
+    # ------------------------------------------------------------------
     # 8. Mechanical Parts
+    # ------------------------------------------------------------------
     if "SLEEVE" in text:
         return "Shaft Sleeve"
+    # RING — word-boundary to avoid matching SPRING, BORING, MOORING, etc.
     if re.search(r"\bRING\b", text):
         return "Ring"
     if "BEARING" in text:
         return "Bearing"
 
-    # 9. Generic fallbacks
-    if "VLV" in text or re.search(r"\bVALVE\b", text):
+    # ------------------------------------------------------------------
+    # 9. Generic fallbacks — only reached if no specific rule fired
+    # ------------------------------------------------------------------
+    if re.search(r"\bVLV\b", text) or re.search(r"\bVALVE\b", text):
         return "Valve"
     if "FITTING" in text:
         return "Fitting"
@@ -182,10 +216,33 @@ def extract_item_type(raw_description: str) -> str:
 
 
 # ============================================================
-# 3. CSV RECORD PARSER
+# 3. CSV RECORD PARSER & CPSE VALIDATION
 # ============================================================
 
-def parse_csv_row(row: dict[str, str]) -> dict[str, Any]:
+def validate_cpse_name(cpse_raw: Any, row_number: Optional[int] = None) -> str:
+    """
+    Validates CPSE name against the official sovereign CPSE registry.
+    Rejects missing, blank, and unregistered CPSE identifiers.
+    Never silently defaults an invalid value to 'OIL'.
+    """
+    prefix = f"Row {row_number}: " if row_number is not None else ""
+    if cpse_raw is None:
+        raise ValueError(f"{prefix}Missing 'cpse_name': CPSE identifier is required.")
+
+    val = str(cpse_raw).strip()
+    if not val:
+        raise ValueError(f"{prefix}Blank 'cpse_name': CPSE identifier cannot be blank.")
+
+    upper = val.upper()
+    if upper not in VALID_CPSES:
+        raise ValueError(
+            f"{prefix}Invalid CPSE '{val}': Unknown enterprise. Must be one of registered CPSEs: {', '.join(sorted(VALID_CPSES))}."
+        )
+
+    return upper
+
+
+def parse_csv_row(row: dict[str, str], row_number: Optional[int] = None) -> dict[str, Any]:
     """Cleans and converts raw CSV string fields into structured dictionary for Cypher."""
     raw_desc = (row.get("raw_description") or "").strip()
     item_type = extract_item_type(raw_desc)
@@ -211,6 +268,9 @@ def parse_csv_row(row: dict[str, str]) -> dict[str, Any]:
             return None
         v = val.strip()
         return v if v else None
+
+    # Validate CPSE strictly against the official registry - never silently default to OIL
+    cpse_name = validate_cpse_name(row.get("cpse_name"), row_number=row_number)
 
     return {
         # ItemType & Root
@@ -239,7 +299,7 @@ def parse_csv_row(row: dict[str, str]) -> dict[str, Any]:
         "cppp_tender_ref": clean_str(row.get("cppp_tender_ref")),
 
         # CPSE
-        "cpse_name": (row.get("cpse_name") or "OIL").strip(),
+        "cpse_name": cpse_name,
 
         # MaterialSpecification
         "raw_description": raw_desc,
@@ -441,19 +501,35 @@ class GraphSeeder:
         self.create_constraints()
 
         rows: List[Dict[str, Any]] = []
+        rejected_rows: List[Dict[str, Any]] = []
         with open(path, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             for idx, r in enumerate(reader, start=1):
                 try:
-                    rows.append(parse_csv_row(r))
+                    rows.append(parse_csv_row(r, row_number=idx))
                 except Exception as e:
                     logger.error(f"Row {idx} parse failure: {e}")
+                    rejected_rows.append({
+                        "row_number": idx,
+                        "sku_code": (r.get("sku_code") or "N/A").strip(),
+                        "reason": str(e),
+                    })
 
                 if max_rows and len(rows) >= max_rows:
                     break
 
         total = len(rows)
-        print(f"[GraphSeeder] Prepared {total} rows for ingestion.")
+        if rejected_rows:
+            logger.warning(
+                f"[GraphSeeder] Encounted {len(rejected_rows)} invalid rows during CSV ingestion."
+            )
+            for rej in rejected_rows[:10]:
+                logger.warning(f"  - Row {rej['row_number']} (SKU: {rej['sku_code']}): {rej['reason']}")
+            if len(rejected_rows) > 10:
+                logger.warning(f"  ... and {len(rejected_rows) - 10} more rejected rows.")
+        self.rejected_rows = rejected_rows
+
+        print(f"[GraphSeeder] Prepared {total} rows for ingestion ({len(rejected_rows)} rejected).")
 
         with self.driver.session() as session:
             for start in range(0, total, batch_size):

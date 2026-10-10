@@ -319,23 +319,26 @@ $$\text{Tier}(Q, C) = \begin{cases}
 
 ### 3.6 Knowledge Graph & Logistics Topology Engine
 
-The **Neo4j 5.20** knowledge graph models physical inventory assets across 19 public sector refinery and petrochemical depots:
+The **Neo4j 5.20** knowledge graph models physical inventory assets across Indian public sector refinery and petrochemical installations adhering to the approved unified architecture:
 
-```
-(:CPSE {name: "IOCL"})
+```text
+(:Item {name: "Item"})
        │
-       ▼ [:OPERATES]
-(:Depot {id: "IOCL_PANIPAT", lat: 29.39, lon: 76.96})
+       ▼ [:HAS_ITEM_TYPE]
+(:ItemType {name: "Gate Valve"})
        │
-       ▼ [:HOLDS]
-(:InventoryItem {sku: "IOCL-PNP-VLV-401", qty: 4, days_idle: 184})
-       │
-       ├──► [:HAS_SIZE]->(:Size {value: "150.0 mm"})
-       ├──► [:HAS_PRESSURE_CLASS]->(:PressureClass {value: "150#"})
-       └──► [:HAS_BODY_METALLURGY]->(:MaterialGrade {value: "WCB"})
-              │
-              ▼ [:ALLOY_UPGRADE_FOR]
-            (:MaterialGrade {value: "A105"})
+       ▼ [:HAS_ITEM]
+(:InventoryItem {
+    sku_code: "IOCL-PNP-VLV-401",
+    nominal_bore_mm: 150.0,
+    pressure_rating_bar: 20.0,
+    make_in_india_class: "Class-I"
+})
+       ├──► [:HAS_STOCK_INFO]──► (:StockInfo {quantity: 4, unit_cost_inr: 45000.0, days_idle: 184})
+       ├──► [:STORED_AT]──────► (:Location {name: "Panipat Refinery"}) ──[:IN_STATE]──► (:State {name: "Haryana"})
+       ├──► [:OPERATED_BY]─────► (:CPSE {name: "IOCL"})
+       ├──► [:ORDERED_BY]──────► (:PurchaseOrder {po_no: "PO-IOCL-2024-991"}) ──[:PART_OF_TENDER]──► (:CPPPTender)
+       └──► [:HAS_SPECIFICATION]─► (:MaterialSpecification {raw_description: "Gate Valve 150mm 150# WCB"})
 ```
 
 #### Logistics Distance & Road Tortuosity:

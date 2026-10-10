@@ -4,11 +4,23 @@ Samanvay-AI Core Configuration.
 Pydantic BaseSettings for all DB connections, ML model paths,
 engineering thresholds, and runtime SLA parameters.
 All values are sourced from environment variables or .env files.
+
+Production Security Policy (Neo4j)
+------------------------------------
+In production (``debug=False``) the Neo4j password must NOT be the
+known default value ``"neo4j"``.  If the default is detected at startup
+the application raises ``ValueError`` immediately.
+
+This check intentionally does NOT log the password value.
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, model_validator
 from typing import Optional
+
+
+# The Neo4j factory default password that must never reach production.
+_NEO4J_DEFAULT_PASSWORD: str = "neo4j"
 
 
 class Settings(BaseSettings):
@@ -53,6 +65,19 @@ class Settings(BaseSettings):
     neo4j_uri: str = Field(default="bolt://localhost:7687", alias="NEO4J_URI")
     neo4j_user: str = Field(default="neo4j", alias="NEO4J_USER")
     neo4j_password: str = Field(default="samanvay_graph", alias="NEO4J_PASSWORD")
+
+    # ── Neo4j Driver Reliability Settings ────────────────────────
+    # These map to supported neo4j-python-driver keyword arguments.
+    # connection_timeout: seconds to wait for a TCP connection.
+    # max_connection_lifetime: seconds before a pooled connection is recycled.
+    # max_connection_pool_size: upper bound on concurrent connections.
+    # connection_acquisition_timeout: seconds to wait for a free slot from pool.
+    neo4j_connection_timeout: int = Field(default=15, alias="NEO4J_CONNECTION_TIMEOUT")
+    neo4j_max_connection_lifetime: int = Field(default=3600, alias="NEO4J_MAX_CONNECTION_LIFETIME")
+    neo4j_max_connection_pool_size: int = Field(default=50, alias="NEO4J_MAX_CONNECTION_POOL_SIZE")
+    neo4j_connection_acquisition_timeout: int = Field(
+        default=60, alias="NEO4J_CONNECTION_ACQUISITION_TIMEOUT"
+    )
 
     # ── ML Model Paths (Air-Gapped Local Inference) ──────────────
     deberta_model_path: str = "ml/ner/models/deberta-v3-small-ner"
@@ -109,6 +134,25 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 60 * 24  # 24 Hours
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+    # ── Production Security Validation ──────────────────────────
+    @model_validator(mode="after")
+    def _reject_default_neo4j_password_in_production(self) -> "Settings":
+        """
+        Raises ValueError when the Neo4j password is the factory default
+        ('neo4j') and the application is NOT running in debug/dev mode.
+
+        This prevents accidental deployment of a publicly-known credential.
+        The password value is never included in the error message.
+        """
+        if not self.debug and self.neo4j_password == _NEO4J_DEFAULT_PASSWORD:
+            raise ValueError(
+                "Insecure Neo4j configuration: the Neo4j password is set to the "
+                "factory default value which is not permitted in production "
+                "(debug=False). Set a strong NEO4J_PASSWORD environment variable "
+                "or enable debug=True for local development."
+            )
+        return self
 
 
 settings = Settings()

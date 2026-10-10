@@ -46,3 +46,16 @@ class CompatEdges(str, Enum):
     EXACT_MATCH = "EXACT_MATCH"
     SAFE_UPGRADE_FOR = "SAFE_UPGRADE_FOR"
     COMPATIBLE_WITH = "COMPATIBLE_WITH"
+
+
+# Single Source of Truth for Registered CPSE Organizations
+VALID_CPSES: frozenset[str] = frozenset({
+    "OIL",
+    "NRL",
+    "IOCL",
+    "ONGC",
+    "BPCL",
+    "HPCL",
+    "GAIL",
+})
+

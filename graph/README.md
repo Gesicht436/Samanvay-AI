@@ -1,221 +1,296 @@
 # Knowledge Graph & Logistics Topology (`graph/`)
 
-This directory implements the **Neo4j 5.20 Property Star Knowledge Graph**, multi-CPSE asset ownership hierarchy, inter-plant transit logistics engine, and Change Data Capture (CDC) synchronization subsystem for **Samanvay-AI**.
+This directory implements the **Neo4j 5.20 Knowledge Graph**, multi-CPSE asset ownership hierarchy, inter-plant transit logistics engine, and Change Data Capture (CDC) synchronization subsystem for **Samanvay-AI**.
 
-While dense vector retrieval identifies semantic proximity, the knowledge graph provides **topological and physical awareness**:
+While dense vector retrieval identifies semantic proximity, the knowledge graph provides **topological, physical, and organizational awareness**:
 - Models the physical asset hierarchy across 7 public sector enterprises (**OIL**, **NRL**, **IOCL**, **ONGC**, **BPCL**, **HPCL**, and **GAIL**).
-- Models spatial coordinates across 19 critical refinery and exploration depots spanning India.
-- Computes multi-modal road transit logistics, great-circle distances, road tortuosity routing, transit durations, freight economics, and green logistics carbon savings ($CO_2$).
-- Represents mechanical compatibility as directed graph edges (`SAFE_UPGRADE_FOR`, `ALLOY_UPGRADE_FOR`, `TRIM_UPGRADE_FOR`, `PORT_UPGRADE_FOR`), enabling Cypher graph traversal of transitive substitution paths.
+- Implements strict **CPSE-scoped data isolation** and **Attribute-Level Privacy** (shielding commercial prices and tender references on cross-enterprise queries).
+- Models spatial coordinates across critical refinery and exploration depots spanning India.
+- Computes multi-modal road transit logistics, great-circle distances, road tortuosity routing ($1.28\times$), transit durations, freight economics, and green logistics carbon savings ($CO_2$).
+- Provides deterministic compatibility search against verified physical properties (`nominal_bore_mm`, `pressure_rating_bar`) with explicit outcomes and zero speculation.
 - Synchronizes inventory and requisition transactional state in real time from PostgreSQL outbox tables.
 
 ---
 
-## 1. Knowledge Graph Schema & Star Topology
+## 1. Approved Knowledge Graph Architecture
+
+The knowledge graph strictly adheres to the approved unified architecture as its single source of truth:
+
+```text
+(:Item {name})
+  -[:HAS_ITEM_TYPE]->
+(:ItemType {name})
+  -[:HAS_ITEM]->
+(:InventoryItem {
+    sku_code,
+    heat_no,
+    nominal_bore_mm,
+    pressure_rating_bar,
+    make_in_india_class,
+    local_content_percentage
+})
+
+InventoryItem
+  -[:HAS_STOCK_INFO]->
+StockInfo {quantity, unit_cost_inr, days_idle}
+
+InventoryItem
+  -[:STORED_AT]->
+Location {name}
+  -[:IN_STATE]->
+State {name}
+
+InventoryItem
+  -[:ORDERED_BY]->
+PurchaseOrder {po_no}
+  -[:PART_OF_TENDER]->
+CPPPTender {tender_id, tender_ref}
+
+InventoryItem
+  -[:OPERATED_BY]->
+CPSE {name}
+
+InventoryItem
+  -[:HAS_SPECIFICATION]->
+MaterialSpecification {
+    raw_description,
+    standard,
+    hsn_code,
+    mesc_code,
+    gem_category,
+    gem_category_id,
+    indian_standard,
+    oil_std_spec,
+    oil_material_code
+}
+```
 
 ```mermaid
 flowchart TD
-    subgraph ENTERPRISE["Enterprise & Facility Hierarchy"]
-        C[":CPSE\n{name: 'IOCL', code: 'IOCL'}"] -->|":OPERATES"| D[":Depot\n{id: 'Paradip', name: 'Paradip', lat: 20.3164, lon: 86.6085}"]
-        D -->|":HOLDS"| I[":InventoryItem\n{sku: 'IOCL-PR-VLV-01', qty: 14, days_idle: 150}"]
-        I -->|":BELONGS_TO_CPSE"| C
-    end
-
-    subgraph STAR["Property Star Architecture"]
-        I -->|":HAS_SIZE"| S[":Size\n{value: '100.0 mm'}"]
-        I -->|":HAS_PRESSURE_CLASS"| PC1[":PressureClass\n{value: '300#'}"]
-        I -->|":HAS_BODY_METALLURGY"| MG1[":MaterialGrade\n{value: 'ASTM A216 WCB'}"]
-        I -->|":HAS_TRIM"| VT1[":ValveTrim\n{value: 'Trim 8'}"]
-        I -->|":HAS_PORT_BORE"| PB1[":PortBore\n{value: 'Full Bore'}"]
-    end
-
-    subgraph COMPATIBILITY["Directed Mechanical Upgrade Paths"]
-        PC2[":PressureClass\n{value: '600#'}"] -->|":SAFE_UPGRADE_FOR"| PC1
-        PC1 -->|":SAFE_UPGRADE_FOR"| PC0[":PressureClass\n{value: '150#'}"]
-        
-        MG2[":MaterialGrade\n{value: 'ASTM A351 CF8M'}"] -->|":ALLOY_UPGRADE_FOR"| MG1
-        
-        VT2[":ValveTrim\n{value: 'Trim 5'}"] -->|":TRIM_UPGRADE_FOR"| VT1
-        VT1 -->|":TRIM_UPGRADE_FOR"| VT0[":ValveTrim\n{value: 'Trim 1'}"]
-        
-        PB1 -->|":PORT_UPGRADE_FOR"| PB0[":PortBore\n{value: 'Reduced Bore'}"]
-    end
-
-    subgraph REQUISITION["Logistics & Requisition Workflow"]
-        REQ[":Requisition\n{id: 'REQ-2026-089', status: 'APPROVED', qty: 2}"]
-        REQ -->|":REQUESTS_ITEM"| I
-        D -->|":DISPATCHES_REQUISITION"| REQ
-        REQ -->|":DESTINED_FOR"| D_TGT[":Depot\n{id: 'OIL Duliajan', lat: 27.3575, lon: 95.3188}"]
-    end
+    ROOT[":Item\n{name: 'Item'}"] -->|":HAS_ITEM_TYPE"| IT[":ItemType\n{name: 'Gate Valve'}"]
+    IT -->|":HAS_ITEM"| II[":InventoryItem\n{sku_code: 'OIL-VLV-001',\n nominal_bore_mm: 100.0,\n pressure_rating_bar: 20.0}"]
+    
+    II -->|":HAS_STOCK_INFO"| SI[":StockInfo\n{quantity: 12,\n unit_cost_inr: 45000.0,\n days_idle: 180}"]
+    II -->|":STORED_AT"| LOC[":Location\n{name: 'Duliajan Materials Yard'}"]
+    LOC -->|":IN_STATE"| ST[":State\n{name: 'Assam'}"]
+    II -->|":ORDERED_BY"| PO[":PurchaseOrder\n{po_no: 'PO-OIL-2024-101'}"]
+    PO -->|":PART_OF_TENDER"| TND[":CPPPTender\n{tender_id: 'CPPP/2024/091',\n tender_ref: 'TND-REF-01'}"]
+    II -->|":OPERATED_BY"| CPSE[":CPSE\n{name: 'OIL'}"]
+    II -->|":HAS_SPECIFICATION"| SPEC[":MaterialSpecification\n{raw_description: '...',\n standard: 'API 6D',\n indian_standard: 'IS 14846'}"]
 ```
+
+> [!IMPORTANT]
+> **Strict Schema Boundaries:**
+> Separate property nodes (`Depot`, `CanonicalMaterial`, `Heat`, `Size`, `PressureClass`, `MaterialGrade`, generic `Property` nodes, or separate specification/code nodes) are strictly prohibited and excluded from this graph.
+> Engineering dimensions and pressure ratings are stored directly on `:InventoryItem` as `nominal_bore_mm` and `pressure_rating_bar`.
 
 ---
 
 ## 2. File-by-File Technical Breakdown
 
-### [`schema.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/schema.py) — Graph Ontologies & Enums
-Defines standard node labels, property star relationship types, and mechanical compatibility edge taxonomies.
+### [`schema.py`](schema.py) — Graph Ontologies & CPSE Registry
+Defines the standard node labels, relationship types, and the single source of truth for valid CPSE organizations.
 
-- **[`NodeTypes`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/schema.py#L3-L24)**:
-  - Enterprise Nodes: `CPSE`, `DEPOT`, `INVENTORY_ITEM`, `CANONICAL_MATERIAL`.
-  - Physical Property Nodes: `SIZE`, `PRESSURE_CLASS`, `PRESSURE_RATING`, `MATERIAL_GRADE`, `PIPE_SCHEDULE`, `FLANGE_FACING`, `END_CONNECTION`, `VALVE_TRIM`, `PORT_BORE`, `FIRE_SAFE_RATING`, `VALVE_OPERATOR`, `PIPE_MFG_METHOD`, `END_PREP`, `PIPE_COATING`.
-  - Procurement & Standards Nodes: `GEM_CATEGORY`, `UNSPSC_COMMODITY`.
+- **`NodeTypes`**:
+  - `ITEM` (`Item`)
+  - `ITEM_TYPE` (`ItemType`)
+  - `INVENTORY_ITEM` (`InventoryItem`)
+  - `STOCK_INFO` (`StockInfo`)
+  - `LOCATION` (`Location`)
+  - `STATE` (`State`)
+  - `PURCHASE_ORDER` (`PurchaseOrder`)
+  - `CPPP_TENDER` (`CPPPTender`)
+  - `CPSE` (`CPSE`)
+  - `MATERIAL_SPECIFICATION` (`MaterialSpecification`)
 
-- **[`RelTypes`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/schema.py#L25-L45)**:
-  - Star Graph Connectors: `OPERATES`, `HOLDS`, `HAS_SIZE`, `HAS_PRESSURE_CLASS`, `HAS_BODY_METALLURGY`, `HAS_TRIM`, `HAS_PORT_BORE`, `HAS_FACING`, `HAS_END_CONNECTION`, `HAS_FIRE_SAFE_RATING`, `HAS_OPERATOR`, `HAS_SCHEDULE`, `HAS_PRESSURE_RATING`, `HAS_MANUFACTURING_METHOD`, `HAS_END_PREP`, `HAS_COATING`, `STANDARDIZED_AS`, `CLASSIFIED_UNDER`, `MAPPED_TO`.
+- **`RelTypes`**:
+  - `HAS_ITEM_TYPE`, `HAS_ITEM`, `HAS_STOCK_INFO`, `STORED_AT`, `IN_STATE`, `ORDERED_BY`, `PART_OF_TENDER`, `OPERATED_BY`, `HAS_SPECIFICATION`.
 
-- **[`CompatEdges`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/schema.py#L46-L53)**:
-  - Directed Mechanical Substitutions: `EXACT_MATCH`, `SAFE_UPGRADE_FOR`, `ALLOY_UPGRADE_FOR`, `TRIM_UPGRADE_FOR`, `PORT_UPGRADE_FOR`, `COMPATIBLE_WITH`.
-
----
-
-### [`logistics.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py) — Haversine & Carbon Freight Calculations
-Computes inter-depot freight logistics, transit times, and environmental carbon savings.
-
-- **[`DEPOT_COORDINATES`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py#L4-L40)**:
-  - Registry of 19 critical refinery depots and exploration bases across 7 CPSEs with exact GPS coordinates:
-    - **OIL:** Central Materials Warehouse Duliajan `(27.3575, 95.3188)`, Moran Supply Base `(27.1856, 94.9282)`, Digboi `(27.3826, 95.6262)`, Guwahati Pipeline HQ `(26.1855, 91.8214)`, Jorhat Subsurface Base `(26.7509, 94.2037)`, Jodhpur Heavy Oil Base `(26.2389, 73.0243)`, Kakinada Offshore Depot `(16.9891, 82.2475)`.
-    - **NRL:** Numaligarh Refinery Yard `(26.5982, 93.7543)`.
-    - **ONGC:** Assam Asset Nazira `(26.9183, 94.7342)`, Hazira Gas Processing Plant `(21.1000, 72.6500)`, Ankleshwar `(21.6263, 73.0025)`, Uran Gas Complex `(18.8789, 72.9341)`, Mumbai High Logistics Base `(19.3700, 71.3800)`, Rajahmundry `(17.0005, 81.8040)`.
-    - **IOCL:** Panipat `(29.3909, 76.9635)`, Mathura `(27.4924, 77.6737)`, Koyali `(22.3217, 73.1384)`, Paradip `(20.3164, 86.6085)`, Barauni `(25.4714, 85.9990)`, Guwahati `(26.1445, 91.7362)`, Digboi `(27.3834, 95.6228)`.
-    - **BPCL:** Mumbai Mahul Refinery `(19.0252, 72.8890)`, Kochi Refinery `(9.9312, 76.2673)`, Bina Refinery `(24.1814, 78.1292)`.
-    - **HPCL:** Mumbai Refinery `(19.0176, 72.8562)`, Visakh Refinery `(17.6868, 83.2185)`.
-    - **GAIL:** Pata Petrochemicals `(26.4600, 80.5400)`, Vijaipur Gas Processing Complex `(24.1084, 77.2905)`.
-
-- **[`haversine_distance(lat1, lon1, lat2, lon2) -> float`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py#L42-L56)**:
-  - Great-circle distance over the Earth's spherical surface ($R = 6,371.0\text{ km}$):
-    $$d = 2R \arcsin \left( \sqrt{ \sin^2\left(\frac{\Delta \phi}{2}\right) + \cos(\phi_1)\cos(\phi_2)\sin^2\left(\frac{\Delta \lambda}{2}\right) } \right)$$
-
-- **[`road_distance(lat1, lon1, lat2, lon2) -> float`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py#L58-L60)**:
-  - Applies the **1.28x Indian National Highway Tortuosity Factor** to account for terrain, bypass detours, and road network geometry:
-    $$\text{Road Distance (km)} = \text{Haversine Distance} \times 1.28$$
-
-- **[`estimate_transit_hours(distance_km: float) -> float`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py#L62-L64)**:
-  - Estimates heavy commercial vehicle transit duration assuming an average haul speed of $40\text{ km/h}$ plus a $4.0\text{ hours}$ operational buffer for inter-state commercial checkpoints, toll queues, and loading/unloading:
-    $$\text{Transit Hours} = \frac{\text{Distance (km)}}{40.0} + 4.0$$
-
-- **[`estimate_freight_cost_inr(distance_km: float, weight_kg: float) -> float`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py#L66-L70)**:
-  - Models Indian container road transport economics (CONCOR baseline tariff $\approx 5.0\text{ INR}/\text{km-tonne}$):
-    $$\text{Cost (INR)} = \text{Distance (km)} \times \left(\frac{\text{Weight (kg)}}{1000.0}\right) \times 5.0$$
-
-- **[`compute_co2_saved(distance_km: float) -> float`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py#L72-L76)**:
-  - Evaluates environmental savings of domestic inter-CPSE surplus transfer versus foreign emergency air/sea imports:
-    - Overseas shipping: $10,000\text{ km}$ voyage at $10\text{ g } CO_2/\text{tonne-km}$.
-    - Domestic road freight: Bureau of Energy Efficiency (BEE) freight emission factor of $0.0612\text{ kg } CO_2/\text{tonne-km}$ ($\sim 60\text{ g } CO_2/\text{tonne-km}$).
-    $$\text{CO}_2\text{ Saved (kg)} = \frac{100,000 - (\text{Distance (km)} \times 60)}{1000.0} \times \text{Tonnes}$$
-
-- **[`get_nearest_depots(depot_id, top_n=5)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py#L78-L92)** & **[`compute_route_summary(source, target, weight)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py#L93-L113)**:
-  - Returns road distance, transit hours, freight cost, and $CO_2$ impact for inter-depot corridors.
+- **`VALID_CPSES`**:
+  - Registered sovereign CPSE organizations: `OIL`, `NRL`, `IOCL`, `ONGC`, `BPCL`, `HPCL`, `GAIL`.
 
 ---
 
-### [`queries.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/queries.py) — Cypher Query Repository
-Encapsulates high-performance, parameterized Cypher statements executed through Bolt driver sessions.
+### [`seed_graph.py`](seed_graph.py) — CSV Ingestion & Validation
+Parses the master catalog dataset and seeds the Neo4j database using high-throughput Cypher batches.
 
-- **[`GraphQuerier`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/queries.py#L11-L107)**:
-  - `find_compatible_surplus(item_type, size, pressure_class, metallurgy, facing=None) -> List[Dict[str, Any]]`:
-    - Executes zero-tolerance matching on dimension (`:Size`), while traversing multi-hop directed upgrade edges on pressure classes (`[:SAFE_UPGRADE_FOR*]`) and alloy metallurgy (`[:ALLOY_UPGRADE_FOR*]`).
-    - Joins sovereign CPSE and depot coordinates to locate candidate surplus items.
-  - `get_depot_surplus(depot_id: str)`: Lists all idle items held at a specific warehouse.
-  - `get_cpse_surplus(cpse_code: str)`: Returns aggregate surplus line items across all depots owned by an enterprise.
-  - `get_item_property_star(sku_code: str)`: Traverses all `HAS_*` outbound edges from an `InventoryItem` node.
-
----
-
-### [`syncer.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/syncer.py) — PostgreSQL Outbox to Neo4j CDC Syncer
-Translates transactional change events from PostgreSQL into Cypher property graph mutations in real time.
-
-- **[`Neo4jSyncer`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/syncer.py#L18-L338)**:
-  - `ensure_constraints()`: Enforces unique database constraints on `(c:CPSE.name)`, `(d:Depot.id)`, `(i:InventoryItem.sku)`, `(s:Size.value)`, `(p:PressureClass.value)`, `(m:MaterialGrade.value)`, and `(r:Requisition.id)`.
-  - `sync_inventory_item(item: Dict[str, Any])`: Merges `CPSE`, `Depot`, and `InventoryItem` nodes; links ownership via `[:OPERATES]` and `[:HOLDS]`; establishes property star edges (`[:HAS_SIZE]`, `[:HAS_PRESSURE_CLASS]`, `[:HAS_BODY_METALLURGY]`).
-  - `batch_sync_inventory(items: List[Dict[str, Any]], batch_size: int = 500)`: Uses `UNWIND $batch AS row` Cypher batching for bulk initial ingestion.
-  - `sync_requisition(req: Dict[str, Any])`: Merges `Requisition` nodes and attaches `[:REQUESTS_ITEM]`, `[:DISPATCHES_REQUISITION]`, and `[:DESTINED_FOR]` edges.
-  - `sync_event(table_name: str, op: str, payload: Dict[str, Any])`: Dispatches transactional `INSERT`, `UPDATE`, and `DELETE` CDC events from PostgreSQL outbox logs.
+- **`validate_cpse_name(cpse_raw, row_number=None) -> str`**:
+  - Validates `cpse_name` against `VALID_CPSES`.
+  - Rejects missing values, empty strings, and unknown enterprises with detailed exception reporting (including row number and reason).
+  - **Never silently defaults an invalid or missing CPSE to `"OIL"`**.
+- **`parse_csv_row(row, row_number=None) -> Dict[str, Any]`**:
+  - Normalizes and types CSV fields into the approved schema structure.
+- **`GraphSeeder`**:
+  - `create_constraints()`: Enforces uniqueness on `Item.name`, `ItemType.name`, `InventoryItem.sku_code`, `StockInfo.sku_code`, `Location.name`, `State.name`, `PurchaseOrder.po_no`, `CPPPTender.tender_id`, `CPSE.name`, and `MaterialSpecification.sku_code`.
+  - `seed_from_csv(...)`: Batches rows via `UNWIND $rows AS row` and tracks all rejected rows with explicit logging.
 
 ---
 
-### [`seed_graph.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/seed_graph.py) — Graph Topology Initializer
-Initializes the sovereign graph structure across India upon fresh deployment.
+### [`queries.py`](queries.py) — Cypher Query Engine & Access Scoping
+Encapsulates parameterized Cypher queries with strict data-access layer security and attribute-level privacy.
 
-- **[`GraphSeeder`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/seed_graph.py#L6-L164)**:
-  - Clears graph and seeds all 7 CPSE sovereign nodes.
-  - Pre-populates all 19 depot nodes with GPS coordinates.
-  - Creates the mechanical upgrade paths:
-    - Pressure: `1500#` $\rightarrow$ `900#` $\rightarrow$ `600#` $\rightarrow$ `300#` $\rightarrow$ `150#` via `[:SAFE_UPGRADE_FOR]`.
-    - Metallurgy: `CF8M (SS316)` $\rightarrow$ `WCB (Carbon Steel)` via `[:ALLOY_UPGRADE_FOR]`.
-    - Trim: `Trim 5` $\rightarrow$ `Trim 8` $\rightarrow$ `Trim 1` via `[:TRIM_UPGRADE_FOR]`.
-    - Port Bore: `Full Bore` $\rightarrow$ `Reduced Bore` via `[:PORT_UPGRADE_FOR]`.
-  - Ingests initial sample inventory items.
+- **Access Policy Enforcement**:
+  - **In-Tenant Queries (`item.cpse == requesting_cpse`)**: Full item subgraph returned, including sensitive procurement data (`unit_cost_inr`, `po_no`, `tender_id`).
+  - **Cross-Tenant Queries (`item.cpse != requesting_cpse`)**: Requires explicit authorization (`allow_cross_cpse=True`). Commercial prices (`unit_cost_inr`) and procurement IDs (`po_no`, `tender_id`, `tender_ref`) are stripped.
+  - **Unauthorized Access**: If an unauthenticated caller or unauthorized CPSE attempts to access another CPSE's item with a SKU alone (`allow_cross_cpse=False`), the query engine raises a `PermissionError`.
+- **Query Methods**:
+  - `get_item_by_sku(sku_code, requesting_cpse=None, allow_cross_cpse=None)`: Retrieves complete subgraph for a given SKU.
+  - `get_items_by_item_type(item_type_name, limit=50, requesting_cpse=None, allow_cross_cpse=None)`: Scoped list of items by ItemType.
+  - `get_items_by_state(state_name, limit=50, requesting_cpse=None, allow_cross_cpse=None)`: Scoped list of items stored in a designated State.
+  - `get_items_by_location(location_name, limit=50, requesting_cpse=None, allow_cross_cpse=None)`: Scoped list of items at a depot Location.
+  - `get_cpse_surplus(cpse_name, min_days_idle=0, limit=50, requesting_cpse=None, allow_cross_cpse=None)`: Lists surplus items for an enterprise.
+  - `get_idle_items(min_days_idle=90, limit=50, requesting_cpse=None, allow_cross_cpse=None)`: Discovers dormant items across depots.
+  - `get_item_specification(sku_code, requesting_cpse=None, allow_cross_cpse=None)`: Fetches consolidated MaterialSpecification properties.
+  - `get_item_hierarchy(sku_code, requesting_cpse=None, allow_cross_cpse=None)`: Returns hierarchical path from root `Item` to branches.
+  - `find_compatible_surplus(item_type, nominal_bore_mm, pressure_rating_bar, ...)`: Deterministic physical compatibility search.
 
 ---
 
-## 3. Cypher Traversal Examples
+### [`syncer.py`](syncer.py) — PostgreSQL Outbox to Neo4j CDC Syncer
+Real-time Change Data Capture (CDC) synchronization conforming to the approved graph structure.
 
-### 1. Transitive Compatibility Traversal with Upgrade Paths
+- **`Neo4jSyncer`**:
+  - `update_item(...)`: Updates dynamic stock parameters (`quantity`, `unit_cost_inr`, `days_idle`) and physical properties.
+  - `batch_sync_inventory(items, batch_size=500)`: Ingests inventory batches into the approved graph schema with CPSE validation.
+  - `sync_event(table_name, operation, payload)`: Dispatches transactional CDC events.
+
+---
+
+### [`logistics.py`](logistics.py) — Inter-Depot Spatial Routing & Green Logistics
+Computes interstate transit logistics, road routing, and carbon emissions savings across Indian PSU facilities.
+
+- **`DEPOT_COORDINATES`**: GPS coordinates for major refineries and exploration supply bases across all 7 CPSEs.
+- **`haversine_distance(lat1, lon1, lat2, lon2) -> float`**: Great-circle spherical distance ($R = 6,371\text{ km}$).
+- **`road_distance(lat1, lon1, lat2, lon2) -> float`**: Applies the $1.28\times$ Indian National Highway tortuosity factor.
+- **`estimate_transit_hours(distance_km) -> float`**: Computes transit time assuming $40\text{ km/h}$ heavy commercial haul + $4.0\text{ hr}$ logistics/checkpoint buffer.
+- **`estimate_freight_cost_inr(distance_km, weight_kg) -> float`**: Container road freight cost modeling (CONCOR baseline $\approx ₹5.00/\text{ton-km}$).
+- **`compute_co2_saved(distance_km) -> float`**: Evaluates carbon reduction of domestic mutual aid versus overseas emergency imports.
+- **`compute_route_summary(...)`** & **`get_nearest_depots(...)`**: Inter-depot route summary metrics.
+
+---
+
+## 3. Engineering Compatibility Search (`find_compatible_surplus`)
+
+### Principles and Guardrails
+1. **Verified Physical Properties Only**: Matching operates on structured properties stored in `:InventoryItem`:
+   - `nominal_bore_mm`: Exact dimensional match ($\pm 0.1\text{ mm}$ tolerance).
+   - `pressure_rating_bar`: Safe rating threshold (candidate item's pressure rating must be $\ge$ required pressure rating).
+2. **Zero Hallucination / Zero Guessing**:
+   - `nominal_bore_mm` and `pressure_rating_bar` must be valid positive values.
+   - Missing required engineering properties result in an immediate, explicit `ValueError`.
+   - The graph engine never guesses engineering parameters from description strings or claims safety based on text similarity.
+3. **Explicit Outcome Classification**:
+   - `EXACT_SPECIFICATION_MATCH`: Candidate pressure rating exactly matches required rating.
+   - `SAFE_PRESSURE_UPGRADE`: Candidate pressure rating exceeds required rating.
+4. **Attribute-Level Commercial Privacy**:
+   - On cross-CPSE mutual aid queries, candidate items are surfaced to locate surplus, but `unit_cost_inr` and internal procurement references are strictly stripped.
+
+---
+
+## 4. Cypher Traversal Examples (Approved Unified Schema)
+
+### 1. Retrieve Complete Item Subgraph by SKU
 ```cypher
-MATCH (target_size:Size {value: '100.0 mm'})
-MATCH (item:InventoryItem {item_type: 'Gate Valve'})-[:HAS_SIZE]->(target_size)
-MATCH (item)-[:HAS_PRESSURE_CLASS]->(pc:PressureClass)
-MATCH (target_pc:PressureClass {value: '150#'})
-WHERE pc = target_pc OR (pc)-[:SAFE_UPGRADE_FOR*]->(target_pc)
+MATCH (item:InventoryItem {sku_code: 'OIL-STU-00001'})
+OPTIONAL MATCH (root:Item)-[:HAS_ITEM_TYPE]->(it:ItemType)-[:HAS_ITEM]->(item)
+OPTIONAL MATCH (item)-[:HAS_STOCK_INFO]->(stock:StockInfo)
+OPTIONAL MATCH (item)-[:STORED_AT]->(loc:Location)-[:IN_STATE]->(state:State)
+OPTIONAL MATCH (item)-[:ORDERED_BY]->(po:PurchaseOrder)-[:PART_OF_TENDER]->(tender:CPPPTender)
+OPTIONAL MATCH (item)-[:OPERATED_BY]->(cpse:CPSE)
+OPTIONAL MATCH (item)-[:HAS_SPECIFICATION]->(spec:MaterialSpecification)
+RETURN
+    root.name AS root_item,
+    it.name AS item_type,
+    item.sku_code AS sku_code,
+    item.nominal_bore_mm AS nominal_bore_mm,
+    item.pressure_rating_bar AS pressure_rating_bar,
+    stock.quantity AS quantity,
+    stock.unit_cost_inr AS unit_cost_inr,
+    loc.name AS location,
+    state.name AS state,
+    cpse.name AS cpse,
+    po.po_no AS po_no,
+    tender.tender_id AS tender_id,
+    spec.raw_description AS raw_description;
+```
 
-MATCH (item)-[:HAS_BODY_METALLURGY]->(mg:MaterialGrade)
-MATCH (target_mg:MaterialGrade {value: 'WCB'})
-WHERE mg = target_mg OR (mg)-[:ALLOY_UPGRADE_FOR*]->(target_mg)
-
-MATCH (cpse:CPSE)-[:OPERATES]->(d:Depot)-[:HOLDS]->(item)
-RETURN item.sku AS sku_code, cpse.name AS cpse, d.name AS depot_name,
-       d.lat AS lat, d.lon AS lon, item.qty AS qty, item.days_idle AS days_idle;
+### 2. Physical Compatibility Traversal with Pressure Upgrade
+```cypher
+MATCH (root:Item)-[:HAS_ITEM_TYPE]->(it:ItemType {name: 'Gate Valve'})-[:HAS_ITEM]->(item:InventoryItem)
+MATCH (item)-[:HAS_STOCK_INFO]->(stock:StockInfo)
+MATCH (item)-[:STORED_AT]->(loc:Location)-[:IN_STATE]->(state:State)
+MATCH (item)-[:OPERATED_BY]->(cpse:CPSE)
+OPTIONAL MATCH (item)-[:HAS_SPECIFICATION]->(spec:MaterialSpecification)
+WHERE abs(item.nominal_bore_mm - 100.0) < 0.1
+  AND item.pressure_rating_bar >= 20.0
+  AND stock.quantity > 0
+  AND stock.days_idle >= 90
+RETURN
+    item.sku_code AS sku_code,
+    it.name AS item_type,
+    item.nominal_bore_mm AS nominal_bore_mm,
+    item.pressure_rating_bar AS pressure_rating_bar,
+    stock.quantity AS quantity,
+    stock.days_idle AS days_idle,
+    loc.name AS location,
+    state.name AS state,
+    cpse.name AS cpse,
+    spec.raw_description AS raw_description
+ORDER BY stock.days_idle DESC, item.pressure_rating_bar ASC;
 ```
 
 ---
 
-## 4. Usage Example
+## 5. Python Usage Examples
 
 ```python
-from graph.logistics import road_distance, compute_route_summary, get_nearest_depots
 from graph.queries import GraphQuerier
+from graph.logistics import compute_route_summary
 
-# 1. Compute Inter-Depot Logistics between OIL Duliajan and IOCL Paradip
-summary = compute_route_summary(
+# 1. Inter-Depot Logistics
+route = compute_route_summary(
     source_depot_id="OIL Duliajan",
-    target_depot_id="Paradip",
-    weight_kg=2500.0
+    target_depot_id="Numaligarh",
+    weight_kg=1500.0,
 )
+print(f"Road Distance: {route['road_distance_km']} km")
+print(f"Transit Duration: {route['estimated_transit_hours']} hrs")
+print(f"Carbon Saved: {route['co2_saved_kg']} kg CO2")
 
-print("--- Inter-Plant Logistics Summary ---")
-print(f"Origin Depot:       {summary['source']}")
-print(f"Destination Depot:  {summary['target']}")
-print(f"Road Distance:      {summary['road_distance_km']} km (1.28x Tortuosity)")
-print(f"Estimated Transit:  {summary['estimated_transit_hours']} hrs (@ 40 km/h + 4hr buffer)")
-print(f"Freight Cost:       Rs. {summary['estimated_freight_cost_inr']:,.2f}")
-print(f"Carbon CO2 Saved:   {summary['co2_saved_kg']} kg CO2 vs Overseas Import")
+# 2. CPSE-Scoped Querier
+querier = GraphQuerier(requesting_cpse="OIL")
+try:
+    # In-tenant access: returns full item with pricing
+    oil_item = querier.get_item_by_sku("OIL-STU-00001")
+    print(f"In-Tenant SKU: {oil_item['item']['sku_code']}, Price: {oil_item['stock']['unit_cost_inr']}")
 
-# 2. Query Transitive Mechanical Substitutions from Neo4j
-querier = GraphQuerier()
-if querier.driver:
+    # Cross-CPSE mutual aid compatibility search
     candidates = querier.find_compatible_surplus(
         item_type="Gate Valve",
-        size="4 inch",
-        pressure_class="150#",
-        metallurgy="WCB"
+        nominal_bore_mm=100.0,
+        pressure_rating_bar=20.0,
+        allow_cross_cpse=True,
     )
-    print(f"\nFound {len(candidates)} compatible surplus items across CPSE network.")
-    for cand in candidates:
-        print(f"  -> SKU: {cand['sku_code']} | CPSE: {cand['cpse']} | Depot: {cand['depot_name']} | Qty: {cand['qty']}")
+    for c in candidates:
+        # Commercial prices for non-OIL items are automatically stripped
+        print(f"Found candidate {c['sku_code']} from {c['cpse']} (Status: {c['compatibility_status']})")
+finally:
     querier.close()
 ```
 
 ---
 
-## 5. Testing & Verification
+## 6. Testing & Verification
 
-Run the test suite verifying logistics formulas, 1.28x tortuosity, BEE emissions, and Cypher query schemas:
+Run the test suite for schema validation, CSV parsing, compatibility behavior, and access scoping:
 
 ```bash
-# Run Haversine, road tortuosity, and freight calculation unit tests
-pytest tests/unit/test_logistics.py -v
+# Compile check
+uv run python -m compileall graph
 
-# Run Neo4j graph API and query execution tests
-pytest tests/api/test_graph_api.py -v
+# Run graph schema, CSV validation, and mock query tests
+uv run pytest tests/unit/test_graph_schema_and_queries.py -v
+
+# Run logistics calculations unit tests
+uv run pytest tests/unit/test_logistics.py -v
 ```

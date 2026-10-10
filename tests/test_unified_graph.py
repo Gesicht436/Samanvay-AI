@@ -11,6 +11,21 @@ uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 user = os.getenv("NEO4J_USER", "neo4j")
 pwd = os.getenv("NEO4J_PASSWORD", "samanvay_graph")
 
+
+def _is_neo4j_live() -> bool:
+    try:
+        d = GraphDatabase.driver(uri, auth=(user, pwd))
+        d.verify_connectivity()
+        d.close()
+        return True
+    except Exception:
+        return False
+
+
+NEO4J_LIVE = _is_neo4j_live()
+
+
+@pytest.mark.skipif(not NEO4J_LIVE, reason="Live Neo4j instance not reachable at configured URI")
 def test_unified_graph_structure():
     driver = GraphDatabase.driver(uri, auth=(user, pwd))
     with driver.session() as s:
@@ -78,8 +93,9 @@ def test_unified_graph_structure():
 
     driver.close()
 
+@pytest.mark.skipif(not NEO4J_LIVE, reason="Live Neo4j instance not reachable at configured URI")
 def test_graph_querier():
-    querier = GraphQuerier(uri, user, pwd)
+    querier = GraphQuerier(uri, user, pwd, requesting_cpse="OIL")
     try:
         # Test get_item_by_sku
         item_data = querier.get_item_by_sku("OIL-STU-00001")
@@ -100,8 +116,8 @@ def test_graph_querier():
         assert hier["item_type"] == "Stud Bolt"
         assert hier["sku_code"] == "OIL-STU-00001"
 
-        # Test get_items_by_item_type
-        items = querier.get_items_by_item_type("Stud Bolt")
+        # Test get_items_by_item_type (with cross-CPSE authorized flag)
+        items = querier.get_items_by_item_type("Stud Bolt", allow_cross_cpse=True)
         assert len(items) > 0
         sku_list = [x["sku_code"] for x in items]
         assert "BPCL-STU-03517" in sku_list or "OIL-STU-00001" in sku_list
@@ -128,6 +144,8 @@ def test_graph_querier():
     finally:
         querier.close()
 
+
+@pytest.mark.skipif(not NEO4J_LIVE, reason="Live Neo4j instance not reachable at configured URI")
 def test_graph_syncer():
     syncer = GraphSyncer(uri, user, pwd)
     try:
@@ -137,7 +155,7 @@ def test_graph_syncer():
         assert updated["stock"]["quantity"] == 65
 
         # Query back via GraphQuerier to verify update was persisted in DB
-        querier = GraphQuerier(uri, user, pwd)
+        querier = GraphQuerier(uri, user, pwd, requesting_cpse="OIL")
         item = querier.get_item_by_sku("OIL-STU-00001")
         assert item["stock"]["days_idle"] == 99
         assert item["stock"]["quantity"] == 65

@@ -23,7 +23,7 @@ India's 7 major public sector oil, gas, and petrochemical enterprises (**OIL, IO
 4. **Multi-Property Engineering Discovery**: Detailed tolerance matching across nominal bore, pressure class, schedule, metallurgy, IIW weldability, sour service (NACE MR0175), facing ends, and valve trims.
 5. **Multi-Tenant Consignment Isolation & RBAC**: Strict consignment scoping (requesters see only their own demands and incoming depot requests; cross-tenant items are shielded) with locked organization badges and cryptographic segregation of duties.
 6. **25+ Pre-Seeded Evaluation Personas**: 1-Click login hub covering all 7 CPSEs, Central MoPNG Vigilance Auditor, and Super Admin.
-7. **Real-Time Logistics Topology & Star Graph**: Neo4j 5.20 knowledge graph modeling 19 CPSE refinery depots across India, road tortuosity ($1.28\times$), transit hours, and carbon footprint ($CO_2$) savings.
+7. **Real-Time Logistics Topology & Unified Knowledge Graph**: Neo4j 5.20 unified knowledge graph modeling Item, ItemType, InventoryItem, Location, State, PurchaseOrder, CPPPTender, CPSE, MaterialSpecification, and StockInfo with road tortuosity ($1.28\times$), transit hours, and carbon footprint ($CO_2$) savings.
 8. **Sovereign Audit Ledger & CISF Pass**: Tamper-evident SHA-256 chained audit blocks with Merkle verification and 100% offline air-gapped SVG QR code gate passes.
 
 For deep architectural specifications, see **[architecture.md](architecture.md)**.
@@ -96,7 +96,7 @@ Samanvay-AI/
 | **NER & Dialects** | [ml/ner/README.md](ml/ner/README.md) | 40+ acronym CPSE dialect normalizer (IOCL, ONGC, metric SAP) and slot tagger |
 | **Ranker & Scoring** | [ml/ranking/README.md](ml/ranking/README.md) | 4 domain subvectors, XGBoost ranking, TreeSHAP explainability |
 | **Vision & OCR** | [ml/vision/README.md](ml/vision/README.md) | Dual-Path OCR ($<50$ms fast-path), IIW Carbon Equivalent ($CE$), PREN, MTC parsing |
-| **Knowledge Graph** | [graph/README.md](graph/README.md) | Neo4j 5.20 star graph, 19 refinery depot GPS coords, Haversine, road tortuosity, $CO_2$ |
+| **Knowledge Graph** | [graph/README.md](graph/README.md) | Neo4j 5.20 unified architecture, CPSE-scoped reads, Haversine, road tortuosity, $CO_2$ |
 | **Docker Engine** | [docker/README.md](docker/README.md) | Multi-container compose (Postgres, Qdrant, Neo4j, Backend, Frontend, CDC worker) |
 | **Database Init** | [docker/init-db/README.md](docker/init-db/README.md) | Initial SQL scripts, UUID v4 extension, `pgcrypto`, outbox triggers |
 | **Scripts & Workers** | [scripts/README.md](scripts/README.md) | Standalone CDC worker, database seeder, live API verification smoke test |

@@ -91,7 +91,7 @@ flowchart LR
   - Connects to PostgreSQL with native `psycopg2` extensions and registers `LISTEN samanvay_cdc_channel`.
   - Captures asynchronous notifications from transactional triggers when any row in `inventory_items` or `requisitions` is created, updated, or removed.
   - Queries `cdc_outbox` for rows with `status='PENDING'`.
-  - Propagates changes into Neo4j graph nodes (`:InventoryItem`, `:Depot`, `:CPSE`, `:MaterialGrade`, `:PressureClass`) via [Neo4jSyncer](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/syncer.py).
+  - Propagates changes into Neo4j unified graph nodes (`:Item`, `:ItemType`, `:InventoryItem`, `:StockInfo`, `:Location`, `:State`, `:PurchaseOrder`, `:CPSE`, `:MaterialSpecification`) via [Neo4jSyncer](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/syncer.py).
   - Flags processed outbox records with `status='COMPLETED'` and timestamp `processed_at`.
 - **Execution:**
   ```bash
