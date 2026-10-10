@@ -331,6 +331,8 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
+        </>
+        )}
 
         {/* Right Column: Standard Credentials Login Form (5 cols) */}
         <div className="lg:col-span-5 space-y-4">

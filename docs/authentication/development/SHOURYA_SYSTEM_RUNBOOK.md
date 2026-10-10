@@ -1488,6 +1488,118 @@ Before starting a new coding-agent task:
 
 ---
 
+## Task 27 — Audit Findings and Targeted Corrections (10 October 2026)
+
+### Audit verification (read-only phase, before any edit)
+1. **Login page JSX (CONFIRMED, working tree).** Commit `8268a0a` shipped
+   `frontend/src/app/login/page.tsx` with `{showEvaluationHub && (` / `<>`
+   opened before the left persona-hub column and no closing `</>` / `)}` at
+   all (unbalanced JSX). The working tree had appended `</>` / `)}` at the
+   END of the file (after the right "Standard Credentials" column), which
+   balanced the syntax but wrapped BOTH columns in `showEvaluationHub`.
+   Since `showEvaluationHub = !isProductionBuild`, a production build would
+   have rendered NO login form at all. Intent (per the file's own comment):
+   only the persona hub is dev-only; the credentials form must always render.
+2. **Alembic template (CONFIRMED).** `backend/alembic/script.py.mako` was
+   deleted in the working tree; `backend/app/script.py.mako` (untracked)
+   held a byte-identical copy (SHA-256 verified against HEAD). `alembic.ini`
+   has `script_location = alembic`, so only `backend/alembic/script.py.mako`
+   is the operative path; `alembic upgrade head` was unaffected, only
+   `alembic revision` generation would fail.
+3. **Frontend API fallback (CONFIRMED).** `frontend/src/lib/api.ts`
+   server-side last-resort fallback was `http://samanvay-ai-backend:8000`
+   (Docker-only hostname, unresolvable on host-local runs). The env override
+   chain (`INTERNAL_BACKEND_URL` → `NEXT_PUBLIC_API_BASE_URL` →
+   `NEXT_PUBLIC_API_URL`) and browser-side relative `/api/v1` were intact.
+   Docker Compose sets `INTERNAL_BACKEND_URL` explicitly, so changing only
+   the fallback default is Docker-safe. `frontend/next.config.ts` had
+   already been corrected to `http://127.0.0.1:8000` in the working tree
+   (kept); `UserHeaderBadge.tsx` (`useState` from `react`) was already
+   correct (kept).
+4. **PostgreSQL (ENVIRONMENT).** No listener on `127.0.0.1:5432`; no
+   Windows PostgreSQL service, no Docker CLI, no `Program Files\PostgreSQL`
+   installation. `backend/main.py` lifespan in development calls
+   `init_db()` → `create_all()` → connection refused → uvicorn aborts
+   startup (only seeding is wrapped in try/except). In production,
+   `verify_schema_version()` fails closed by design. All auth/session
+   features (login, `/me`, logout, `auth_sessions`, provisioning, audit
+   ledger) are DB-backed and unavailable without PostgreSQL. Per the Golden
+   Rule (section 25), no application code was changed to compensate.
+
+### Changes made (approved: fixes 1–3 only)
+* `frontend/src/app/login/page.tsx`: moved the `</>` / `)}` pair from the
+  end of the conditional (after the right column) to immediately after the
+  left persona-hub column closes, so `showEvaluationHub` wraps only the hub
+  and the standard credentials form always renders. Two-line move.
+* `frontend/src/lib/api.ts`: server-side fallback changed to
+  `http://127.0.0.1:8000`. Env-var override chain and browser relative
+  path untouched.
+* `backend/alembic/script.py.mako`: restored byte-identical to HEAD from
+  the kept untracked copy `backend/app/script.py.mako` (user elected to
+  keep that copy; it remains untracked).
+* No commit, no push, no migration, no schema/credential/dependency change.
+
+### Test outcomes (actual)
+* `npx tsc --noEmit` (frontend) → **PASS** (exit 0).
+* `python -m pytest tests/unit -q` → **159 passed** in 21.48s (includes
+  migration-integrity + csrf/session/security suites).
+* `npm run build` → **NOT RUN** by user decision: a live Next.js server
+  (PID 11792, from a prior session) holds port 3000 and the shared
+  `.next` directory; left untouched.
+* DB-backed `tests/api/*` → **BLOCKED**: PostgreSQL unavailable (see
+  Environment Issues).
+
+### Environment issues
+* PostgreSQL 16 is not installed/running on this machine at all (no
+  service, no Docker, no binaries). Backend startup and every DB-backed
+  feature remain BLOCKED until PostgreSQL is provisioned by the user.
+* A leftover Next.js server from a prior (interrupted) session is serving
+  port 3000 from `frontend/.next`; it predates these fixes and does NOT
+  reflect them. Restart it (commands below) to pick up the corrections.
+
+### Local deployment commands (verified environment, PowerShell)
+
+Start (each in its own terminal, repository root `C:\Users\HP\Samanvay-AI`):
+
+```powershell
+# Terminal 0 — PostgreSQL: NOT installed on this machine. Until it is
+# provisioned (user action), the backend will refuse to start and all
+# auth/session features stay unavailable. Do not run migrations yet.
+
+# Terminal 1 — Backend (development)
+cd C:\Users\HP\Samanvay-AI
+.\.venv\Scripts\Activate.ps1
+$env:APP_ENV = "development"
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Terminal 2 — Frontend (first stop the stale server if still running)
+$conn = Get-NetTCPConnection -State Listen -LocalPort 3000 -ErrorAction SilentlyContinue
+if ($conn) { Stop-Process -Id $conn[0].OwningProcess -Force }
+cd C:\Users\HP\Samanvay-AI\frontend
+npm run dev
+```
+
+Verify: `http://127.0.0.1:8000/health` (backend) and `http://127.0.0.1:3000/login`
+(frontend; the standard credentials form must be visible — production
+builds show it without the persona hub).
+
+Shutdown (reverse order, per terminal):
+
+```powershell
+# Frontend and backend terminals: press Ctrl+C.
+# If a terminal is lost, stop by port:
+foreach ($p in 3000, 8000) {
+  $c = Get-NetTCPConnection -State Listen -LocalPort $p -ErrorAction SilentlyContinue
+  if ($c) { Stop-Process -Id $c[0].OwningProcess -Force }
+}
+```
+
+### Known limitation
+* `npm run build` (production compile) has not been re-verified since the
+  login-page fix; `tsc --noEmit` passes on the fixed file. Run
+  `npm run build` in `frontend/` when port 3000 is free.
+
+
 ## Document Status
 
 **Purpose:** Local development and execution guardrail
