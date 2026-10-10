@@ -9,7 +9,7 @@ THESAURUS_PATH = Path(__file__).parent / "thesaurus.json"
 
 def load_thesaurus() -> dict:
     if THESAURUS_PATH.exists():
-        with open(THESAURUS_PATH, "r", encoding="utf-8") as f:
+        with open(THESAURUS_PATH, "r", encoding="utf-8-sig") as f:
             return json.load(f)
     return {"material_standards": {}, "item_types": {}}
 
@@ -30,7 +30,6 @@ def fix_numeric_ambiguities(val_str: str) -> str:
     if not val_str:
         return val_str
     
-    # Replace misrecognized O/o or l/I after decimal point or between digits
     s = re.sub(r"(?<=\d\.)[Oo](?=\d|\b)", "0", val_str)
     s = re.sub(r"(?<=\d\.)[lI](?=\d|\b)", "1", s)
     s = re.sub(r"(?<=\d)[Oo](?=\d|\b)", "0", s)
