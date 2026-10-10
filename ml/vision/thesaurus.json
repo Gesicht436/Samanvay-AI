@@ -1,0 +1,27 @@
+{
+  "material_standards": {
+    "A105N": "ASTM A105",
+    "A105": "ASTM A105",
+    "SA105": "ASTM A105",
+    "SA105N": "ASTM A105",
+    "A106": "ASTM A106",
+    "A106B": "ASTM A106 Grade B",
+    "A333": "ASTM A333",
+    "A312": "ASTM A312",
+    "TP304": "ASTM A312 TP304",
+    "TP316": "ASTM A312 TP316",
+    "TP316L": "ASTM A312 TP316L"
+  },
+  "item_types": {
+    "CS": "CARBON STEEL",
+    "SS": "STAINLESS STEEL",
+    "LTCS": "LOW TEMPERATURE CARBON STEEL",
+    "BW": "BUTTWELD",
+    "SW": "SOCKET WELD",
+    "RF": "RAISED FACE",
+    "FF": "FLAT FACE",
+    "RTJ": "RING TYPE JOINT",
+    "RED": "REDUCER",
+    "TEE": "EQUAL TEE"
+  }
+}
