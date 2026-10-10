@@ -38,6 +38,7 @@ from backend.app.schemas.auth import (
 )
 from backend.app.services import auth_rate_limit as rate_limit
 from backend.app.services import auth_session_service as session_service
+from backend.app.services import hibp_service
 
 logger = logging.getLogger("samanvay.auth")
 
@@ -111,7 +112,11 @@ def login_user(
     """
     ip, user_agent = _client_meta(request)
 
-    guard = rate_limit.get_rate_limit_guard("login", limit=10, window_seconds=60)
+    guard = rate_limit.get_rate_limit_guard(
+        "login",
+        limit=settings.auth_login_rate_limit_attempts,
+        window_seconds=settings.auth_login_rate_limit_window_seconds,
+    )
     rl = guard.consume("login", credentials.username.strip().lower())
     if not rl.allowed:
         session_service.record_security_event(
@@ -349,6 +354,32 @@ def provision_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username or email is already registered.",
+        )
+
+    try:
+        breach_count = hibp_service.check_password_against_hibp(payload.password)
+    except hibp_service.HIBPVerificationError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=hibp_service._RETRYABLE_VERIFICATION_MESSAGE,
+            headers={"Retry-After": "300"},
+        ) from None
+
+    if breach_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=hibp_service._BREACHED_PASSWORD_MESSAGE,
+        )
+
+    # Server-side role validity gate (AUTH-006 §7): the Pydantic `UserRole`
+    # enum constrains the request body, but this is an additive defense so that
+    # a role outside the frozen `perm.VALID_ROLES` set can never be persisted
+    # into `users.role`. The check runs before any `User` construction or DB
+    # interaction and raises HTTP 422 otherwise.
+    if payload.role.value not in perm.VALID_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid role: the assigned role is not a valid sovereign functional role.",
         )
 
     user = User(

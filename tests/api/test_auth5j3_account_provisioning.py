@@ -233,6 +233,23 @@ def test_anonymous_provisioning_denied_without_event(client):
         json=payload,
         headers={"Origin": settings.allowed_origins_list[0]},
     )
+
+
+def test_provision_invalid_role_rejected(client, _admin_session, _admin_headers):
+    """An invalid role must be rejected with HTTP 422 before any user INSERT."""
+    payload = _provision_payload()
+    payload["role"] = "INVALID_ROLE"
+
+    _authenticate(client, _admin_session)
+    response = client.post(
+        "/api/v1/auth/users",
+        json=payload,
+        headers=_admin_headers(_admin_session),
+    )
+
+    assert response.status_code == 422, response.text
+    assert "Invalid role" in response.json()["detail"]
+
     assert response.status_code == 401
     assert not _user_exists(payload["username"])
     assert _events_for_username(payload["username"]) == []

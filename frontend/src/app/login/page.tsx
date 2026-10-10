@@ -80,7 +80,15 @@ export default function LoginPage() {
         router.push(redirectUrl || '/dashboard');
       }, 400);
     } catch (err: any) {
-      setError(err.message || 'Authentication failed. Please verify credentials.');
+      if (err?.status === 429) {
+        setError(
+          "Too many sign-in attempts. Please wait a minute and try again."
+        );
+      } else {
+        setError(
+          err.message || "Authentication failed. Please verify credentials."
+        );
+      }
       setLoggingInUsername(null);
     } finally {
       setIsSubmitting(false);

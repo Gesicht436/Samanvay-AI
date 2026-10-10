@@ -12,14 +12,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.core.config import settings
-from backend.app.models.base import init_db
+from backend.app.models.base import init_db, verify_schema_version
 from backend.app.api.routers import ingest, match, inventory, requisition, graph, audit, auth
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan: initialize DB tables, auto-seed, and start CDC worker."""
-    init_db()
+    """Application lifespan: verify/prepare DB schema, auto-seed, and start CDC worker.
+
+    Schema provisioning is an explicit deployment operation and is NEVER performed
+    automatically here.  In production we only *verify* the schema is the
+    migration-managed baseline the application expects and fail closed otherwise;
+    we never create, upgrade, or stamp tables at startup.  In development/test we
+    retain the create_all() bootstrap for convenience and test compatibility.
+    """
+    if settings.is_production:
+        verify_schema_version()
+    else:
+        init_db()
     try:
         from backend.app.services.seeder import seed_database_if_empty, seed_users_if_empty
         seed_database_if_empty()

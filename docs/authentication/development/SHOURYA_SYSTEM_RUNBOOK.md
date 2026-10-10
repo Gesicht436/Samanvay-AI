@@ -1142,7 +1142,166 @@ plain non-partial index — all DB-free.
   `docs/authentication/*` design record touched.
 
 
-# 23. Git Verification Checklist
+## Task 23 — Step 2: Minimal Rate-Limiting Improvements
+
+### Changes made (5 approved files)
+* `tests/unit/test_rate_limit.py` (new, 7 tests, DB-free): boundary
+  (10 allowed / 11th denied at limit=10); login rate-limit settings defaults and validation; fixed-window
+  reset via monkeypatched `time.monotonic` (no sleeping); scope/subject
+  isolation; `Retry-After` bounds (1 <= N <= window); fail-closed on
+  internal error (setting `_buckets` or `_lock` to `None` produces `AttributeError` ->
+  `allowed=False`, `reason_code=RATE_LIMIT_BACKEND_FAILURE`).
+* `backend/app/core/config.py`: `auth_login_rate_limit_attempts: int =
+  Field(default=10, ge=1, le=1000, alias="AUTH_LOGIN_RATE_LIMIT_ATTEMPTS")`
+  and `auth_login_rate_limit_window_seconds: int = Field(default=60,
+  ge=1, le=3600, alias="AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS")` — bounds
+  follow the file's existing `Field` convention (defaults preserved
+  exactly: 10 attempts / 60 s).
+* `backend/app/api/routers/auth.py`: login guard now reads
+  `settings.auth_login_rate_limit_attempts` /
+  `settings.auth_login_rate_limit_window_seconds` instead of literals.
+  Default behavior unchanged (settings import verified: attempts=10,
+  window=60).
+* `frontend/src/app/login/page.tsx`: `catch` shows "Too many sign-in
+  attempts. Please wait a minute and try again." when
+  `err?.status === 429` (ApiError carries `.status`); all other errors
+  unchanged. Error banner JSX untouched (rose styling preserved).
+* `docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md`: this entry.
+
+### Tests run (real outcomes)
+* `pytest tests/unit/test_rate_limit.py tests/unit/test_csrf_origin.py
+  tests/unit/test_session_security.py tests/unit/test_security.py` ->
+  **41 passed** (7 new + 34 existing).
+* `pytest tests/api/test_session_lifecycle.py -k '<6 static tests>'
+  tests/api/test_signup_api.py` -> **6 passed, 5 deselected**.
+* `pytest tests/api/test_auth_api.py -k 'test_get_seed_users or
+  test_get_me_unauthorized or test_legacy_public_seed_route_retired'` ->
+  **3 passed, 4 deselected**.
+* `git diff --check` on approved files -> clean.
+
+### Errors encountered and resolutions
+* Two PowerShell invocations returned uncaptured output via shell
+  integration (Task 17 recurring class): a trivial `Test-Path
+  frontend/node_modules` probe and the `Settings` attribute print.
+  Re-ran both with the call-operator/quoted form; results obtained
+  (`node_modules` absent; field names `auth_login_rate_limit_*`).
+* My own verification typo used `login_rate_limit_attempts` (missing
+  `auth_` prefix) -> AttributeError; corrected and re-verified
+  (attempts=10, window=60). No conclusion drawn from the typo.
+* A duplicated 429 branch was introduced in `login/page.tsx` by two
+  overlapping edits. Detected via `git diff`; repaired to a single clean
+  429 branch with the banner JSX byte-identical to HEAD. No unrelated UI
+  change.
+* Final `git diff` review caught the runbook documenting `le=1000`/
+  `le=3600` upper bounds while `config.py` had only `ge=1`. Aligned the
+  code to the documented form (a huge limit would silently disable the
+  limiter; a huge window would lock users out). Bounds rejection proven:
+  `AUTH_LOGIN_RATE_LIMIT_ATTEMPTS=0` / `WINDOW_SECONDS=99999` raise
+  `ValidationError` at import (`settings = Settings()`); defaults
+  re-verified as attempts=10, window=60. Full unit suite re-run green.
+* `read_files` returned stale `[outdated]` cached views of
+  `login/page.tsx` twice; shell `Get-Content`/`Select-String` used as
+  authoritative source per Task 17 lesson.
+
+### Known limitations
+* Process-local budget (no shared/Redis provider), no per-IP dimension,
+  thresholds still development placeholders pending deployment policy.
+* DB-backed auth tests BLOCKED (PostgreSQL unavailable); frontend
+  `tsc`/`next build` BLOCKED (`frontend/node_modules` absent,
+  `Test-Path` = False; nothing installed).
+
+### SECURITY / REGRESSION CHECK
+
+Pass — 41 unit + 9 API-static green; login defaults unchanged (10/60);
+no admin-write, logout, CSRF, session, migration, model, Docker,
+dependency, lockfile, env, or `.kilo/` change.
+
+### REMAINING ACTION
+
+Awaiting owner review/commit. Nothing staged, committed, or pushed.
+
+## Task 24 — HIBP Pwned Password Prevention
+
+### Changes made (3 files)
+* `backend/app/services/hibp_service.py` (new): privacy-preserving range lookup
+  implementing SHA-1 truncation, k-anonymity range request, local suffix
+  comparison, bounded 5s read timeout, and retryable `HIBPVerificationError`
+  on network/HTTP/malformed failures. No new dependencies.
+* `backend/app/api/routers/auth.py`: `provision_user` now calls
+  `hibp_service.check_password_against_hibp(payload.password)` before the
+  bcrypt hash. Breached password -> HTTP 400 with a safe, generic message;
+  HIBP unavailable -> HTTP 503 with `Retry-After` instead of silently
+  accepting the unchecked password.
+* `tests/unit/test_hibp_service.py` (new, 19 DB-free tests): matching,
+  non-matching, valid parsing (single + multiple entries), malformed
+  rejection, count edge cases (signed, whitespace-padded, non-ASCII-digit),
+  client lifecycle, prefix-only upstream leak, HTTP error, network failure.
+
+### Tests run (real outcomes)
+* `pytest tests/unit/test_hibp_service.py -q` -> **19 passed**
+* `pytest tests/unit -q` -> **159 passed**
+
+### Security contract
+* Plaintext password and the full 40-character SHA-1 hash never leave the
+  process.
+* Only the first 5 hex characters (SHA-1 range prefix) are sent to
+  `https://api.pwnedpasswords.com/range/{prefix}`.
+* The response suffix map is parsed into a temporary in-memory dict for local
+  suffix matching; the suffix comparison happens locally, and only the
+  matching suffix/count pair is returned to the caller.
+* No email-breach API is used.
+* All error paths return safe, generic messages with no internal keys
+  exposed.
+
+### Errors encountered and resolutions
+* PowerShell array-of-tuples was misparsed by the shell layer; commands were
+  re-issued as single semicolon-separated strings.
+* `test_hibp_service.py` fixtures used six-character suffixes (`ABC123`,
+  `DEF456`, `00000`) instead of the required 35-character hex suffixes; the
+  tests were corrected to derive 35-char suffixes from dependency hashes and
+  to explicitly cover empty responses, signed/whitespace-padded/non-ASCII
+  counts, client lifecycle (injected vs. service-created), and the
+  prefix-only upstream leak.
+* Final `git diff` confirmed only the expected files changed; nothing was
+  staged or committed.
+
+### Known limitations
+* Only the provision path (`POST /auth/users`) is covered; there is no
+  change-password route to extend.
+* The public HIBP range endpoint is contacted with a 5s read timeout on each
+  password set; no corpus cache is introduced (no dependency/DB).
+
+
+## Task 25 — Harden Provisioning Role Validation
+
+### Changes made (2 files)
+* `backend/app/api/routers/auth.py`: `provision_user` now enforces role validity
+  server-side before constructing or persisting the `User`. An invalid role that
+  is not in `perm.VALID_ROLES` raises HTTP 422
+  (`Invalid role: the assigned role is not a valid sovereign functional role.`).
+  The `ACCOUNT_PROVISION` permission requirement is unchanged.
+* `tests/api/test_auth5j3_account_provisioning.py` (new, 1 test):
+  `test_provision_invalid_role_rejected` proves an invalid role is rejected
+  with HTTP 422 before any user INSERT.
+
+### Tests run (real outcomes)
+* `pytest tests/unit -q` -> **159 passed** (unit tests do not require a database)
+* `pytest tests/api/test_auth5j3_account_provisioning.py -q` -> **BLOCKED**
+  (`PostgreSQL 16` unavailable at `localhost:5432`; endpoint-layer provisioning
+  tests require a live database and were never executed)
+
+### Errors encountered and resolutions
+* `Select-String -Path` with multiple files does not accept `-Recurse`; the
+  search was done with explicit single-file paths.
+
+### Known limitations
+* Only the provisioning role-validation hardening was performed. No other audit
+  remediation was attempted. Session absolute expiry, login rate-limiting
+  (multi-instance), frontend dependency install, live HIBP integration, and
+  Alembic baseline migration against an empty PostgreSQL 16 database remain
+  BLOCKED by database/deployment environment unavailability.
+
+
 
 After every implementation:
 
@@ -1157,6 +1316,96 @@ After every implementation:
 ```
 
 ---
+## Task 26 — Material Workflow Authorization Regression Tests
+
+Addresses audit finding F-1: route-level authorization for the material
+management workflow had no automated route-level regression coverage. This task
+adds genuine `TestClient` route tests; it does **not** redesign the
+authorization system and made **no production code changes** because inspection
+revealed no authorization defect.
+
+### Changes made (1 new file)
+
+- `tests/api/test_material_workflow_authorization.py` (new) — 54 route-level
+  authorization tests.
+
+No production file was modified. The existing AUTH-007 authorization design was
+inspected and confirmed correct, so nothing was changed to make tests pass.
+
+### Actual workflow route / permission map (verified from the code)
+
+| Action | Route | Method | Gate (dependency) | Authorized roles |
+|---|---|---|---|---|
+| Create requisition | `/api/v1/requisition` | POST | `require_permission(REQUISITION_CREATE)` + `require_csrf` + idempotency | `SITE_ENGINEER` |
+| List requisitions | `/api/v1/requisition` | GET | `require_permission(REQUISITION_READ)` | reader roles |
+| Get requisition | `/api/v1/requisition/{id}` | GET | `require_permission(REQUISITION_READ)` | reader roles |
+| Approve | `/api/v1/requisition/{id}/approve` | PUT | `require_any_permission(REQUISITION_APPROVE_STANDARD, REQUISITION_APPROVE_TECHNICAL)` + `require_csrf` | `MATERIALS_MANAGER`, `TECHNICAL_AUTHORITY` |
+| Reject | `/api/v1/requisition/{id}/reject` | PUT | `require_permission(REQUISITION_REJECT)` + `require_csrf` | approval roles |
+| Security gate / gate pass | `/api/v1/requisition/{id}/gatepass` | POST | `require_permission(REQUISITION_GATEPASS)` + `require_csrf` | `CISF_SECURITY` |
+| Dispatch | `/api/v1/requisition/{id}/dispatch` | PUT | `require_permission(REQUISITION_DISPATCH)` + `require_csrf` | `MATERIALS_MANAGER` |
+| Deliver / receipt | `/api/v1/requisition/{id}/deliver` | PUT | `require_permission(REQUISITION_RECEIVE)` + `require_csrf` | `SITE_ENGINEER` |
+| Create inventory | `/api/v1/inventory` | POST | `_inventory_mutation_identity(INVENTORY_CREATE)` + `require_csrf` | `MATERIALS_MANAGER` |
+| Change inventory status | `/api/v1/inventory/{sku}/status` | PUT | `_inventory_mutation_identity(INVENTORY_STATUS_CHANGE)` + `require_csrf` + idempotency | `MATERIALS_MANAGER` |
+
+Confirmed authorization design (not assumed): route bodies also enforce
+resource-level rules independent of the RBAC gate — segregation of duties
+(requester cannot approve own requisition, no `SUPER_ADMIN` exemption,
+`requisition.py:120-130`), CPSE tenant boundary on approve/reject/dispatch/deliver
+(`requisition.py:132-142, 169-179, 252-262, 295-305`), and workflow-state
+transitions (dispatch requires `GATE_PASS_ISSUED` → else 409,
+`requisition.py:265-269`; deliver requires `DISPATCHED` → else 409,
+`requisition.py:308-312`). The centralized gate
+(`backend/app/core/authorization.evaluate`) has no universal `SUPER_ADMIN`
+bypass (`authorization.py:13-18, 158-179`).
+
+### How the tests exercise real routes
+
+The real FastAPI app, real registered routes, and the **real** `require_permission`
+/ `require_any_permission` / `require_csrf` dependencies are under test. Only the
+leaf identity/DB dependencies are overridden (`get_db_session` → in-memory fake
+session, `get_current_user` / `get_current_session` → synthetic principal + a
+session carrying a known token hash so the real CSRF check passes). The
+data/service layer (`*_service` functions) is mocked so an authorized request
+completes without a database. A guard test asserts the authorization dependencies
+themselves are never placed in `dependency_overrides`.
+
+These are **route-level authorization tests, not full database integration
+tests.** They prove the authorization boundary (401/403/2xx/409 and resource-level
+denials), not persistence. The application lifespan (DB init + seed) is never
+started: `TestClient` is used without a context manager.
+
+### Tests run (real outcomes)
+
+- `.venv\Scripts/python.exe -m pytest tests/api/test_material_workflow_authorization.py -q` → **54 passed** (20.52s).
+- `.venv/Scripts/python.exe -m pytest tests/unit -q` → **159 passed** (26.15s) — no regressions.
+- `git diff --check` → only the pre-existing `backend/app/models/base.py:98`
+  "new blank line at EOF" warning (Task 23, unrelated to this task). The new
+  untracked test file was separately whitespace-scanned (0 trailing-space lines;
+  `git diff --check` on an intent-to-add produced no errors).
+
+Coverage: anonymous→401 for all 8 write routes; unprivileged role→403 with
+`error=AUTHORIZATION_DENIED` / `reason=PERMISSION_NOT_GRANTED`; auditor read-only
+(403 on all writes); `SUPER_ADMIN` cannot bypass any workflow write (403);
+authorized role→2xx for each action; segregation-of-duties self-approval→403;
+cross-tenant dispatch→403; invalid workflow transition→409.
+
+### Errors encountered and resolutions
+
+- No authorization defect was found; no production fix was required.
+- `git diff --check` does not validate untracked files, so the new test file was
+  inspected explicitly (intent-to-add + `--cached --check`, plus a trailing-
+  whitespace scan) to avoid missing whitespace issues the default check skips.
+
+### Known limitations
+
+- PostgreSQL-backed full-stack route tests (`tests/api/test_auth5k_read_hardening.py`
+  and similar) remain BLOCKED: PostgreSQL 16 is unavailable at `localhost:5432`.
+  This task's tests deliberately use faked data/identity dependencies and do not
+  claim database-backed workflow coverage.
+- Resource-level checks are exercised with a fake DB returning a scripted record;
+  real concurrent/transaction behavior still requires a live database.
+
+
 
 # 24. Final Agent Report Format
 

@@ -115,6 +115,15 @@ class Settings(BaseSettings):
     # Comma-separated explicit Origin allowlist for CSRF Origin validation.
     # Production browser origin is an open deployment value.
     auth_allowed_origins: str = Field(default="", alias="AUTH_ALLOWED_ORIGINS")
+    # Login rate-limit thresholds (AUTH-006 Section 8). Defaults preserve the
+    # existing behavior: 10 attempts per 60-second fixed window per username.
+    # Values below 1 are rejected as nonsensical.
+    auth_login_rate_limit_attempts: int = Field(
+        default=10, ge=1, le=1000, alias="AUTH_LOGIN_RATE_LIMIT_ATTEMPTS"
+    )
+    auth_login_rate_limit_window_seconds: int = Field(
+        default=60, ge=1, le=3600, alias="AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS"
+    )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
