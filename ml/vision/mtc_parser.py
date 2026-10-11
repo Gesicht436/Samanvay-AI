@@ -12,6 +12,8 @@ Extracts:
 import re
 from typing import Dict, Any, List, Optional, Tuple
 
+from sqlalchemy import text
+
 from backend.app.schemas.material import ExtractedMaterialAttributes
 from ml.vision.chemistry import (
     compute_carbon_equivalent,
@@ -19,7 +21,8 @@ from ml.vision.chemistry import (
     compute_pren,
     validate_composition,
     validate_mechanical_properties,
-)
+ ) 
+from ml.vision.spec_detect import detect_en10204_type
 
 
 KNOWN_TPI_AGENCIES = [
@@ -74,13 +77,9 @@ class MTCParser:
         if material_grade:
             material_grade = material_grade.split("\n")[0].split("|")[0].strip()
 
-        # Specification
-        spec = None
-        if "EN 10204 3.2" in text or "3.2" in text:
-            spec = "EN 10204 3.2"
-        elif "EN 10204 3.1" in text or "3.1" in text:
-            spec = "EN 10204 3.1"
-
+        # Specification             
+        spec = detect_en10204_type(text) 
+           
         # Manufacturer
         manufacturer = self._find_known_entity(text, KNOWN_MANUFACTURERS)
         if not manufacturer:
