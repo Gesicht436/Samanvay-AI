@@ -15,56 +15,29 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from neo4j import GraphDatabase
 
+from backend.app.core.config import get_neo4j_config
 from graph.seed_graph import extract_item_type, validate_cpse_name
 
 logger = logging.getLogger("samanvay.graph.syncer")
 
-
 def _get_neo4j_config() -> tuple[str, str, str, dict]:
-    """
-    Returns (uri, user, password, driver_kwargs).
+    """Dynamic delegation to consolidated get_neo4j_config helper."""
+    return get_neo4j_config()
 
-    driver_kwargs contains supported neo4j-python-driver connection pool
-    and timeout settings. Credentials are never included in driver_kwargs.
-    """
-    uri = None
-    user = None
-    password = None
-    driver_kwargs: dict = {}
 
-    try:
-        from backend.app.core.config import settings
-        uri = getattr(settings, "neo4j_uri", None) or getattr(settings, "NEO4J_URI", None)
-        user = getattr(settings, "neo4j_user", None) or getattr(settings, "NEO4J_USER", None)
-        password = getattr(settings, "neo4j_password", None) or getattr(settings, "NEO4J_PASSWORD", None)
-        driver_kwargs = {
-            "connection_timeout": settings.neo4j_connection_timeout,
-            "max_connection_lifetime": settings.neo4j_max_connection_lifetime,
-            "max_connection_pool_size": settings.neo4j_max_connection_pool_size,
-            "connection_acquisition_timeout": settings.neo4j_connection_acquisition_timeout,
-        }
-    except Exception:
-        driver_kwargs = {
-            "connection_timeout": int(os.getenv("NEO4J_CONNECTION_TIMEOUT", "15")),
-            "max_connection_lifetime": int(os.getenv("NEO4J_MAX_CONNECTION_LIFETIME", "3600")),
-            "max_connection_pool_size": int(os.getenv("NEO4J_MAX_CONNECTION_POOL_SIZE", "50")),
-            "connection_acquisition_timeout": int(
-                os.getenv("NEO4J_CONNECTION_ACQUISITION_TIMEOUT", "60")
-            ),
-        }
 
-    if not uri:
-        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    if not user:
-        user = os.getenv("NEO4J_USER", "neo4j")
-    if not password:
-        password = os.getenv("NEO4J_PASSWORD", "samanvay_graph")
+class _ClearSentinel:
+    """Sentinel value used to explicitly clear / remove a property from a graph node."""
 
-    return str(uri), str(user), str(password), driver_kwargs
+    def __repr__(self) -> str:
+        return "CLEAR"
+
+
+CLEAR = _ClearSentinel()
 
 
 class Neo4jSyncer:
@@ -91,35 +64,40 @@ class Neo4jSyncer:
     def update_item(
         self,
         sku_code: str,
-        quantity: Optional[int] = None,
-        unit_cost_inr: Optional[float] = None,
-        days_idle: Optional[int] = None,
-        heat_no: Optional[str] = None,
-        nominal_bore_mm: Optional[float] = None,
-        pressure_rating_bar: Optional[float] = None,
-        make_in_india_class: Optional[str] = None,
-        local_content_percentage: Optional[float] = None,
+        quantity: Optional[Any] = None,
+        unit_cost_inr: Optional[Any] = None,
+        days_idle: Optional[Any] = None,
+        heat_no: Optional[Any] = None,
+        nominal_bore_mm: Optional[Any] = None,
+        pressure_rating_bar: Optional[Any] = None,
+        make_in_india_class: Optional[Any] = None,
+        local_content_percentage: Optional[Any] = None,
+        clear_fields: Optional[Sequence[str]] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
-        """Updates specific attributes of an existing InventoryItem and its StockInfo node."""
-        query = """
-        MATCH (item:InventoryItem {sku_code: $sku_code})
-        OPTIONAL MATCH (item)-[:HAS_STOCK_INFO]->(stock:StockInfo)
-
-        SET item.heat_no = CASE WHEN $heat_no IS NOT NULL THEN $heat_no ELSE item.heat_no END,
-            item.nominal_bore_mm = CASE WHEN $nominal_bore_mm IS NOT NULL THEN $nominal_bore_mm ELSE item.nominal_bore_mm END,
-            item.pressure_rating_bar = CASE WHEN $pressure_rating_bar IS NOT NULL THEN $pressure_rating_bar ELSE item.pressure_rating_bar END,
-            item.make_in_india_class = CASE WHEN $make_in_india_class IS NOT NULL THEN $make_in_india_class ELSE item.make_in_india_class END,
-            item.local_content_percentage = CASE WHEN $local_content_percentage IS NOT NULL THEN $local_content_percentage ELSE item.local_content_percentage END
-
-        SET stock.quantity = CASE WHEN $quantity IS NOT NULL THEN $quantity ELSE stock.quantity END,
-            stock.unit_cost_inr = CASE WHEN $unit_cost_inr IS NOT NULL THEN $unit_cost_inr ELSE stock.unit_cost_inr END,
-            stock.days_idle = CASE WHEN $days_idle IS NOT NULL THEN $days_idle ELSE stock.days_idle END
-
-        RETURN properties(item) AS item, properties(stock) AS stock
         """
+        Updates specific attributes of an existing InventoryItem and its StockInfo node.
 
-        params = {
-            "sku_code": sku_code,
+        Partial Update Semantics
+        ------------------------
+        1. Omitted / None: The property is left strictly unchanged. Existing values
+           are preserved and never cleared or overwritten unintentionally.
+        2. Valid Value: The property is updated to the newly supplied value.
+        3. CLEAR / clear_fields: The property is explicitly removed from the node
+           via Cypher REMOVE (e.g. `heat_no=CLEAR` or `clear_fields=["heat_no"]`).
+        4. Dependency-free: Uses standard Cypher SET and REMOVE clauses without
+           requiring APOC plugins.
+        """
+        if not sku_code:
+            raise ValueError("sku_code is required for update_item.")
+
+        clear_set = set(clear_fields or [])
+
+        # Categorize known properties into item vs stock
+        stock_prop_names = {"quantity", "unit_cost_inr", "days_idle"}
+
+        # Collect raw incoming arguments
+        candidate_props: Dict[str, Any] = {
             "quantity": quantity,
             "unit_cost_inr": unit_cost_inr,
             "days_idle": days_idle,
@@ -129,6 +107,72 @@ class Neo4jSyncer:
             "make_in_india_class": make_in_india_class,
             "local_content_percentage": local_content_percentage,
         }
+        candidate_props.update(kwargs)
+
+        item_set: Dict[str, Any] = {}
+        item_remove: List[str] = []
+        stock_set: Dict[str, Any] = {}
+        stock_remove: List[str] = []
+
+        for prop_name, val in candidate_props.items():
+            is_stock = prop_name in stock_prop_names
+            should_clear = (val is CLEAR) or (prop_name in clear_set)
+
+            if should_clear:
+                if is_stock:
+                    stock_remove.append(prop_name)
+                else:
+                    item_remove.append(prop_name)
+            elif val is not None:
+                if is_stock:
+                    stock_set[prop_name] = val
+                else:
+                    item_set[prop_name] = val
+            # If val is None and not in clear_set, leave completely unchanged (do nothing)
+
+        # Also handle any extra properties listed in clear_fields that were not in candidate_props
+        for prop_name in clear_set:
+            if prop_name not in candidate_props:
+                if prop_name in stock_prop_names:
+                    if prop_name not in stock_remove:
+                        stock_remove.append(prop_name)
+                else:
+                    if prop_name not in item_remove:
+                        item_remove.append(prop_name)
+
+        # Build Cypher query clauses
+        query_lines = [
+            "MATCH (item:InventoryItem {sku_code: $sku_code})",
+            "OPTIONAL MATCH (item)-[:HAS_STOCK_INFO]->(stock:StockInfo)",
+        ]
+        params: Dict[str, Any] = {"sku_code": sku_code}
+
+        if item_set:
+            set_parts = []
+            for p, val in item_set.items():
+                param_key = f"set_item_{p}"
+                params[param_key] = val
+                set_parts.append(f"item.{p} = ${param_key}")
+            query_lines.append("SET " + ", ".join(set_parts))
+
+        if item_remove:
+            remove_parts = [f"item.{p}" for p in item_remove]
+            query_lines.append("REMOVE " + ", ".join(remove_parts))
+
+        if stock_set:
+            set_parts = []
+            for p, val in stock_set.items():
+                param_key = f"set_stock_{p}"
+                params[param_key] = val
+                set_parts.append(f"stock.{p} = ${param_key}")
+            query_lines.append("SET " + ", ".join(set_parts))
+
+        if stock_remove:
+            remove_parts = [f"stock.{p}" for p in stock_remove]
+            query_lines.append("REMOVE " + ", ".join(remove_parts))
+
+        query_lines.append("RETURN properties(item) AS item, properties(stock) AS stock")
+        query = "\n".join(query_lines)
 
         with self.driver.session() as session:
             result = session.run(query, params)

@@ -23,8 +23,9 @@ from .logistics import (
     DEPOT_COORDINATES,
 )
 from .queries import GraphQuerier
-from .syncer import Neo4jSyncer, GraphSyncer
+from .syncer import Neo4jSyncer, GraphSyncer, CLEAR
 from .seed_graph import GraphSeeder, extract_item_type, validate_cpse_name
+from backend.app.core.config import get_neo4j_config
 
 __all__ = [
     "NodeTypes",
@@ -46,4 +47,6 @@ __all__ = [
     "GraphSeeder",
     "extract_item_type",
     "validate_cpse_name",
+    "get_neo4j_config",
+    "CLEAR",
 ]

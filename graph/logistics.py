@@ -40,8 +40,9 @@ The backward-compatible alias ``compute_co2_saved`` is preserved but deprecated.
 """
 
 import math
+from types import MappingProxyType
 import warnings
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Mapping, Tuple
 
 # ---------------------------------------------------------------------------
 # Coordinate deduplication precision: round to 4 decimal places (~11 m).
@@ -49,7 +50,7 @@ from typing import Any, Dict, List, Tuple
 _COORD_ROUND_DIGITS: int = 4
 
 
-DEPOT_COORDINATES: Dict[str, Tuple[float, float]] = {
+_DEPOT_COORDINATES_DATA: Dict[str, Tuple[float, float]] = {
     # OIL India Limited Major Depots
     # "Duliajan" and the long-form alias share coordinates — deduplication
     # inside get_nearest_depots keeps the first entry by insertion order.
@@ -98,6 +99,14 @@ DEPOT_COORDINATES: Dict[str, Tuple[float, float]] = {
     "Pata": (26.4600, 80.5400),
     "Vijaipur": (24.1084, 77.2905),
 }
+
+# Immutable mapping proxy: prevents external callers from mutating entries
+# (assignment, deletion, clearing, pop) while each coordinate is an immutable
+# (float, float) 2-tuple preserving full compatibility with logistics algorithms.
+DEPOT_COORDINATES: Mapping[str, Tuple[float, float]] = MappingProxyType({
+    k: (float(v[0]), float(v[1])) for k, v in _DEPOT_COORDINATES_DATA.items()
+})
+
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

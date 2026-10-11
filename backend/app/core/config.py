@@ -16,7 +16,7 @@ This check intentionally does NOT log the password value.
 
 from pydantic_settings import BaseSettings
 from pydantic import Field, model_validator
-from typing import Optional
+from typing import Any, Dict, Optional, Tuple
 
 
 # The Neo4j factory default password that must never reach production.
@@ -156,3 +156,25 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+def get_neo4j_config(
+    settings_obj: Optional[Settings] = None,
+) -> Tuple[str, str, str, Dict[str, Any]]:
+    """
+    Returns (uri, user, password, driver_kwargs) for Neo4j connections.
+
+    Consolidated configuration helper sourced directly from application Settings.
+    driver_kwargs contains supported neo4j-python-driver connection pool and timeout
+    settings. Credentials are never included in driver_kwargs.
+
+    If settings_obj is omitted, uses the application singleton `settings`.
+    """
+    cfg = settings_obj if settings_obj is not None else settings
+    driver_kwargs: Dict[str, Any] = {
+        "connection_timeout": cfg.neo4j_connection_timeout,
+        "max_connection_lifetime": cfg.neo4j_max_connection_lifetime,
+        "max_connection_pool_size": cfg.neo4j_max_connection_pool_size,
+        "connection_acquisition_timeout": cfg.neo4j_connection_acquisition_timeout,
+    }
+    return str(cfg.neo4j_uri), str(cfg.neo4j_user), str(cfg.neo4j_password), driver_kwargs
+
+

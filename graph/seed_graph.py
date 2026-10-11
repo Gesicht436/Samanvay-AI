@@ -35,31 +35,8 @@ DEFAULT_DATASET_PATH = PROJECT_ROOT / "datasets" / "inventory_catalog.csv"
 
 
 # ============================================================
-# 1. SETTINGS HELPER
-# ============================================================
+from backend.app.core.config import get_neo4j_config
 
-def get_neo4j_config() -> tuple[str, str, str]:
-    """Retrieve Neo4j connection parameters with graceful fallbacks."""
-    uri = None
-    user = None
-    password = None
-
-    try:
-        from backend.app.core.config import settings
-        uri = getattr(settings, "neo4j_uri", None) or getattr(settings, "NEO4J_URI", None)
-        user = getattr(settings, "neo4j_user", None) or getattr(settings, "NEO4J_USER", None)
-        password = getattr(settings, "neo4j_password", None) or getattr(settings, "NEO4J_PASSWORD", None)
-    except Exception:
-        pass
-
-    if not uri:
-        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    if not user:
-        user = os.getenv("NEO4J_USER", "neo4j")
-    if not password:
-        password = os.getenv("NEO4J_PASSWORD", "samanvay_graph")
-
-    return str(uri), str(user), str(password)
 
 
 # ============================================================
@@ -438,11 +415,11 @@ class GraphSeeder:
     """Manages database connection, schema setup, CSV parsing, and batch ingestion."""
 
     def __init__(self, uri: Optional[str] = None, user: Optional[str] = None, password: Optional[str] = None):
-        c_uri, c_user, c_pwd = get_neo4j_config()
+        c_uri, c_user, c_pwd, c_kwargs = get_neo4j_config()
         self.uri = uri or c_uri
         self.user = user or c_user
         self.password = password or c_pwd
-        self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+        self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password), **c_kwargs)
 
     def close(self):
         if self.driver:

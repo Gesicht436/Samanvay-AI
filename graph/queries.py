@@ -33,49 +33,14 @@ except ImportError:
 logger = logging.getLogger("samanvay.graph.queries")
 
 
-def _get_neo4j_config() -> tuple[str, str, str, Dict[str, Any]]:
-    """
-    Returns (uri, user, password, driver_kwargs).
+from backend.app.core.config import get_neo4j_config
 
-    driver_kwargs contains supported neo4j-python-driver connection pool
-    and timeout settings sourced from application config or environment
-    variables. Credentials are never included in driver_kwargs.
-    """
-    uri = None
-    user = None
-    password = None
-    driver_kwargs: Dict[str, Any] = {}
 
-    try:
-        from backend.app.core.config import settings
-        uri = getattr(settings, "neo4j_uri", None) or getattr(settings, "NEO4J_URI", None)
-        user = getattr(settings, "neo4j_user", None) or getattr(settings, "NEO4J_USER", None)
-        password = getattr(settings, "neo4j_password", None) or getattr(settings, "NEO4J_PASSWORD", None)
-        driver_kwargs = {
-            "connection_timeout": settings.neo4j_connection_timeout,
-            "max_connection_lifetime": settings.neo4j_max_connection_lifetime,
-            "max_connection_pool_size": settings.neo4j_max_connection_pool_size,
-            "connection_acquisition_timeout": settings.neo4j_connection_acquisition_timeout,
-        }
-    except Exception:
-        # Fall back to env-var defaults if config module is unavailable
-        driver_kwargs = {
-            "connection_timeout": int(os.getenv("NEO4J_CONNECTION_TIMEOUT", "15")),
-            "max_connection_lifetime": int(os.getenv("NEO4J_MAX_CONNECTION_LIFETIME", "3600")),
-            "max_connection_pool_size": int(os.getenv("NEO4J_MAX_CONNECTION_POOL_SIZE", "50")),
-            "connection_acquisition_timeout": int(
-                os.getenv("NEO4J_CONNECTION_ACQUISITION_TIMEOUT", "60")
-            ),
-        }
+def _get_neo4j_config() -> Tuple[str, str, str, Dict[str, Any]]:
+    """Dynamic delegation to consolidated get_neo4j_config helper."""
+    return get_neo4j_config()
 
-    if not uri:
-        uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    if not user:
-        user = os.getenv("NEO4J_USER", "neo4j")
-    if not password:
-        password = os.getenv("NEO4J_PASSWORD", "samanvay_graph")
 
-    return str(uri), str(user), str(password), driver_kwargs
 
 
 class GraphQuerier:
