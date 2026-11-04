@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,7 @@ class CompatibilityRanker:
         self,
         query: Any,
         candidate: Any,
-        cosine: float,
+        cosine: float = 0.0,
         domain_scores: dict[str, float] | None = None,
     ) -> float:
         features = build_features(query, candidate, cosine, domain_scores)
@@ -52,3 +53,21 @@ class CompatibilityRanker:
                 domain_scores = getattr(candidate, "domain_scores", None)
             scores.append(self.score(query, candidate, float(cosine), domain_scores))
         return scores
+
+    def predict(self, query: Any, candidate: Any) -> float:
+        q_dict = query if isinstance(query, dict) else (query.model_dump() if hasattr(query, "model_dump") else {})
+        c_dict = candidate if isinstance(candidate, dict) else (candidate.model_dump() if hasattr(candidate, "model_dump") else {})
+        matches = 0
+        total = 0
+        for k in ("item_type", "size_nb_mm", "pressure_class", "metallurgy"):
+            if k in q_dict and k in c_dict and q_dict[k] is not None and c_dict[k] is not None:
+                total += 1
+                if str(q_dict[k]).strip().upper() == str(c_dict[k]).strip().upper() or (
+                    k == "size_nb_mm" and math.isclose(float(q_dict[k]), float(c_dict[k]), abs_tol=1e-5)
+                ):
+                    matches += 1
+        est_cosine = (matches / total) if total > 0 else 0.85
+        return self.score(query, candidate, cosine=est_cosine)
+
+    def predict_batch(self, query: Any, candidates: list[Any]) -> list[float]:
+        return [self.predict(query, c) for c in candidates]

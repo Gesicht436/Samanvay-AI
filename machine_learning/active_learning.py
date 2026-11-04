@@ -2,10 +2,11 @@
 
 import hashlib
 import json
+import os
 from collections import OrderedDict, deque
 from datetime import UTC, datetime
 from threading import RLock
-from typing import Any
+from typing import Any, Optional, Dict
 
 from pydantic import BaseModel, Field
 
@@ -144,3 +145,79 @@ _active_learning_queue = ActiveLearningQueue()
 
 def get_active_learning_queue() -> ActiveLearningQueue:
     return _active_learning_queue
+
+
+# ── ActiveLearningCache & Golden Benchmark Seeder ─────────────────────────────
+
+class CacheEntry:
+    def __init__(self, query_text: str, source_sku: str, decision: str, tier_override: str, officer: str):
+        self.query_text = query_text
+        self.source_sku = source_sku
+        self.decision = decision
+        self.tier_override = tier_override
+        self.officer = officer
+        self.stamp = ""
+
+
+class ActiveLearningCache:
+    def __init__(self, max_size=10000):
+        self.max_size = max_size
+        self.cache: Dict[tuple, CacheEntry] = OrderedDict()
+        self.sku_stamps = {}
+
+    def lookup(self, query_text: str, source_sku: str) -> Optional[CacheEntry]:
+        key = (query_text, source_sku)
+        if key in self.cache:
+            self.cache.move_to_end(key)
+            return self.cache[key]
+        return None
+
+    def record_decision(self, query_text: str, source_sku: str, decision: str, tier_override: str, officer: str):
+        key = (query_text, source_sku)
+        entry = CacheEntry(query_text, source_sku, decision, tier_override, officer)
+        self.cache[key] = entry
+        self.cache.move_to_end(key)
+
+        if len(self.cache) > self.max_size:
+            self.cache.popitem(last=False)
+
+        if decision == "APPROVE":
+            self.boost_approved(source_sku)
+        elif decision == "REJECT":
+            self.demote_rejected(source_sku)
+
+    def boost_approved(self, sku_code: str):
+        if len(self.sku_stamps) >= self.max_size and sku_code not in self.sku_stamps:
+            self.sku_stamps.pop(next(iter(self.sku_stamps)))
+        self.sku_stamps[sku_code] = "[VERIFIED BY HUMAN EXPERT]"
+
+    def demote_rejected(self, sku_code: str):
+        if len(self.sku_stamps) >= self.max_size and sku_code not in self.sku_stamps:
+            self.sku_stamps.pop(next(iter(self.sku_stamps)))
+        self.sku_stamps[sku_code] = "[REJECTED BY HUMAN EXPERT]"
+
+
+def seed_from_golden_benchmarks(cache: ActiveLearningCache, benchmarks_path: str):
+    if not os.path.exists(benchmarks_path):
+        return
+
+    with open(benchmarks_path, "r", encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            return
+
+    officer = "CHIEF_MATERIALS_ENGINEER_BOOTSTRAP"
+
+    for item in data:
+        query = item.get("query_text")
+        sku = item.get("source_sku")
+        tier = item.get("tier", 3)
+
+        if not query or not sku:
+            continue
+
+        decision = "APPROVE" if tier in [1, 2] else "REJECT"
+        tier_override = f"Tier {tier}"
+
+        cache.record_decision(query, sku, decision, tier_override, officer)

@@ -33,6 +33,7 @@ class HITLBootstrapRequest(BaseModel):
 
 
 @router.post("", response_model=MatchResult | None)
+@router.post("/contract", response_model=MatchResult | None)
 def match_item(request: MatchRequest, searcher=Depends(get_vector_searcher)):
     attributes = extract_attributes(request.raw_description)
     reranker = None
@@ -61,6 +62,7 @@ def hitl_queue():
 
 
 @router.get("/hitl-training-examples")
+@router.get("/hitl-examples")
 def hitl_training_examples():
     return {"items": get_active_learning_queue().training_examples()}
 

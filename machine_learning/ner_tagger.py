@@ -40,12 +40,37 @@ ITEM_TYPES = {
     "BALL VALVE": "BALL_VALVE",
     "GLOBE VALVE": "GLOBE_VALVE",
     "VALVE": "VALVE",
+    "VLV GT": "VALVE",
+    "VLV BL": "VALVE",
+    "VLV GL": "VALVE",
+    "VLV CHK": "VALVE",
+    "VLV PSV": "VALVE",
+    "VLV": "VALVE",
     "GATE": "GATE_VALVE",
     "BALL": "BALL_VALVE",
     "BOLT": "BOLT",
+    "STUD BLT": "STUD_BOLT",
+    "STUD BOLT": "STUD_BOLT",
     "STUD": "STUD_BOLT",
+    "CHECK VALVE": "CHECK_VALVE",
+    "NRV": "CHECK_VALVE",
+    "BUTTERFLY VALVE": "BUTTERFLY_VALVE",
+    "PIPE": "PIPE",
+    "TUBE": "TUBE",
+    "GASKET": "GASKET",
+    "TEE": "TEE",
+    "ELBOW": "ELBOW",
+    "REDUCER": "REDUCER",
 }
-FACING_TYPES = {"WN": "WELD_NECK", "WNRF": "WELD_NECK_RAISED_FACE", "RF": "RAISED_FACE", "RTJ": "RING_TYPE_JOINT", "BW": "BUTT_WELD"}
+FACING_TYPES = {
+    "WN": "WELD_NECK",
+    "WNRF": "WELD_NECK_RAISED_FACE",
+    "RF": "RAISED_FACE",
+    "RTJ": "RING_TYPE_JOINT",
+    "BW": "BUTT_WELD",
+    "SW": "SOCKET_WELD",
+    "FF": "FLAT_FACE",
+}
 _METALLURGY_TYPES = (
     ("A105N", "ASTM_A105N"),
     ("AISI 316", "SS316"),
@@ -55,6 +80,15 @@ _METALLURGY_TYPES = (
     ("WCB", "ASTM_A216_WCB"),
     ("B7", "ASTM_A193_B7"),
     ("316", "SS316"),
+    ("IS 2062", "IS_2062"),
+    ("IS2062", "IS_2062"),
+    ("LF2", "ASTM_A350_LF2"),
+    ("LF-2", "ASTM_A350_LF2"),
+    ("A350 LF2", "ASTM_A350_LF2"),
+    ("INCONEL 625", "INCONEL_625"),
+    ("HASTELLOY C-276", "HASTELLOY_C276"),
+    ("DUPLEX", "DUPLEX_SS"),
+    ("SUPER DUPLEX", "SUPER_DUPLEX_SS"),
 )
 METALLURGY_TYPES = [
     (re.compile(rf"(?<![A-Z0-9]){re.escape(name)}(?![A-Z0-9])", re.IGNORECASE), value)
@@ -323,3 +357,118 @@ def _get_default_tagger() -> NERTagger:
 
 def extract_attributes(raw_description: str) -> ExtractedMaterialAttributes:
     return _get_default_tagger().extract_attributes(raw_description)
+
+
+class DialectNormalizer:
+    """Drop-in normalizer delegating to Hariom's OCR text normalizer and NER tagger."""
+
+    def __init__(self):
+        pass
+
+    def normalize(self, query_text: str) -> dict[str, Any]:
+        import re
+        from OCR.normalization import normalize_text
+        norm_text = normalize_text(query_text)
+        extracted = extract_attributes(norm_text)
+        data = extracted.model_dump()
+        u = query_text.upper()
+
+        item_type = data.get("item_type")
+        if "STUD" in u or "BOLT" in u:
+            item_type = "STUD_BOLT"
+        elif "FLG" in u or "FLANGE" in u:
+            item_type = "FLANGE"
+        elif "PIPE" in u:
+            item_type = "PIPE"
+        elif "VLV" in u or "VALVE" in u:
+            item_type = "VALVE"
+
+        # Size NB
+        size_nb = data.get("size_nb_mm")
+        m_nb = re.search(r'\b(\d+(?:\.\d+)?)\s*(?:MM\s+NB|NB)\b', u)
+        if m_nb:
+            size_nb = float(m_nb.group(1))
+        else:
+            m_in = re.search(r'\b(\d+(?:\.\d+)?)\s*(?:IN|INCH(?:ES)?|")\b', u)
+            if m_in:
+                val = float(m_in.group(1))
+                inch_to_nb = {
+                    0.5: 15.0, 0.75: 20.0, 1.0: 25.0, 1.25: 32.0, 1.5: 40.0,
+                    2.0: 50.0, 2.5: 65.0, 3.0: 80.0, 4.0: 100.0, 5.0: 125.0,
+                    6.0: 150.0, 8.0: 200.0, 10.0: 250.0, 12.0: 300.0,
+                    14.0: 350.0, 16.0: 400.0, 18.0: 450.0, 20.0: 500.0, 24.0: 600.0,
+                }
+                if val in inch_to_nb:
+                    size_nb = inch_to_nb[val]
+
+        # PN and Pressure
+        m_pn = re.search(r'\bPN\s*(\d+(?:\.\d+)?)\b', u)
+        pressure_bar = float(m_pn.group(1)) if m_pn else None
+
+        m_class = re.search(r'\((\d+)[#]\)', u) or re.search(r'\bCLASS\s*(\d+)\b', u) or re.search(r'\b(\d+)\s*#\b', u)
+        pressure_class = int(m_class.group(1)) if m_class else data.get("pressure_class")
+        if not pressure_class and pressure_bar:
+            pn_map = {10: 150, 16: 150, 20: 150, 25: 150, 40: 300, 50: 300, 100: 600, 160: 900, 250: 1500, 420: 2500}
+            pressure_class = pn_map.get(int(pressure_bar), int(pressure_bar * 6))
+
+        # MESC Code (4 parts, e.g. 03.10.45.19)
+        mesc = data.get("mesc_code")
+        oil_mat_code = None
+        if mesc:
+            parts = str(mesc).split(".")
+            oil_mat_code = ".".join(parts[:4]) if len(parts) >= 4 else str(mesc)
+        else:
+            m_mesc = re.search(r'\b(\d{2}\.\d{2}\.\d{2}\.\d{2})(?:\.\d{2})?\b', u)
+            if m_mesc:
+                oil_mat_code = m_mesc.group(1)
+
+        # IS Standard
+        indian_standard = data.get("indian_standard")
+        if not indian_standard or "IS" not in str(indian_standard):
+            m_is = re.search(r'\b(IS\s+\d+(?:\s+Part\s+\d+)?(?:\s+Grade\s+[A-Z0-9]+)?)\b', u, re.IGNORECASE)
+            if m_is:
+                indian_standard = m_is.group(1)
+
+        # OISD / EIL
+        specs = []
+        if data.get("oisd_standard"):
+            specs.append(data["oisd_standard"])
+        if data.get("eil_specification"):
+            specs.append(data["eil_specification"])
+        oil_std_spec = " / ".join(specs) if specs else None
+        if not oil_std_spec:
+            m_oil_spec = re.search(r'\b(OISD-[A-Z0-9-]+(?:\s*/\s*EIL\s*[0-9A-Z-]+)?|EIL\s*[0-9A-Z-]+)\b', u, re.IGNORECASE)
+            if m_oil_spec:
+                oil_std_spec = m_oil_spec.group(1)
+
+        # MII
+        m_mii = re.search(r'\b(Class-I|Class-II|Non-Local)\b', u, re.IGNORECASE)
+        mii = m_mii.group(1) if m_mii else "Class-I"
+        if mii.lower() == "class-i":
+            mii = "Class-I"
+        elif mii.lower() == "class-ii":
+            mii = "Class-II"
+
+        return {
+            **data,
+            "raw_description": query_text,
+            "normalized_text": norm_text,
+            "item_type": item_type,
+            "size_nb_mm": size_nb,
+            "pressure_class": pressure_class,
+            "pressure_rating_bar": pressure_bar,
+            "oil_material_code": oil_mat_code,
+            "indian_standard": indian_standard,
+            "oil_std_spec": oil_std_spec,
+            "make_in_india_class": mii,
+            "metallurgy": data.get("metallurgy") or data.get("material_grade"),
+            "facing_end": data.get("facing_end") or data.get("end_connection"),
+            "standard": data.get("standard"),
+            "schedule": data.get("schedule"),
+            "sour_service": bool("NACE" in u or "SOUR" in u),
+        }
+
+
+def extract_metadata_from_dialect(raw_description: str) -> dict[str, Any]:
+    normalizer = DialectNormalizer()
+    return normalizer.normalize(raw_description)
