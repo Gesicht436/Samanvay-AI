@@ -1,7 +1,7 @@
-# AUTH-006 — Session & Authentication Implementation Design
+﻿# AUTH-006 — Session & Authentication Implementation Design
 
 **Project:** Samanvay-AI
-**Branch:** `auth-development-shourya`
+**Branch:** `main`
 **Status:** Implementation-ready design; limited implementation/business-rule details remain open as identified in Section 18
 **Depends on:** AUTH-003, AUTH-004, AUTH-005
 **Scope:** Application-layer implementation blueprint only

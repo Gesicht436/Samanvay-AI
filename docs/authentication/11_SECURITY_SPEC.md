@@ -1,4 +1,4 @@
-Owner: Shourya Mishra
+﻿Owner: Security Architecture Team
 Project: Samanvay-AI / BharatCodex
 Scope: Application Authentication, Authorization, Tenant Isolation & Security Controls
 Status: In Progress / Security Hardening Phase

@@ -1,6 +1,6 @@
 # Running Samanvay AI Locally — Developer & Contributor Guide
 
-> **Project Overview**: Samanvay AI is a sovereign, enterprise-grade AI-powered material harmonization and inter-CPSE spare parts interoperability platform designed for India's Ministry of Petroleum and Natural Gas (MoPNG). It integrates **FastAPI**, **Next.js 16**, **PostgreSQL 16**, **Qdrant Vector Engine**, and **Neo4j Graph Database**.
+> **Project Overview**: Samanvay AI is a sovereign, enterprise-grade AI-powered material harmonization and inter-CPSE spare parts interoperability platform designed for India's Ministry of Petroleum and Natural Gas (MoPNG). It integrates **FastAPI**, **Next.js 16**, **PostgreSQL 16**, **Alembic**, **Qdrant Vector Engine**, and **Neo4j Graph Database**.
 
 This guide outlines everything you need to run, test, and contribute to the platform locally on Windows, macOS, or Linux.
 
@@ -28,7 +28,7 @@ Ensure the following tools are installed on your workstation:
 We provide three distinct workflows depending on your objective:
 - [**Method 1: Full Docker Stack (Recommended)**](#method-1-full-docker-compose-recommended) — Starts all databases, backend, and frontend in pre-configured production containers with 1 command.
 - [**Method 2: Hybrid Local Dev Mode**](#method-2-hybrid-local-development-hot-reloading) — Runs databases in Docker while running FastAPI and Next.js directly on your host with instant hot-reloading.
-- [**Method 3: Offline / Isolated Test Mode**](#method-3-offline--isolated-test-mode-no-docker) — Runs the full 393+ automated pytest suite using in-memory SQLite (no Docker needed).
+- [**Method 3: Offline / Isolated Test Mode**](#method-3-offline--isolated-test-mode-no-docker) — Runs the full automated pytest suite using in-memory SQLite (no Docker needed).
 
 ---
 
@@ -38,7 +38,7 @@ This method starts all 5 microservices in isolated, health-checked containers.
 
 ### Step 1: Clone and Navigate to the Repository
 ```powershell
-git clone -b Hariom_Chandra https://github.com/Gesicht436/Samanvay-AI.git
+git clone -b main https://github.com/Gesicht436/Samanvay-AI.git
 cd Samanvay-AI
 ```
 
@@ -108,10 +108,10 @@ npm run dev
 
 ## Method 3: Offline / Isolated Test Mode (No Docker)
 
-You can run the complete quality assurance suite without starting Docker. The test harness automatically switches to in-memory SQLite and mock vector searchers:
+You can run the quality assurance suite without starting Docker. The test harness automatically switches to in-memory SQLite and mock vector searchers:
 
 ```powershell
-# Run the entire test suite (393+ automated tests)
+# Run the entire test suite
 uv run pytest tests/
 
 # Run tests with short traceback on failures
@@ -133,8 +133,8 @@ Once the stack is running, access the services via your web browser:
 | Application / Service | URL | Default Credentials / Purpose |
 | :--- | :--- | :--- |
 | **Web Portal (Frontend)** | [http://localhost:3000](http://localhost:3000) | Main CPSE Interoperability Platform |
-| **Interactive API Docs (Swagger UI)** | [http://localhost:8000/docs](http://localhost:8000/docs) | OpenAPI interactive documentation |
-| **Alternative API Docs (ReDoc)** | [http://localhost:8000/redoc](http://localhost:8000/redoc) | Clean API schema reference |
+| **Interactive API Docs (Swagger UI)** | [http://localhost:8000/docs](http://localhost:8000/docs) | OpenAPI interactive documentation (Dev only) |
+| **Alternative API Docs (ReDoc)** | [http://localhost:8000/redoc](http://localhost:8000/redoc) | Clean API schema reference (Dev only) |
 | **Backend Liveness Health Check** | [http://localhost:8000/health](http://localhost:8000/health) | `{"status": "healthy"}` probe |
 | **Neo4j Graph Browser** | [http://localhost:7474](http://localhost:7474) | User: `neo4j`<br>Password: `samanvay_graph` |
 | **Qdrant Vector Dashboard** | [http://localhost:6333/dashboard](http://localhost:6333/dashboard) | Graphical collection viewer & query console |
@@ -143,15 +143,30 @@ Once the stack is running, access the services via your web browser:
 
 ## 4. Pre-Provisioned CPSE Demo Credentials
 
-The database auto-seeds test accounts for simulated cross-CPSE procurement:
+The platform establishes **zero-trust server-side session cookies** (`__Host-samanvay_session` in production / `samanvay_session` in development) accompanied by session-bound CSRF tokens.
 
-| Role / Entity | Username | Password | Access Scope |
-| :--- | :--- | :--- | :--- |
-| **Oil India Limited** | `OIL_OFFICER` | `oil_secure` | Duliajan, Moran, Digboi, Jodhpur depots |
-| **Indian Oil Corporation** | `IOCL_OFFICER` | `iocl_secure` | Panipat, Mathura, Paradip, Guwahati refineries |
-| **Oil & Natural Gas Corp** | `ONGC_OFFICER` | `ongc_secure` | Hazira, Uran, Ankleshwar, Mumbai Offshore bases |
-| **Bharat Petroleum** | `BPCL_OFFICER` | `bpcl_secure` | Mumbai, Kochi, Bina, Numaligarh depots |
-| **MoPNG Master Auditor** | `MOPNG_AUDITOR` | `mopng_secure` | Pan-India audit trail & cryptographic seal verification |
+In development mode, the database auto-seeds persona accounts across Indian Public Sector Undertakings (CPSEs). All pre-provisioned demo accounts share the default development password:
+
+```text
+Default Password: OilIndia@2026
+```
+
+| Enterprise Entity | Role | Username | Assigned Depot / Base | Scope & Functional Permissions |
+| :--- | :--- | :--- | :--- | :--- |
+| **Oil India Limited (OIL)** | `SITE_ENGINEER` | `engineer_oil` | `DEPOT-OIL-DLJ` | Raises material requisitions, browses plant stock |
+| **Oil India Limited (OIL)** | `MATERIALS_MANAGER` | `stores_oil` | `DEPOT-OIL-DLJ` | Approves requisitions, manages stock & surplus |
+| **Oil India Limited (OIL)** | `CISF_SECURITY` | `cisf_oil` | `DEPOT-OIL-DLJ` | Generates & verifies CISF material gate passes |
+| **Indian Oil Corp (IOCL)** | `SITE_ENGINEER` | `engineer_iocl` | `DEPOT-IOCL-PNP` | Panipat Refinery piping & mechanical requisitions |
+| **Indian Oil Corp (IOCL)** | `MATERIALS_MANAGER` | `stores_iocl` | `DEPOT-IOCL-PNP` | Panipat Warehouse in-charge & stock transfers |
+| **Indian Oil Corp (IOCL)** | `CISF_SECURITY` | `cisf_iocl` | `DEPOT-IOCL-PNP` | Panipat Refinery gate security verification |
+| **ONGC** | `SITE_ENGINEER` | `engineer_ongc` | `DEPOT-ONGC-URN` | Uran Gas Processing Plant requisitions |
+| **ONGC** | `MATERIALS_MANAGER` | `stores_ongc` | `DEPOT-ONGC-URN` | Uran central spare parts inventory manager |
+| **ONGC** | `CISF_SECURITY` | `cisf_ongc` | `DEPOT-ONGC-URN` | Uran security gate verification officer |
+| **MoPNG Ministry** | `VIGILANCE_AUDITOR` | `auditor` | `CENTRAL` | Read-only pan-India audit ledger & CVC exports |
+| **MoPNG Ministry** | `SUPER_ADMIN` | `admin` | `CENTRAL` | User provisioning, account approval & governance |
+
+> [!TIP]
+> **One-Click Demo Personas**: On the login page ([http://localhost:3000/login](http://localhost:3000/login)), you can click on any pre-seeded persona card to instantly populate credentials and authenticate into the corresponding CPSE tenant view.
 
 ---
 
@@ -168,8 +183,7 @@ This automated script performs:
 2. **Cryptographic Audit Hash-Chain Verification** (`POST /api/v1/audit/verify`)
 3. **Cross-CPSE Inventory Discovery** (`GET /api/v1/graph/discover`)
 4. **Logistics Topology Aggregation** (`GET /api/v1/graph/topology`)
-5. **Golden Benchmark Validation** (`GET /api/v1/match/benchmark`)
-6. **Digital Gate Pass Seal Issuance** (`POST /api/v1/requisition/create`)
+5. **Digital Gate Pass Seal Issuance** (`POST /api/v1/requisition/create`)
 
 ---
 

@@ -2,22 +2,27 @@
 
 ## 1. Architectural Role & Overview
 
-The `backend/app/services/` package encapsulates core business logic, domain workflows, and cross-subsystem orchestration for **Samanvay-AI**.
+The `backend/app/services/` package encapsulates core business logic, domain workflows, zero-trust session management, and cross-subsystem orchestration for **Samanvay-AI**.
 
 It acts as the intermediary between the presentation layer (`backend/app/api/`), the relational persistence models (`backend/app/models/`), the machine learning inference services (`machine_learning/`), and the knowledge graph (`graph/`), implementing transactional safety, privacy firewalls, and audit integrity.
 
 ```mermaid
 flowchart TD
     subgraph APILayer["API Routers (backend/app/api/)"]
+        R_Auth["routers/auth.py"]
         R_Match["routers/match.py"]
         R_Inv["routers/inventory.py"]
         R_Req["routers/requisition.py"]
         R_Audit["routers/audit.py"]
     end
 
-    subgraph ServiceLayer["Core Domain Services (backend/app/services/)"]
+    subgraph ServiceLayer["Core Domain & Security Services (backend/app/services/)"]
+        AUTH_SESS["auth_session_service.py: Zero-Trust Server Sessions"]
+        HIBP["hibp_service.py: HaveIBeenPwned k-Anonymity API"]
+        RL["auth_rate_limit.py: Sliding Window Brute-Force Defense"]
+        SCHEMA_VER["schema_verification.py: Production Baseline Checks"]
         MS["match_service.py: Zero-Mock Matching Pipeline"]
-        IS["inventory_service.py: Privacy & Stock Management"]
+        IS["inventory_service.py: Multi-Tenant Stock & Privacy"]
         RS["requisition_service.py: 2-Phase Locks & CISF Gate Passes"]
         AS["audit_service.py: CVC/CAG SHA-256 Hash Chaining"]
         CDC["cdc_manager.py: Real-Time PostgreSQL -> Neo4j CDC"]
@@ -28,7 +33,14 @@ flowchart TD
         PG[(PostgreSQL 16)]
         NEO[(Neo4j Graph)]
         ML[ML Models & Safety Rules]
+        HIBP_API["HIBP Range API (External)"]
     end
+
+    R_Auth --> AUTH_SESS
+    R_Auth --> HIBP
+    R_Auth --> RL
+    HIBP --> HIBP_API
+    AUTH_SESS --> PG
 
     R_Match --> MS
     R_Inv --> IS
@@ -52,19 +64,48 @@ flowchart TD
 
 | Service File | Core Functions | Architectural Responsibility |
 | :--- | :--- | :--- |
+| [`auth_session_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/auth_session_service.py) | `create_session()`, `resolve_session_with_outcome()`, `revoke_session()`, `record_security_event()`, `record_invalid_session_attempt()` | Server-side session lifecycle management, cryptographically hashed token lookup, active session tracking, and audit-grade `SecurityEvent` emission. |
+| [`hibp_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/hibp_service.py) | `check_password_breached()`, `verify_password_hygiene()` | Integrates with the Have I Been Pwned k-anonymity SHA-1 range API, preventing users from registering or setting breached passwords without exposing plaintext credentials. |
+| [`auth_rate_limit.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/auth_rate_limit.py) | `get_rate_limit_guard()`, `consume()`, `RateLimitGuard` | In-memory sliding-window rate limiter protecting login and credential endpoints against brute-force, credential stuffing, and dictionary attacks. |
+| [`schema_verification.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/schema_verification.py) | `verify_deployed_schema()`, `assert_baseline_intact()` | Production startup inspection verifying that PostgreSQL catalog matches the Alembic migration baseline, failing closed if any tables or version heads are missing. |
 | [`match_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/match_service.py) | `search_matches()`, `parse_query()`, `retrieve_candidates()`, `score_candidate()`, `compute_logistics()` | End-to-end zero-mock matching pipeline combining 21 safety rules (70%), GBDT ML ranker (30%), Indian standard equivalence, and Make-in-India scoring. |
 | [`requisition_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py) | `create_requisition()`, `approve_requisition()`, `reject_requisition()`, `generate_gate_pass()`, `dispatch_requisition()`, `deliver_requisition()` | Multi-depot transactional inventory reservations (`SELECT ... FOR UPDATE`), inter-CPSE transfer lifecycle, and CISF SVG gate passes with digital seals. |
 | [`inventory_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/inventory_service.py) | `list_inventory()`, `get_item()`, `transition_status()`, `get_surplus_radar()`, `get_inventory_stats()` | Plant stock queries, lifecycle transitions, attribute-level privacy enforcement (cost stripping), and ministry metrics computation. |
 | [`audit_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/audit_service.py) | `create_audit_entry()`, `verify_chain()`, `list_audit_entries()`, `export_csv()` | Tamper-evident CVC/CAG cryptographic hash chaining, continuous integrity verification, and RFC 4180 CSV export with UTF-8 BOM. |
 | [`cdc_manager.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py) | `init_cdc_schema()`, `start_cdc_worker()`, `process_pending_events()`, `backfill_graph_if_empty()` | Real-time PostgreSQL Change Data Capture using advisory locks (`0x53414D41`), outbox triggers, `LISTEN/NOTIFY`, and Neo4j mirroring. |
-| [`seeder.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py) | `seed_database_if_empty()`, `seed_users_if_empty()` | Automated startup provisioning loading 5,000 catalog items, Genesis audit entry, and 23 seed persona accounts across 7 CPSEs. |
+| [`seeder.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py) | `seed_database_if_empty()`, `seed_users_if_empty()` | Automated startup provisioning loading 5,000 catalog items, Genesis audit entry, and 23 seed persona accounts across 7 CPSEs (development only). |
 | [`__init__.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/__init__.py) | Package initialization | Namespace anchor. |
 
 ---
 
 ## 3. Deep-Dive Service Architecture
 
-### 3.1. Zero-Mock Matching Pipeline (`match_service.py`)
+### 3.1. Zero-Trust Session Management (`auth_session_service.py`)
+
+Replaces vulnerable client-side tokens with database-backed, revocable server-side sessions:
+1. **Cryptographic Token Separation**:
+   - The user agent receives a 256-bit entropy random secret via `__Host-samanvay_session`.
+   - The database only ever stores the 64-character SHA-256 hash (`session_token_hash`). If the database is compromised, active session secrets cannot be re-derived.
+2. **Deterministic Lifecycle States**:
+   - Evaluates sessions into four mutually exclusive outcomes: `live`, `expired`, `revoked`, or `unknown`.
+   - Upon encountering any non-live session, immediately emits an HTTP `Set-Cookie` deletion header to clear the client's cookie jar.
+3. **Security Telemetry (`SecurityEvent`)**:
+   - Automatically records structured audit events: `LOGIN_SUCCESS`, `LOGIN_FAILURE`, `SESSION_REVOKED`, `ACCOUNT_PROVISIONED`, `ACCOUNT_APPROVED`, `ACCOUNT_REJECTED`, and `AUTHORIZATION_FAILURE`.
+   - Strips sensitive credentials, passwords, and tokens before persistence.
+
+---
+
+### 3.2. Password Hygiene & Breach Prevention (`hibp_service.py`)
+
+Protects public sector infrastructure against compromised credential reuse:
+- Hashes user password via SHA-1: $\text{Hash} = \text{SHA1}(P)$.
+- Transmits only the first 5 hexadecimal characters (prefix) to the Have I Been Pwned API.
+- Re-assembles the remaining 35-character suffix locally in memory, verifying whether the hash appears in known global breach dumps.
+- Rejects any breached password with clear user guidance to select a secure alternative.
+
+---
+
+### 3.3. Zero-Mock Matching Pipeline (`match_service.py`)
 
 The matching service executes a 6-stage evaluation pipeline for cross-CPSE spare part discovery:
 
@@ -104,10 +145,9 @@ sequenceDiagram
 
 ---
 
-### 3.2. Inter-CPSE Requisitions & Consignment Lifecycle (`requisition_service.py`)
+### 3.4. Inter-CPSE Requisitions & Consignment Lifecycle (`requisition_service.py`)
 
 Enforces financial and physical asset custody transitions:
-
 1. **Two-Phase Reservation Locking**:
    - Executes `SELECT ... FOR UPDATE` on `InventoryItem`.
    - Inserts `InventoryLock` record with 7-day TTL expiration.
@@ -125,7 +165,7 @@ Enforces financial and physical asset custody transitions:
 
 ---
 
-### 3.3. Change Data Capture Manager (`cdc_manager.py`)
+### 3.5. Change Data Capture Manager (`cdc_manager.py`)
 
 Maintains sub-millisecond real-time synchronization between relational PostgreSQL records and the Neo4j knowledge graph:
 - **Startup Concurrency Control**: Uses PostgreSQL transaction advisory lock (`0x53414D41`) to guarantee idempotent DDL execution across multi-worker deployments.
@@ -134,7 +174,7 @@ Maintains sub-millisecond real-time synchronization between relational PostgreSQ
 
 ---
 
-### 3.4. Sovereign Cryptographic Audit Ledger (`audit_service.py`)
+### 3.6. Sovereign Cryptographic Audit Ledger (`audit_service.py`)
 
 Implements tamper-evident audit trails for CVC and CAG compliance:
 - Anchors each new event to the previous record's SHA-256 digest ($H_0 = \text{"0"}^{64}$).

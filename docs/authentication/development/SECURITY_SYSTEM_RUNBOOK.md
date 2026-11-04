@@ -1,7 +1,7 @@
-# Shourya — System & Development Runbook
+﻿# Security Architecture Team — System & Development Runbook
 
 **Project:** Samanvay-AI / BharatCodex
-**Developer:** Shourya Mishra
+**Team:** Security & Architecture
 **Primary Environment:** Windows + PowerShell
 **Repository:** `C:\Users\HP\Samanvay-AI`
 
@@ -603,20 +603,20 @@ Do not combine the two into a false "all verified" statement.
 The runbook is located under:
 
 ```text
-docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md
+docs/authentication/development/SECURITY_SYSTEM_RUNBOOK.md
 ```
 
 not:
 
 ```text
-docs/development/SHOURYA_SYSTEM_RUNBOOK.md
+docs/development/SECURITY_SYSTEM_RUNBOOK.md
 ```
 
-The previously referenced path `docs/development/SHOURYA_SYSTEM_RUNBOOK.md` does not exist.
+The previously referenced path `docs/development/SECURITY_SYSTEM_RUNBOOK.md` does not exist.
 
 ### Prevention
 
-Coding agents must read the actual path `docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md` before beginning Samanvay-AI work.
+Coding agents must read the actual path `docs/authentication/development/SECURITY_SYSTEM_RUNBOOK.md` before beginning Samanvay-AI work.
 
 ---
 
@@ -1135,7 +1135,7 @@ plain non-partial index — all DB-free.
   requests); directory comments for `login/`, `signup/`, `AuthContext.tsx`;
   route table rows for `/login`, `/signup` (retired), and `/admin/users`
   (corrected to `GET /auth/users`, `POST /auth/users/{id}/approve|reject`).
-* `docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md`: this entry.
+* `docs/authentication/development/SECURITY_SYSTEM_RUNBOOK.md`: this entry.
 * No router, model, migration, dependency, lockfile, env, or Docker file
   changed; no package installed; no service started; no `.kilo/`,
   `architecture.md`, `context.md`, `MATCH_ENDPOINT_AUDIT_REPORT.md`, or
@@ -1166,7 +1166,7 @@ plain non-partial index — all DB-free.
   attempts. Please wait a minute and try again." when
   `err?.status === 429` (ApiError carries `.status`); all other errors
   unchanged. Error banner JSX untouched (rose styling preserved).
-* `docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md`: this entry.
+* `docs/authentication/development/SECURITY_SYSTEM_RUNBOOK.md`: this entry.
 
 ### Tests run (real outcomes)
 * `pytest tests/unit/test_rate_limit.py tests/unit/test_csrf_origin.py
@@ -1603,7 +1603,7 @@ foreach ($p in 3000, 8000) {
 ## Document Status
 
 **Purpose:** Local development and execution guardrail
-**Scope:** Shourya's Samanvay-AI development environment
+**Scope:** Samanvay-AI Security Architecture development environment
 **Authority:** Operational guidance; does not override frozen project architecture or security contracts
 **Last updated:** October 2026
 

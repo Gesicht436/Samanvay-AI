@@ -1,6 +1,6 @@
 # Samanvay AI — Test Suite & Quality Assurance Architecture (`tests/`)
 
-> **Executive Scope**: The `tests/` directory houses the complete verification harness for Samanvay AI, comprising **393+ automated tests** across unit, integration, machine learning, and API tiers. It validates deterministic physical compliance (ASME/ASTM), neural semantic search, dual-path OCR ingestion, Indian CPSE/MoPNG standards, and cryptographic audit integrity.
+> **Executive Scope**: The `tests/` directory houses the complete verification harness for Samanvay AI, comprising **393+ automated tests** across unit, integration, machine learning, security, and API tiers. It validates deterministic physical compliance (ASME/ASTM), neural semantic search, dual-path OCR ingestion, zero-trust session authentication, centralized RBAC/ABAC authorization, and cryptographic audit integrity.
 
 ---
 
@@ -23,10 +23,10 @@ graph TD
     end
 
     subgraph "Specialized Sub-Harnesses"
-        API[api/<br/>Full CRUD & Role Auth Verification]
+        API[api/<br/>Session Auth, RBAC, Approvals & Lifecycle]
         INT[integration/<br/>240 Golden Accuracy Benchmarks]
         ML[ml/<br/>Bi-Encoder, GBDT Reranker & Active Learning]
-        UNIT[unit/<br/>36 ASME Tolerance Rules & Cryptography]
+        UNIT[unit/<br/>36 ASME Tolerance Rules, CSRF, HIBP & Rate Limiting]
     end
 
     CONF --> API
@@ -38,10 +38,10 @@ graph TD
 ```
 
 ### Directory Submodules
-- [`tests/api/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/README.md): REST API endpoints, JWT role-based access control, requisition lifecycles, and inventory transfers.
+- [`tests/api/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/README.md): REST API endpoints, zero-trust session authentication, centralized RBAC/ABAC authorization, account provisioning/approvals, requisition lifecycles, and inventory transfers.
 - [`tests/integration/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/integration/README.md): 240 Golden benchmark test cases verifying cross-CPSE fuzzy matching across 6 Indian energy operators.
 - [`tests/ml/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/ml/README.md): Machine learning models, bi-encoder embeddings, LightGBM reranker, NER tokenizers, active learning queues, and subvector projections.
-- [`tests/unit/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/README.md): Isolated unit tests for IIW carbon equivalence, 36 parametric tolerance scenarios, logistics routing, and SHA-256 audit block hashing.
+- [`tests/unit/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/README.md): Isolated unit tests for IIW carbon equivalence, 36 parametric tolerance scenarios, CSRF origin verification, HIBP password checks, sliding-window rate limiting, migration integrity, and SHA-256 audit block hashing.
 
 ---
 
@@ -50,7 +50,7 @@ graph TD
 [`conftest.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/conftest.py) establishes the global testing context for pytest:
 
 1. **Environment Flagging**: Automatically sets `os.environ["TESTING"] = "1"` to bypass real database connection pools and background network calls.
-2. **Database Initialization**: The session-scoped fixture `setup_test_db` executes [`init_db()`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/models/base.py) to generate SQLite tables in memory, then triggers [`seed_users_if_empty()`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py) to provision deterministic test CPSE identities (`IOCL_OFFICER`, `ONGC_OFFICER`, etc.).
+2. **Database Initialization**: The session-scoped fixture `setup_test_db` executes [`init_db()`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/models/base.py) to generate SQLite tables in memory, then triggers [`seed_users_if_empty()`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py) to provision deterministic test CPSE identities.
 3. **Dependency Overrides**: The autouse fixture `override_db` redirects FastAPI dependency injection from production PostgreSQL connection strings to isolated `SessionLocal` instances per test.
 
 ```mermaid
@@ -110,9 +110,12 @@ uv run pytest tests/integration/
 uv run pytest tests/ml/
 uv run pytest tests/api/
 
-# Run a targeted root suite file
-uv run pytest tests/test_document_ingest.py -v
-uv run pytest tests/test_match_hitl_api.py -v
+# Run targeted security test suites
+uv run pytest tests/unit/test_csrf_origin.py
+uv run pytest tests/unit/test_hibp_service.py
+uv run pytest tests/unit/test_rate_limit.py
+uv run pytest tests/api/test_session_lifecycle.py
+uv run pytest tests/api/test_material_workflow_authorization.py
 ```
 
 > [!NOTE]

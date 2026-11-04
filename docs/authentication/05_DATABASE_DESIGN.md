@@ -1,7 +1,7 @@
-# AUTH-005 — Database & Session Design
+﻿# AUTH-005 — Database & Session Design
 
 **Project:** Samanvay-AI
-**Branch:** `auth-development-shourya`
+**Branch:** `main`
 **Status:** Design
 **Depends on:** AUTH-001, AUTH-002, AUTH-003, AUTH-004
 **Next:** AUTH-006 — Authentication Implementation Design

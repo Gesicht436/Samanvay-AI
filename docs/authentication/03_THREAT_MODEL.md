@@ -1,7 +1,7 @@
-# AUTH-004 — Threat Model & Security Requirements
+﻿# AUTH-004 — Threat Model & Security Requirements
 
 **Project:** Samanvay-AI
-**Authentication Branch:** `auth-development-shourya`
+**Authentication Branch:** `main`
 **Status:** Design / Security Requirements
 **Depends on:** AUTH-001, AUTH-002, AUTH-003
 **Next:** AUTH-005 — Database & Session Design

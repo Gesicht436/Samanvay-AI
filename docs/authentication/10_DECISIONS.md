@@ -1,4 +1,4 @@
-# Authentication Architecture — Decision Log
+﻿# Authentication Architecture — Decision Log
 
 This file records implementation-level architecture decisions taken after the
 frozen AUTH-002 … AUTH-007 documents. Frozen decisions in those documents
@@ -8,7 +8,7 @@ remain authoritative unless explicitly amended here.
 
 ## 5J.3 — Account-management implementation decisions
 
-Branch: `auth-development-shourya` · Source: AUTH-5J.3 architecture decisions
+Branch: `main` · Source: AUTH-5J.3 architecture decisions
 
 ### D-5J.3-1 — `ACCOUNT_PROVISIONED` security event — ADOPTED
 
@@ -58,7 +58,7 @@ behavior.
 Source: Task 16B credential-authority reconciliation. This is the canonical
 record of the credential-authority direction referenced by
 `02_ARCHITECTURE.md`, `05_DATABASE_DESIGN.md`, `06_IMPLEMENTATION_DESIGN.md`,
-`11_SHOURYA_SECURITY_SPEC.md`, and the system runbook.
+`11_SECURITY_SPEC.md`, and the system runbook.
 
 ### D-CRED-1 — Credential authority direction — ACCEPTED (implementation pending identity-provider decision)
 

@@ -1,7 +1,7 @@
-# AUTH-003 — Authentication & Authorization Architecture
+﻿# AUTH-003 — Authentication & Authorization Architecture
 
 **Project:** Samanvay-AI
-**Branch:** `auth-development-shourya`
+**Branch:** `main`
 **Status:** Frozen target architecture; implementation and detailed policy mechanics remain to be specified
 **Scope:** Authentication, authorization, tenant/resource policy, and their security boundaries
 

@@ -4,14 +4,17 @@
 
 The `tests/api/` package provides comprehensive HTTP-level integration tests for all REST routers defined in `backend/app/api/routers/`.
 
-Executed via `pytest` and `fastapi.testclient.TestClient`, these tests validate HTTP status codes, request/response payload contracts, JWT bearer token issuance, Role-Based Access Control (RBAC), multi-tenant enterprise data isolation, attribute-level commercial privacy firewalls, and cryptographic audit hash continuity.
+Executed via `pytest` and `fastapi.testclient.TestClient`, these tests validate HTTP status codes, request/response payload contracts, zero-trust server-side session lifecycles, Role-Based Access Control (RBAC), Segregation of Duties (SoD), multi-tenant enterprise data isolation, attribute-level commercial privacy firewalls, and cryptographic audit hash continuity.
 
 ```mermaid
 flowchart TD
     TestClient["FastAPI TestClient"] --> APISuite["tests/api/ Suite"]
 
-    APISuite --> T_Auth["test_auth_api.py & test_signup_api.py: JWT & RBAC"]
-    APISuite --> T_Match["test_match_api.py: /match/search & /match/benchmark"]
+    APISuite --> T_Auth["test_auth_api.py & test_session_lifecycle.py: Sessions & Cookie Auth"]
+    APISuite --> T_Prov["test_auth5j3_account_provisioning.py: Account Approval Lifecycle"]
+    APISuite --> T_Hardening["test_auth5k_read_hardening.py: Read Authorization Invariants"]
+    APISuite --> T_Workflow["test_material_workflow_authorization.py: SoD & Tenant Scoping"]
+    APISuite --> T_Match["test_match_api.py: /match/search & Authoritative CPSE Scoping"]
     APISuite --> T_Inv["test_inventory_api.py: Stock Ledger & Stats"]
     APISuite --> T_Req["test_requisition_api.py: Idempotency & Lock Concurrency"]
     APISuite --> T_Graph["test_graph_api.py: Logistics & Privacy Firewalls"]
@@ -24,9 +27,13 @@ flowchart TD
 
 | Test File | Target Router / Component | Tested Invariants & Behaviors |
 | :--- | :--- | :--- |
-| [`test_auth_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_auth_api.py) | `/api/v1/auth` | Seed user retrieval, password verification, 24-hr JWT token issuance, multi-tenant role/depot claims, HTTP 401 unauthorized rejections, and `/seed` idempotency. |
-| [`test_signup_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_signup_api.py) | `/api/v1/auth/signup` | New personnel self-registration, instant JWT issuance, duplicate username rejection (409), duplicate email rejection (409), and invalid role enum handling (422). |
-| [`test_match_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_match_api.py) | `/api/v1/match` | Query normalization, ASME dimensional fit rules, continuous ML ranker scoring, live search endpoint execution, and 150 Golden Benchmark evaluation. |
+| [`test_auth_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_auth_api.py) | `/api/v1/auth` | Seed persona listing without credential disclosure, session cookie establishment on login, `/auth/me` identity resolution, and 401 unauthorized rejections. |
+| [`test_session_lifecycle.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_session_lifecycle.py) | `AuthSession` & `auth_session_service` | Login session creation, database persistence, cookie deletion headers upon logout, session timeout, and concurrent session tracking. |
+| [`test_auth5j3_account_provisioning.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_auth5j3_account_provisioning.py) | `/auth/users/provision` & `/approve` | Super Admin account provisioning, atomic `ACCOUNT_PROVISIONED` telemetry, approval workflows, and unapproved account denial. |
+| [`test_auth5k_read_hardening.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_auth5k_read_hardening.py) | `/inventory`, `/graph`, `/ingest` | Authoritative session-derived CPSE scoping across read routes, verifying that client-supplied `X-CPSE-ID` headers cannot broaden access. |
+| [`test_material_workflow_authorization.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_material_workflow_authorization.py) | `/requisition` & `/inventory` | Segregation of duties (prohibition of self-approval), supplying CPSE gate pass issuance, and receiving CPSE delivery confirmation. |
+| [`test_match_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_match_api.py) | `/api/v1/match` | Query normalization, ASME dimensional fit rules, continuous ML ranker scoring, `MATCH_READ` permission gating, and CPSE candidate scoping. |
+| [`test_signup_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_signup_api.py) | `/api/v1/auth/signup` | Confirms that the legacy public signup endpoint is retired (404) in favor of supervised administrative account provisioning. |
 | [`test_inventory_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_inventory_api.py) | `/api/v1/inventory` | Inventory CRUD lifecycle, cross-CPSE commercial price stripping, and aggregate inventory stats calculation. |
 | [`test_requisition_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_requisition_api.py) | `/api/v1/requisition` | `Idempotency-Key` deduplication caching and atomic multi-depot inventory locking safety. |
 | [`test_graph_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/test_graph_api.py) | `/api/v1/graph` | Road distance geodetic accuracy, transit hours estimation, avoided $\text{CO}_2$ calculations, and attribute privacy compliance. |
@@ -37,38 +44,20 @@ flowchart TD
 
 ## 3. Key Invariant Assertions & Security Verifications
 
-### 3.1. Authentication & Multi-Tenancy (`test_auth_api.py` & `test_signup_api.py`)
-- Verifies that `POST /api/v1/auth/login` returns a valid JWT embedding `sub`, `role`, `cpse`, and `depot_id`.
-- Ensures that protected endpoints (`/api/v1/auth/me`) reject unauthenticated requests with HTTP 401.
-- Confirms that duplicate usernames or emails are rejected with HTTP 409 conflict errors.
+### 3.1. Zero-Trust Session Authentication (`test_auth_api.py` & `test_session_lifecycle.py`)
+- Verifies that `POST /api/v1/auth/login` sets an `HttpOnly`, `SameSite=Lax`, `Secure` session cookie (`__Host-samanvay_session` in production).
+- Asserts that no bearer/JWT tokens, secrets, or passwords appear in the response payload.
+- Confirms that invalid, expired, or revoked session presentations result in HTTP 401 with an explicit `Set-Cookie` deletion header.
 
-### 3.2. Attribute-Level Commercial Privacy (`test_match_api.py` & `test_graph_api.py`)
-- **MoPNG Privacy Invariant**: When an entity from CPSE $A$ (e.g. `IOCL`) queries the platform, any candidate part owned by CPSE $B$ (e.g. `ONGC`, `OIL`) **must not** reveal commercial pricing data.
-- Tested specifically by asserting:
-  ```python
-  for cand in response.candidates:
-      if cand.cpse != "IOCL":
-          assert cand.unit_cost_inr is None
-          assert cand.total_value_inr is None
-  ```
+### 3.2. Segregation of Duties & Workflow Boundaries (`test_material_workflow_authorization.py`)
+- **Anti-Self-Approval**: Asserts that a Site Engineer attempting to approve their own requisition is denied with `HTTP 403 Forbidden` (`DENY_SELF_APPROVAL`).
+- **Supplying CPSE Isolation**: Asserts that only personnel belonging to the supplying CPSE can issue a digital CISF gate pass.
+- **Receiving CPSE Confirmation**: Asserts that delivery receipt confirmation is restricted to the receiving CPSE.
 
-### 3.3. Zero-Tolerance Safety Gating & Benchmarks (`test_match_api.py`)
-- Verifies that `GET /api/v1/match/benchmark` evaluates all 150 test cases from `datasets/golden_benchmarks.json`.
-- Confirms that `precision_zero_tolerance == 1.0` (zero hazardous substitutions pass undetected).
+### 3.3. Authoritative Multi-Tenant Scoping (`test_auth5k_read_hardening.py` & `test_match_api.py`)
+- **MoPNG Privacy Invariant**: Asserts that spoofing `X-CPSE-ID` headers or injecting `cpse` into request bodies cannot bypass server-side tenant boundaries.
+- Confirms that cross-CPSE candidates have their commercial pricing (`unit_cost_inr`, `total_value_inr`) scrubbed.
 
 ### 3.4. Cryptographic Tamper-Evidence (`test_audit_api.py`)
 - Constructs valid multi-block audit ledgers and verifies `is_valid == True`.
-- Injects single-byte alterations into historical payload text and asserts that `verify_audit_chain()` immediately reports `is_valid == False` and identifies the exact corrupted index height.
-
----
-
-## 4. Running the API Test Suite
-
-```powershell
-# Run the complete API test module
-uv run pytest tests/api/ -v
-
-# Run a specific router test suite
-uv run pytest tests/api/test_auth_api.py -v
-uv run pytest tests/api/test_match_api.py -v
-```
+- Verifies that modifying any historical field breaks all subsequent SHA-256 seals.

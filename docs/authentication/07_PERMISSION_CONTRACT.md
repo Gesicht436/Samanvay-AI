@@ -1,7 +1,7 @@
-# AUTH-007 — Permission & Authorization Contract
+﻿# AUTH-007 — Permission & Authorization Contract
 
 **Project:** Samanvay-AI
-**Branch:** `auth-development-shourya`
+**Branch:** `main`
 **Status:** Frozen permission and authorization contract; concrete implementation contract for AUTH-006
 **Depends on:** AUTH-003, AUTH-004, AUTH-005, AUTH-006
 **Scope:** Canonical permission vocabulary, role-to-permission mapping, authorization evaluation contract, resource-policy boundaries, CPSE isolation rules, workflow authorization rules, audit-scope rules, and the policy-provider interface

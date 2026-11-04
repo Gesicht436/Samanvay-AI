@@ -8,7 +8,7 @@ It establishes strict OpenAPI boundaries across four vital subdomains:
 1. **Material & Matching Contracts**: Dynamic relational compatibility tiers, physical property scorecards, deterministic rule violation structures, and TreeSHAP explainability attributions.
 2. **Inventory Management & Privacy Controls**: Segregated public versus internal schemas enforcing attribute-level privacy (commercial costs are strictly scrubbed in cross-CPSE responses).
 3. **Inter-CPSE Requisitions & CISF Logistics**: Request and approval models, two-phase reservation parameters, and digitally sealed CISF material gate passes.
-4. **Sovereign Audit & RBAC Authentication**: CVC/CAG cryptographic hash chain envelopes, active learning HITL feedback schemas, and multi-tenant JWT payload contracts.
+4. **Sovereign Audit & Zero-Trust Authentication**: CVC/CAG cryptographic hash chain envelopes, active learning HITL feedback schemas, session-bound CSRF contracts, and administrative provisioning payloads.
 
 ```mermaid
 flowchart TD
@@ -17,6 +17,7 @@ flowchart TD
         ICR["InventoryCreateRequest"] --> StockEngine["Inventory Service"]
         RCR["RequisitionCreateRequest"] --> ReqEngine["Requisition Service"]
         ALF["ActiveLearningFeedback"] --> MLLoop["Active Learning Service"]
+        UPR["UserProvisionRequest"] --> AuthEngine["Auth & User Management"]
     end
 
     subgraph EvaluationContracts["Domain Schemas (material.py)"]
@@ -31,6 +32,8 @@ flowchart TD
         StockEngine -->|Own Facility Internal| IIPR["InventoryItemPrivateResponse (Includes Unit Cost & PO)"]
         ReqEngine --> GPR["GatePassResponse (SHA-256 Seal & QR SVG)"]
         ReqEngine --> AVR["AuditVerificationResponse (Chain Integrity)"]
+        AuthEngine --> CSRF_RESP["CsrfTokenResponse (Session-Bound Token)"]
+        AuthEngine --> UR["UserResponse (Sanitized Profile Without Secrets)"]
     end
 ```
 
@@ -44,7 +47,7 @@ flowchart TD
 | [`inventory.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/schemas/inventory.py) | `InventoryStatus`, `InventoryItemResponse`, `InventoryItemPrivateResponse`, `InventoryCreateRequest`, `SurplusRadarItem` | Inventory lifecycle tracking and attribute-level commercial privacy firewall enforcement. |
 | [`requisition.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/schemas/requisition.py) | `UrgencyLevel`, `RequisitionStatus`, `RequisitionCreateRequest`, `RequisitionResponse`, `GatePassCreateRequest`, `GatePassResponse` | Inter-CPSE transfer requests, approval/rejection lifecycle, and CISF material gate pass contracts. |
 | [`audit.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/schemas/audit.py) | `AuditActionCategory`, `AuditLogEntry`, `AuditLogCreateRequest`, `AuditVerificationResponse`, `ActiveLearningFeedback` | Tamper-evident CVC/CAG audit log serialization, active learning feedback, and hash-chain verification responses. |
-| [`auth.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/schemas/auth.py) | `UserRole`, `UserLogin`, `UserSignup`, `UserResponse`, `Token`, `TokenPayload`, `SeedUserInfo`, `SEED_USERS` | Multi-tenant CPSE authentication, JWT bearer token claims, and pre-seeded test user directory. |
+| [`auth.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/schemas/auth.py) | `UserRole`, `UserLogin`, `UserProvisionRequest`, `CsrfTokenResponse`, `UserResponse`, `SeedUserInfo`, `SEED_USERS` | Multi-tenant CPSE authentication, server-side session responses, administrative provisioning contracts, and pre-seeded test user directory. |
 | [`__init__.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/schemas/__init__.py) | Package namespace exports | Central hub re-exporting all API contracts. |
 
 ---
@@ -58,35 +61,26 @@ flowchart TD
   - `TIER_2_SUBSTITUTE`: $80\% - 94\%$ match composite score, safe standard upgrades requiring Human-In-The-Loop (HITL) sign-off.
   - `TIER_3_INCOMPATIBLE`: $< 80\%$ composite score OR any zero-tolerance engineering rule violation.
 - **Granular Property Breakdown (`PropertyScorecard`)**:
-  Separates physical dimensions, pressure ratings, metallurgy, connection ends, and component-specific properties into distinct `PropertyEvaluation` nodes with dedicated statuses (`IDENTICAL`, `SAFE_UPGRADE`, `ADAPTABLE`, `HARD_REJECT`).
-- **Extracted Attributes & Graceful Degradation (`ExtractedMaterialAttributes`)**:
-  Features model validators that parse shorthand units (e.g., converting `"4 INCH"` or `4"` to `100.0 mm`, and `300#` to integer `300`). If non-critical fields on degraded scans cannot be parsed, the schema flags `is_incomplete=True` and populates `missing_attributes` without raising validation errors.
+  Returns explicit sub-scores across dimensional tolerance, pressure safety, metallurgy suitability, and facing/end finish.
+- **Explainable Violations (`RuleViolation`)**:
+  When an item is rejected, returns the specific engineering safety module (e.g. `M04_Metallurgy`), reference standard (e.g. `ASME B31.3`), and root-cause failure mode.
 
-### 3.2. Attribute-Level Privacy Firewall (`inventory.py`)
+### 3.2. Privacy Firewalls & Sensitive Data Scrubbing (`inventory.py`)
 
-To satisfy strict MoPNG commercial confidentiality mandates during inter-CPSE surplus discovery:
-- `InventoryItemResponse`: Emits technical specifications, quantities, and idle days, but **strictly omits** `unit_cost_inr`, `total_value_inr`, `po_no`, and `heat_no`.
-- `InventoryItemPrivateResponse`: Inherits from `InventoryItemResponse` and includes cost and vendor metadata. This schema is restricted to authenticated users belonging to the owning facility.
-- `SurplusRadarItem`: Dedicated schema for the Pre-Purchase Radar where commercial prices are scrubbed at the serialization boundary.
+To prevent anti-competitive price signaling between sister CPSEs while enabling surplus discovery:
+- **`InventoryItemResponse`** (Public Cross-CPSE Schema):
+  Completely omits `unit_cost_inr`, `total_value_inr`, and procurement order references.
+- **`InventoryItemPrivateResponse`** (Internal Same-CPSE Schema):
+  Includes financial valuations and purchase order details, rendered only when the requesting officer matches the inventory item's owning CPSE.
 
-### 3.3. Inter-CPSE Requisition & CISF Gate Pass (`requisition.py`)
+### 3.3. Inter-CPSE Requisition Contracts (`requisition.py`)
 
-- **`RequisitionCreateRequest`**: Requires `sku_code`, `required_qty > 0`, `source_unit`, `justification`, `urgency_level` (`EMERGENCY_SHUTDOWN`, `PLANNED_MAINTENANCE`, `ROUTINE`), and an `Idempotency-Key` header.
-- **`GatePassResponse`**: Returns the complete security document containing the `cisf_verification_seal`, `sha256_hash`, transit metrics (`transit_distance_km`, `estimated_transit_hours`), ecological impact (`co2_saved_kg`), and inline `qr_code_svg` for field barcode verification.
+- **`RequisitionCreateRequest`**: Requires target CPSE, SKU code, requested quantity, and urgency level (`CRITICAL_SHUTDOWN`, `PLANNED_MAINTENANCE`, `ROUTINE_STOCK`).
+- **`GatePassResponse`**: Returns the complete SVG QR payload and cryptographic digital seal for CISF checkpoint verification.
 
-### 3.4. Sovereign Cryptographic Audit & HITL (`audit.py`)
+### 3.4. Session Authentication Contracts (`auth.py`)
 
-- **`AuditVerificationResponse`**: Delivers the result of on-the-fly chain verification (`is_valid`, `total_entries`, `entries_verified`, `first_broken_index`).
-- **`ActiveLearningFeedback`**: Captures engineer override decisions (`APPROVE`, `REJECT`, `RECLASSIFY`) with optional `tier_override` and confidence scores, triggering retraining datasets.
-
-### 3.5. Multi-Tenant Role-Based Access Control (`auth.py`)
-
-- **6 Functional Roles (`UserRole`)**:
-  - `SITE_ENGINEER`: Creates search inquiries, reviews engineering upgrades.
-  - `MATERIALS_MANAGER`: Manages plant stock, initiates inter-CPSE requisitions.
-  - `TECHNICAL_AUTHORITY`: Reviews and triage-signs Tier-2 substitutes.
-  - `CISF_SECURITY`: Inspects digital gate passes, authorizes perimeter dispatch.
-  - `VIGILANCE_AUDITOR`: Inspects SHA-256 tamper-evident ledgers.
-  - `SUPER_ADMIN`: Ministry-level administrative access.
-- **Seed User Catalog (`SEED_USERS`)**:
-  Pre-configures authentic CPSE test accounts across OIL Duliajan, IOCL Panipat, ONGC Uran, GAIL Pata, BPCL Mumbai, HPCL Visakh, NRL Numaligarh, and MoPNG.
+- **`UserLogin`**: Accepts username and password for server-side credential verification.
+- **`UserProvisionRequest`**: Super-admin account provisioning payload enforcing min-8 char passwords, email validation, and sovereign role assignment.
+- **`CsrfTokenResponse`**: Returns the HMAC session-bound CSRF token required for browser mutations.
+- **`UserResponse`**: Safe user representation containing identity, CPSE, and role without passwords or session secrets.
