@@ -1,12 +1,13 @@
 """
 FastAPI Ingest Router — Multi-modal Document & Catalog Ingestion.
 
-Handles:
+Powered by Hariom's OCR Pipeline (OCR.pipeline) and MTC Ingestion Intelligence
+(backend.app.ingestion). Handles:
 1. Multi-modal PDF & Scanned MTC Ingestion:
-   - Fast PyMuPDF digital vector stream extraction (< 50ms)
-   - Preprocessed PaddleOCR raster scan path
+   - Native PyMuPDF vector stream extraction
+   - Preprocessed PaddleOCR / EasyOCR raster scan path
    - EN 10204 3.1 MTC chemistry, IIW CE, and mechanical ASTM validation
-   - Automatic graceful degradation and routing to HITL queue
+   - Relational persistence into PostgreSQL IngestedDocument table
 2. ERP Inventory Catalog Batch Streaming:
    - CSV / Excel batch import with schema validation
 3. Ingested Document Ledger Queries.
@@ -15,21 +16,21 @@ Handles:
 import io
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import pandas as pd
 
 from backend.app.api.dependencies import get_db_session
 from backend.app.models.tables import IngestedDocument, InventoryItem
-from backend.app.schemas.material import ExtractedMaterialAttributes
-from ml.vision.ocr_engine import OCREngine
-from ml.vision.mtc_parser import MTCParser
-
+from backend.app.ingestion.document import process_document, clean_text, parse_mtc_certificate
 
 router = APIRouter(prefix="/ingest", tags=["Ingest"])
 
-# Singleton engine instances
-ocr_engine = OCREngine()
-mtc_parser = MTCParser()
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+
+
+class TextIngestRequest(BaseModel):
+    raw_text: str = Field(min_length=1)
 
 
 @router.post("/document")
@@ -48,31 +49,41 @@ async def upload_document(
             detail="Uploaded file must have a valid filename.",
         )
 
-    file_bytes = await file.read()
+    file_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(file_bytes) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded file is empty (0 bytes).",
         )
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File is too large. Maximum upload size is 15 MB.",
+        )
 
-    # 1. Dual-Path Text Extraction
-    ocr_result = ocr_engine.extract_document(file_bytes, file.filename)
-    raw_text = (ocr_result.get("raw_text") or "").strip()
-    confidence = float(ocr_result.get("confidence_score", 0.0))
-    doc_type = ocr_result.get("doc_type", "UNKNOWN")
-    is_scanned = bool(ocr_result.get("is_scanned", False))
-    is_unreadable = bool(not raw_text or len(raw_text) < 5 or confidence == 0.0)
+    # 1. Process Document through Hariom's OCR & Ingestion Pipeline
+    try:
+        doc_result = process_document(file_bytes, file.filename)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"The selected document could not be processed: {exc}",
+        ) from exc
 
-    # 2. MTC Certificate Extraction & ASTM Validation
-    parsed_mtc = mtc_parser.parse_full_mtc(raw_text, confidence_score=confidence)
-    material_attrs = mtc_parser.to_material_attributes(parsed_mtc)
+    raw_text = doc_result.get("raw_text") or ""
+    confidence = float(doc_result.get("confidence", 0.0))
+    extraction_method = doc_result.get("extraction_method", "unknown")
+    is_scanned = "paddle" in extraction_method.lower() or "easyocr" in extraction_method.lower()
+    doc_type = "SCANNED_PDF" if is_scanned else "DIGITAL_VECTOR_PDF"
+    is_unreadable = bool(not raw_text or len(raw_text.strip()) < 5 or confidence == 0.0)
 
-    # If document is unreadable, force requires_hitl and mark incomplete
-    if is_unreadable:
-        material_attrs.requires_hitl = True
-        material_attrs.is_incomplete = True
+    parsed_metadata = doc_result.get("parsed_metadata", {})
+    chemistry = doc_result.get("chemistry", {})
+    astm_conformance = doc_result.get("astm_conformance", False)
+    warnings = doc_result.get("conformance_warnings", [])
+    requires_hitl = doc_result.get("requires_hitl", False) or is_unreadable
 
-    # 3. Persist into Relational Ledger
+    # 2. Persist into PostgreSQL IngestedDocument Ledger
     doc_record = IngestedDocument(
         filename=file.filename,
         doc_type=doc_type,
@@ -80,17 +91,13 @@ async def upload_document(
         confidence=confidence,
         raw_text=raw_text[:50000] if raw_text else "",
         parsed_metadata={
-            "header": parsed_mtc.get("header", {}),
-            "chemistry": parsed_mtc.get("chemical_composition", {}),
-            "carbon_equivalent_iiw": parsed_mtc.get("carbon_equivalent_iiw"),
-            "weldability": parsed_mtc.get("weldability"),
-            "pren": parsed_mtc.get("pren"),
-            "mechanical": parsed_mtc.get("mechanical_properties", {}),
-            "conforms_to_astm": parsed_mtc.get("conforms_to_astm", False),
-            "warnings": parsed_mtc.get("non_conformance_warnings", []),
-            "missing_attributes": material_attrs.missing_attributes,
-            "requires_hitl": material_attrs.requires_hitl,
+            **parsed_metadata,
+            "chemistry": chemistry,
+            "astm_conformance": astm_conformance,
+            "warnings": warnings,
+            "requires_hitl": requires_hitl,
             "is_unreadable": is_unreadable,
+            "extraction_method": extraction_method,
         },
     )
 
@@ -103,6 +110,7 @@ async def upload_document(
         db.rollback()
         doc_id = None
 
+    # Merge response with both frontend schemas
     return {
         "document_id": doc_id,
         "filename": file.filename,
@@ -115,18 +123,42 @@ async def upload_document(
             else "Document text successfully parsed."
         ),
         "confidence_score": confidence,
-        "requires_hitl": material_attrs.requires_hitl,
-        "is_incomplete": material_attrs.is_incomplete,
-        "missing_attributes": material_attrs.missing_attributes,
-        "extracted_attributes": material_attrs.model_dump(),
-        "chemistry": parsed_mtc.get("chemical_composition", {}),
-        "carbon_equivalent_iiw": parsed_mtc.get("carbon_equivalent_iiw"),
-        "weldability": parsed_mtc.get("weldability"),
-        "pren": parsed_mtc.get("pren"),
-        "mechanical": parsed_mtc.get("mechanical_properties", {}),
-        "astm_conformance": parsed_mtc.get("conforms_to_astm", False),
-        "warnings": parsed_mtc.get("non_conformance_warnings", []),
-        "bounding_boxes": ocr_result.get("bounding_boxes", [])[:50],
+        "confidence": confidence,
+        "extraction_method": extraction_method,
+        "page_count": doc_result.get("page_count", 1),
+        "pages": doc_result.get("pages", []),
+        "requires_hitl": requires_hitl,
+        "is_incomplete": bool(requires_hitl and not astm_conformance),
+        "missing_attributes": warnings,
+        "extracted_attributes": parsed_metadata.get("engineering_attributes", {}),
+        "parsed_metadata": parsed_metadata,
+        "raw_text": raw_text,
+        "chemistry": chemistry,
+        "carbon_equivalent_iiw": chemistry.get("carbon_equivalent_iiw") if isinstance(chemistry, dict) else None,
+        "weldability": chemistry.get("weldability") if isinstance(chemistry, dict) else None,
+        "pren": chemistry.get("pren") if isinstance(chemistry, dict) else None,
+        "mechanical": parsed_metadata.get("mechanical_properties", []),
+        "astm_conformance": astm_conformance,
+        "warnings": warnings,
+        "ocr_profile": doc_result.get("ocr_profile"),
+        "bounding_boxes": [],
+    }
+
+
+@router.post("/text")
+async def ingest_text(request: TextIngestRequest) -> dict:
+    """
+    Ingests raw MTC or certificate text directly for parsing and validation.
+    """
+    cleaned = clean_text(request.raw_text)
+    metadata = parse_mtc_certificate(cleaned)
+    return {
+        "filename": None,
+        "raw_text": cleaned,
+        "parsed_metadata": metadata,
+        "confidence": 1.0,
+        "extraction_method": "manual_text",
+        "page_count": 1,
     }
 
 
@@ -153,9 +185,6 @@ async def upload_catalog(
             raise HTTPException(status_code=400, detail="Unsupported catalog format. Must be CSV or Excel.")
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Failed to parse tabular file: {str(e)}")
-
-    required_cols = {"sku_code", "cpse", "depot_id", "description", "item_type"}
-    actual_cols = {c.lower().strip() for c in df.columns}
 
     # Normalize column names
     col_map = {c: c.lower().strip() for c in df.columns}

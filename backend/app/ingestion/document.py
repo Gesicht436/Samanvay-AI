@@ -208,3 +208,22 @@ def ingest_document(file_bytes: bytes, filename: str) -> DocumentIngestResponse:
         astm_conformance={"conforming": conforming, "warnings": warnings},
         requires_hitl=not conforming,
     )
+
+
+
+def process_document(file_bytes: bytes, filename: str) -> dict[str, Any]:
+    from . import process_document as _proc
+
+    return _proc(file_bytes, filename)
+
+
+def clean_text(raw_text: str) -> str:
+    from . import clean_text as _clean
+
+    return _clean(raw_text)
+
+
+def parse_mtc_certificate(raw_text: str) -> dict[str, Any]:
+    from . import parse_mtc_certificate as _parse
+
+    return _parse(raw_text)

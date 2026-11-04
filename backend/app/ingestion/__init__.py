@@ -97,3 +97,29 @@ def run_ocr(image_bytes: bytes, min_confidence: float = 0.60) -> tuple[str, floa
 	extraction = extract_document(image_bytes, "upload.png")
 	confidence = _confidence("ocr_image")
 	return (extraction.raw_text, confidence) if confidence >= min_confidence else ("", confidence)
+
+
+from .certificate import MTCParser
+from .ocr_engine import OCREngine
+from .chemistry import (
+    compute_carbon_equivalent,
+    classify_weldability,
+    compute_pren,
+    validate_composition,
+    validate_mechanical_properties,
+)
+
+__all__ = [
+    "ALLOWED_EXTENSIONS",
+    "clean_text",
+    "parse_mtc_certificate",
+    "process_document",
+    "run_ocr",
+    "OCREngine",
+    "MTCParser",
+    "compute_carbon_equivalent",
+    "classify_weldability",
+    "compute_pren",
+    "validate_composition",
+    "validate_mechanical_properties",
+]
