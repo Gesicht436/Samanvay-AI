@@ -2,7 +2,7 @@
 curate_taxonomies.py
 Generates clean UNSPSC v26, GeM category hierarchies, and canonical material master catalog.
 Used for Neo4j knowledge graph seeding and downstream ontology resolution.
-Author: Data Pipelines & Taxonomy Lead (Shaurya)
+Author: Data Pipelines & Taxonomy Team
 """
 
 import os

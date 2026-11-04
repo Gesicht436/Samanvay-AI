@@ -39,7 +39,8 @@ flowchart TD
 | [`matching.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/contracts/matching.py) | `EquivalenceTier`, `Tier`, `ExtractedMaterialAttributes`, `CandidateMatch`, `MatchResult` | Standardizes candidate match rankings, domain subvector similarity breakdowns, engineering rule violation lists, and routing metadata. |
 | [`dashboard.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/contracts/dashboard.py) | `DashboardOCRStatus`, `DashboardCapabilities`, `DashboardSummary` | Provides health, capability reporting, model readiness (embedding, reranker), review queue metrics, and OCR status for administrative dashboards. |
 | [`auth.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/contracts/auth.py) | `UserContext` | Lightweight identity context (`user_id`, `role`) passed across service boundaries. |
-| [`__init__.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/contracts/__init__.py) | Package namespace exports | Exposes core matching contracts. |
+| [`canonical_schema.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/contracts/canonical_schema.py) | `CanonicalMaterialItem`, `CANONICAL_COLUMNS`, `MANDATORY_COLUMNS`, `COLUMN_ALIASES`, `normalize_catalog_row` | Samanvay Canonical Material Schema (SCMS-27) defining the project-wide 27-column standard across CPSE ERP catalogs, database models, and API boundaries. |
+| [`__init__.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/contracts/__init__.py) | Package namespace exports | Exposes core canonical schema and matching contracts. |
 
 ---
 

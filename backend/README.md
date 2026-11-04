@@ -68,7 +68,7 @@ The application utilizes FastAPI's `@asynccontextmanager lifespan` hook to perfo
    - In production (`APP_ENV=production`): Runs `verify_schema_version()`, validating that the database is migration-managed and matches `0001_baseline`. Fails closed if any baseline tables or versions are missing.
    - In development: Runs `init_db()` for rapid local bootstrapping.
 2. **Deterministic Auto-Seeding**:
-   - `seed_database_if_empty()`: Populates PostgreSQL with 5,000 authentic CPSE catalog items from `datasets/inventory_catalog.csv` if the table is uninitialized.
+   - `seed_database_if_empty()`: Populates PostgreSQL with 5,000 authentic CPSE catalog items from `data/catalogs/inventory_catalog.csv` if the table is uninitialized.
    - `seed_users_if_empty()`: In development, ensures that default persona users across OIL, IOCL, ONGC, GAIL, BPCL, HPCL, NRL, and MoPNG exist. Existing accounts are never overwritten, and seeding is skipped entirely in production.
 3. **Active Learning Cold-Start**:
    - `seed_from_golden_benchmarks()`: Loads the 150 golden benchmark cases into memory, establishing initial high-confidence decision boundaries before user interaction.

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from rules.tolerance import evaluate_pair
 
-BENCHMARKS_PATH = Path(__file__).resolve().parent.parent.parent / "datasets" / "golden_benchmarks.json"
+BENCHMARKS_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "benchmarks" / "golden_benchmarks.json"
 
 def _load_benchmarks():
     if not BENCHMARKS_PATH.exists():

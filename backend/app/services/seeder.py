@@ -10,9 +10,10 @@ import sys
 import logging
 import pandas as pd
 
+from backend.app.contracts.canonical_schema import normalize_catalog_row
 from backend.app.models.base import SessionLocal, init_db
 from backend.app.models.tables import InventoryItem, SovereignAuditLedger
-from ml.ner.normalizer import DialectNormalizer
+from machine_learning.ner_tagger import DialectNormalizer
 
 logger = logging.getLogger("samanvay.seeder")
 
@@ -36,9 +37,9 @@ def seed_database_if_empty():
             return
 
         csv_candidates = [
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "datasets", "inventory_catalog.csv"),
-            "/app/datasets/inventory_catalog.csv",
-            "datasets/inventory_catalog.csv",
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "catalogs", "inventory_catalog.csv"),
+            "/app/data/catalogs/inventory_catalog.csv",
+            "data/catalogs/inventory_catalog.csv",
         ]
 
         catalog_csv = None
@@ -48,7 +49,7 @@ def seed_database_if_empty():
                 break
 
         if not catalog_csv:
-            logger.warning("Auto-seeder: datasets/inventory_catalog.csv not found in search paths.")
+            logger.warning("Auto-seeder: data/catalogs/inventory_catalog.csv not found in search paths.")
             return
 
         logger.info(f"Auto-seeding 5,000 inventory items from {catalog_csv}...")
@@ -59,42 +60,48 @@ def seed_database_if_empty():
         items_to_add = []
 
         for idx, row in df.iterrows():
-            sku = str(row["sku_code"]).strip()
-            cpse = str(row["cpse_name"]).strip().upper()
-            location = str(row["depot_location"]).strip()
-            desc = str(row["raw_description"]).strip()
-            qty = int(row["quantity"])
-            unit_cost = float(row["unit_cost_inr"])
-            days_idle = int(row["days_idle"])
-            depot_id = derive_depot_id(cpse, location)
+            norm = normalize_catalog_row(row.to_dict())
+            sku = str(norm["sku_code"]).strip()
+            cpse = str(norm["cpse"]).strip().upper()
+            location = str(norm["depot_location"]).strip()
+            desc = str(norm["description"]).strip()
+            qty = int(norm["quantity"])
+            unit_cost = float(norm["unit_cost_inr"])
+            days_idle = int(norm.get("days_idle", 0) or 0)
+            depot_id = norm.get("depot_id") or derive_depot_id(cpse, location)
 
             meta = normalizer.normalize(desc)
-            item_type = str(meta.get("item_type") or "EQUIPMENT")[:60]
-            size_nb_mm = meta.get("size_nb_mm")
-            pressure_class = meta.get("pressure_class")
-            metallurgy = str(meta.get("metallurgy") or "")[:60] if meta.get("metallurgy") else None
-            facing_end = str(meta.get("facing_end") or "")[:30] if meta.get("facing_end") else None
+            item_type = str(norm.get("item_type") or meta.get("item_type") or "EQUIPMENT")[:60]
+            size_nb_mm = norm.get("size_nb_mm") or meta.get("size_nb_mm")
+            pressure_class = norm.get("pressure_class") or meta.get("pressure_class")
+            metallurgy = str(norm.get("metallurgy") or meta.get("metallurgy") or "")[:60] if (norm.get("metallurgy") or meta.get("metallurgy")) else None
+            facing_end = str(norm.get("facing_end") or meta.get("facing_end") or "")[:30] if (norm.get("facing_end") or meta.get("facing_end")) else None
 
-            po_no = str(row["po_no"]).strip() if "po_no" in row and pd.notna(row["po_no"]) else None
-            heat_no = str(row["heat_no"]).strip() if "heat_no" in row and pd.notna(row["heat_no"]) else None
-            standard = str(row["standard"]).strip() if "standard" in row and pd.notna(row["standard"]) else None
+            po_no = str(norm["po_no"]).strip() if norm.get("po_no") and pd.notna(norm["po_no"]) else None
+            heat_no = str(norm["heat_no"]).strip() if norm.get("heat_no") and pd.notna(norm["heat_no"]) else None
+            standard = str(norm["standard"]).strip() if norm.get("standard") and pd.notna(norm["standard"]) else None
+            canonical_id = str(norm["canonical_id"]).strip() if norm.get("canonical_id") and pd.notna(norm["canonical_id"]) else None
 
-            for field in ["hsn_code", "gem_category", "mesc_code", "cppp_tender_id"]:
-                if field in row and pd.notna(row[field]):
-                    meta[field] = str(row[field]).strip()
+            indian_standard = str(norm["indian_standard"]).strip() if norm.get("indian_standard") and pd.notna(norm["indian_standard"]) else meta.get("indian_standard")
+            oil_std_spec = str(norm["oil_std_spec"]).strip() if norm.get("oil_std_spec") and pd.notna(norm["oil_std_spec"]) else meta.get("oil_std_spec")
+            oil_material_code = str(norm["oil_material_code"]).strip() if norm.get("oil_material_code") and pd.notna(norm["oil_material_code"]) else meta.get("oil_material_code")
+            gem_category_id = str(norm["gem_category_id"]).strip() if norm.get("gem_category_id") and pd.notna(norm["gem_category_id"]) else meta.get("gem_category_id")
+            gem_product_id = str(norm["gem_product_id"]).strip() if norm.get("gem_product_id") and pd.notna(norm["gem_product_id"]) else None
+            cppp_tender_ref = str(norm["cppp_tender_ref"]).strip() if norm.get("cppp_tender_ref") and pd.notna(norm["cppp_tender_ref"]) else meta.get("cppp_tender_ref")
+            make_in_india_class = str(norm.get("make_in_india_class") or "Class-I")[:30]
+            local_content_percentage = float(norm.get("local_content_percentage") or 75.0)
+            pressure_rating_bar = float(norm["pressure_rating_bar"]) if norm.get("pressure_rating_bar") and pd.notna(norm["pressure_rating_bar"]) else None
+            location_state = str(norm["location_state"]).strip() if norm.get("location_state") and pd.notna(norm["location_state"]) else None
 
-            if days_idle >= 365:
-                status = "SURPLUS_DECLARED"
-                broadcast = True
-            elif days_idle >= 180:
-                status = "POTENTIAL_SURPLUS"
-                broadcast = True
-            else:
-                status = "TO_BE_CONSUMED"
-                broadcast = False
+            props = dict(norm.get("properties", {}))
+            props.update(meta)
+
+            status = norm.get("status", "TO_BE_CONSUMED")
+            broadcast = bool(norm.get("is_broadcasted_surplus", False))
 
             item = InventoryItem(
                 sku_code=sku,
+                canonical_id=canonical_id,
                 cpse=cpse,
                 depot_id=depot_id,
                 depot_location=location,
@@ -104,15 +111,25 @@ def seed_database_if_empty():
                 item_type=item_type,
                 size_nb_mm=size_nb_mm,
                 pressure_class=pressure_class,
+                pressure_rating_bar=pressure_rating_bar,
                 metallurgy=metallurgy,
                 facing_end=facing_end,
                 standard=standard,
+                indian_standard=indian_standard,
+                oil_std_spec=oil_std_spec,
+                oil_material_code=oil_material_code,
+                gem_category_id=gem_category_id,
+                gem_product_id=gem_product_id,
+                cppp_tender_ref=cppp_tender_ref,
+                make_in_india_class=make_in_india_class,
+                local_content_percentage=local_content_percentage,
+                location_state=location_state,
                 quantity=qty,
                 unit_cost_inr=unit_cost,
                 status=status,
                 days_idle=days_idle,
                 is_broadcasted_surplus=broadcast,
-                properties=meta,
+                properties=props,
             )
             items_to_add.append(item)
 
@@ -224,4 +241,3 @@ def seed_users_if_empty(db=None):
     finally:
         if close_db:
             db.close()
-

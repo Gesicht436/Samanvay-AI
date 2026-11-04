@@ -3,7 +3,7 @@ build_train_sets.py
 Constructs annotated datasets for Machine Learning pipelines:
 1. Token Classification (NER): 5,000 samples with character-level offsets.
 2. Bi-Encoder Contrastive Pairs: 8,000 paired samples for MultipleNegativesRankingLoss (MNRL).
-Author: Data Pipelines & Taxonomy Lead (Shaurya)
+Author: Data Pipelines & Taxonomy Team
 """
 
 import os

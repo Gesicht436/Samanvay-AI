@@ -1,8 +1,8 @@
 """
 seed_documents.py
 Synthesizes sample Mill Test Certificates (MTCs compliant with EN 10204 3.1) and Delivery Challans.
-Used by Smariddih (Document Intelligence Lead) to benchmark PyMuPDF, PaddleOCR, and key-value extraction.
-Author: Data Pipelines & Taxonomy Lead (Shaurya)
+Used by Document Intelligence pipelines to benchmark PyMuPDF, PaddleOCR, and key-value extraction.
+Author: Data Pipelines & Taxonomy Team
 """
 
 import os

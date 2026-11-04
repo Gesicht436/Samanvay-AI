@@ -2,13 +2,13 @@
 
 ## 1. Architectural Role & Overview
 
-The `tests/integration/` package provides parameterized integration benchmarks validating the core safety, tolerance, and physics rules engines across all 150 standardized test scenarios in `datasets/golden_benchmarks.json`.
+The `tests/integration/` package provides parameterized integration benchmarks validating the core safety, tolerance, and physics rules engines across all 150 standardized test scenarios in `data/benchmarks/golden_benchmarks.json`.
 
 Unlike isolated unit tests, these integration tests verify the end-to-end evaluation pipeline of `rules.tolerance.evaluate_pair`, ensuring that query and candidate attribute specifications correctly traverse all 21 specialized engineering rules modules (ASME, ASTM, API, NACE, TEMA, EJMA).
 
 ```mermaid
 flowchart TD
-    GB["datasets/golden_benchmarks.json (150 Cases)"] --> Runner["test_benchmarks.py (@pytest.mark.parametrize)"]
+    GB["data/benchmarks/golden_benchmarks.json (150 Cases)"] --> Runner["test_benchmarks.py (@pytest.mark.parametrize)"]
 
     Runner --> Case1["Tier 1: 50 Exact & Safe Over-Rating Cases"]
     Runner --> Case2["Tier 2: 50 Functional Substitutes (HITL Sign-off)"]
@@ -36,7 +36,7 @@ flowchart TD
 
 ## 3. Benchmark Verification Methodology
 
-Each golden benchmark case in `datasets/golden_benchmarks.json` specifies:
+Each golden benchmark case in `data/benchmarks/golden_benchmarks.json` specifies:
 - `query_part`: Desired component dimensions, pressure rating, metallurgy, and equipment-specific properties.
 - `candidate_part`: Available surplus catalog item specifications.
 - `expected_tier`: Target classification (`TIER_1_IDENTICAL`, `TIER_2_SUBSTITUTE`, `TIER_3_INCOMPATIBLE`).

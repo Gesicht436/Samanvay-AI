@@ -96,9 +96,9 @@ class Settings(BaseSettings):
     idempotency_ttl_hours: int = 24
 
     # ── Dataset Paths ────────────────────────────────────────────
-    inventory_catalog_path: str = "datasets/inventory_catalog.csv"
-    golden_benchmarks_path: str = "datasets/golden_benchmarks.json"
-    ocr_payloads_path: str = "datasets/ocr_payloads.json"
+    inventory_catalog_path: str = "data/catalogs/inventory_catalog.csv"
+    golden_benchmarks_path: str = "data/benchmarks/golden_benchmarks.json"
+    ocr_payloads_path: str = "data/benchmarks/ocr_payloads.json"
 
     # ── Server-side Session Authentication (AUTH-005 / AUTH-006) ──
     # NOTE: absolute session expiry, idle/session policy, concurrency and

@@ -1,9 +1,9 @@
 """
 Samanvay-AI Dataset Generator
 Generates:
-1. datasets/inventory_catalog.csv (5,000 rows, CPSE ERP dialects, 12% sparsity)
-2. datasets/golden_benchmarks.json (150 paired test cases: 50 Tier-1, 50 Tier-2, 50 Tier-3 testing 21 safety modules)
-3. datasets/ocr_payloads.json (500 PaddleOCR MTC payloads, 10% low confidence, 5% hallucinations)
+1. data/catalogs/inventory_catalog.csv (5,000 rows, CPSE ERP dialects, SCMS-27 canonical schema)
+2. data/benchmarks/golden_benchmarks.json (150 paired test cases: 50 Tier-1, 50 Tier-2, 50 Tier-3 testing 21 safety modules)
+3. data/benchmarks/ocr_payloads.json (500 PaddleOCR MTC payloads, 10% low confidence, 5% hallucinations)
 """
 
 import csv
@@ -24,8 +24,11 @@ while repo_root and not os.path.exists(os.path.join(repo_root, "pyproject.toml")
         break
     repo_root = p
 
-DATASETS_DIR = os.path.join(repo_root, "datasets")
-os.makedirs(DATASETS_DIR, exist_ok=True)
+DATA_DIR = os.path.join(repo_root, "data")
+CATALOGS_DIR = os.path.join(DATA_DIR, "catalogs")
+BENCHMARKS_DIR = os.path.join(DATA_DIR, "benchmarks")
+os.makedirs(CATALOGS_DIR, exist_ok=True)
+os.makedirs(BENCHMARKS_DIR, exist_ok=True)
 
 # ----------------------------------------------------------------------
 # 1. INVENTORY CATALOG (5,000 Rows) Grounded in Real CPSE / GeM / CPPP
@@ -543,9 +546,9 @@ def generate_catalog_row(cpse: str, item_family: str, counter: int) -> Dict[str,
     
     return {
         "sku_code": sku_code,
-        "cpse_name": cpse,
+        "cpse": cpse,
         "depot_location": depot,
-        "raw_description": raw_desc,
+        "description": raw_desc,
         "quantity": qty,
         "unit_cost_inr": unit_cost,
         "days_idle": days_idle,
@@ -564,7 +567,10 @@ def generate_catalog_row(cpse: str, item_family: str, counter: int) -> Dict[str,
         "cppp_tender_ref": cppp_tender_ref,
         "make_in_india_class": mii_class,
         "local_content_percentage": local_pct,
-        "nominal_bore_mm": nb_mm,
+        "size_nb_mm": nb_mm,
+        "depot_id": f"{cpse}_{depot.split(',')[0].strip().replace(' ', '_').upper()}",
+        "status": "SURPLUS_DECLARED" if days_idle >= 365 else ("POTENTIAL_SURPLUS" if days_idle >= 180 else "TO_BE_CONSUMED"),
+        "is_broadcasted_surplus": days_idle >= 180,
         "pressure_rating_bar": bar_val,
         "location_state": location_state,
     }
@@ -996,18 +1002,18 @@ def main():
     print("Generating Samanvay-AI production-grade datasets grounded in GeM & CPPP...")
     
     fieldnames = [
-        "sku_code", "cpse_name", "depot_location", "raw_description",
+        "sku_code", "cpse", "depot_location", "description",
         "quantity", "unit_cost_inr", "days_idle",
         "po_no", "heat_no", "standard", "hsn_code", "gem_category", "mesc_code", "cppp_tender_id",
         "indian_standard", "oil_std_spec", "oil_material_code", "gem_category_id", "gem_product_id",
-        "cppp_tender_ref", "make_in_india_class", "local_content_percentage", "nominal_bore_mm",
-        "pressure_rating_bar", "location_state"
+        "cppp_tender_ref", "make_in_india_class", "local_content_percentage", "size_nb_mm",
+        "pressure_rating_bar", "location_state", "depot_id", "status", "is_broadcasted_surplus"
     ]
     
     # 1. Inventory Catalog
     print("1. Generating inventory_catalog.csv (5,000 rows)...")
     catalog_rows = generate_inventory_catalog(5000)
-    catalog_path = os.path.join(DATASETS_DIR, "inventory_catalog.csv")
+    catalog_path = os.path.join(CATALOGS_DIR, "inventory_catalog.csv")
     with open(catalog_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -1017,7 +1023,7 @@ def main():
     # 2. Golden Benchmarks
     print("2. Generating golden_benchmarks.json (150 paired test cases)...")
     benchmarks = generate_golden_benchmarks()
-    benchmarks_path = os.path.join(DATASETS_DIR, "golden_benchmarks.json")
+    benchmarks_path = os.path.join(BENCHMARKS_DIR, "golden_benchmarks.json")
     with open(benchmarks_path, "w", encoding="utf-8") as f:
         json.dump(benchmarks, f, indent=2)
     print(f"   -> Successfully saved {len(benchmarks)} paired cases to {benchmarks_path}")
@@ -1025,7 +1031,7 @@ def main():
     # 3. OCR Payloads
     print("3. Generating ocr_payloads.json (500 MTC payloads)...")
     ocr_payloads = generate_ocr_payloads(500)
-    ocr_path = os.path.join(DATASETS_DIR, "ocr_payloads.json")
+    ocr_path = os.path.join(BENCHMARKS_DIR, "ocr_payloads.json")
     with open(ocr_path, "w", encoding="utf-8") as f:
         json.dump(ocr_payloads, f, indent=2)
     print(f"   -> Successfully saved {len(ocr_payloads)} MTC payloads to {ocr_path}")

@@ -54,7 +54,7 @@ RUN groupadd -g 10001 -r samanvay && \
 COPY --chown=samanvay:samanvay --chmod=550 machine_learning/ ./machine_learning/
 COPY --chown=samanvay:samanvay --chmod=550 OCR/ ./OCR/
 COPY --chown=samanvay:samanvay --chmod=550 rules/ ./rules/
-COPY --chown=samanvay:samanvay --chmod=550 datasets/ ./datasets/
+
 COPY --chown=samanvay:samanvay --chmod=550 data/ ./data/
 COPY --chown=samanvay:samanvay --chmod=550 scripts/ ./scripts/
 COPY --chown=samanvay:samanvay --chmod=550 backend/ ./backend/

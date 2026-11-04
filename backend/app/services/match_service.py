@@ -17,9 +17,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from backend.app.models.tables import InventoryItem
-from ml.ner.normalizer import DialectNormalizer
-from ml.ranking.ranker import CompatibilityRanker
-from ml.active_learning.cache import ActiveLearningCache
+from machine_learning.ner_tagger import DialectNormalizer
+from machine_learning.reranker.ranker import CompatibilityRanker
+from machine_learning.active_learning import ActiveLearningCache
 from rules.tolerance import evaluate_pair, ToleranceResult
 from graph.logistics import (
     road_distance,

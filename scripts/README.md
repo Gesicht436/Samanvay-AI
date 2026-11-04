@@ -9,9 +9,9 @@ These utilities decouple runtime orchestration from core API code, enabling repe
 ```mermaid
 flowchart TD
     subgraph DataGeneration["1. Synthesis & Pre-Processing"]
-        GD["generate_datasets.py"] -->|Generates| IC["datasets/inventory_catalog.csv (5k rows)"]
-        GD -->|Generates| GB["datasets/golden_benchmarks.json (150 tests)"]
-        GD -->|Generates| OP["datasets/ocr_payloads.json (500 MTCs)"]
+        GD["generate_datasets.py"] -->|Generates| IC["data/catalogs/inventory_catalog.csv (5k rows)"]
+        GD -->|Generates| GB["data/benchmarks/golden_benchmarks.json (150 tests)"]
+        GD -->|Generates| OP["data/benchmarks/ocr_payloads.json (500 MTCs)"]
         BRP["build_reranker_pairs.py"] -->|Generates| RP["data/ml_training/reranker_pairs.parquet"]
     end
 
@@ -71,7 +71,7 @@ sequenceDiagram
     participant Audit as SovereignAuditLedger
 
     Script->>Postgres: init_db() & Execute DDL Schema Migrations
-    Script->>Script: Read datasets/inventory_catalog.csv (5,000 items)
+    Script->>Script: Read data/catalogs/inventory_catalog.csv (5,000 items)
     loop For Every Row (Batches of 500)
         Script->>Normalizer: normalize(raw_description)
         Normalizer-->>Script: Extracted Attributes (size_nb_mm, pressure_class, metallurgy)
@@ -177,12 +177,12 @@ sequenceDiagram
 ### 3.5. Dataset Generator (`generate_datasets.py`)
 
 Synthesizes production-grade training, validation, and benchmarking datasets:
-1. `datasets/inventory_catalog.csv`: 5,000 authentic records across 7 CPSEs (OIL 30%, NRL 10%, IOCL 15%, ONGC 15%, BPCL 10%, HPCL 10%, GAIL 10%) with authentic ERP naming dialects (OIL MESC dual standards, IOCL hash tokens, ONGC verbose engineering syntax, and BPCL/HPCL hyphenated metric notation).
-2. `datasets/golden_benchmarks.json`: 150 test cases:
+1. `data/catalogs/inventory_catalog.csv`: 5,000 authentic records across 7 CPSEs (OIL 30%, NRL 10%, IOCL 15%, ONGC 15%, BPCL 10%, HPCL 10%, GAIL 10%) with authentic ERP naming dialects (OIL MESC dual standards, IOCL hash tokens, ONGC verbose engineering syntax, and BPCL/HPCL hyphenated metric notation).
+2. `data/benchmarks/golden_benchmarks.json`: 150 test cases:
    - **50 Tier-1 Identical / Safe Over-Rating Cases** ($\ge 95\%$ match).
    - **50 Tier-2 Functional Substitute Cases** ($80\% - 94\%$ match, requires HITL sign-off).
    - **50 Tier-3 Fatal Hazard Invariant Traps** ($0\%$ match / rejection across all 21 physics and standards rule modules).
-3. `datasets/ocr_payloads.json`: 500 Material Test Certificates (MTC EN 10204 3.1) with chemical analysis, IIW carbon equivalent, mechanical tensile/yield/Charpy results, 10% degraded scans (0.65-0.84 confidence), and 5% OCR character substitutions.
+3. `data/benchmarks/ocr_payloads.json`: 500 Material Test Certificates (MTC EN 10204 3.1) with chemical analysis, IIW carbon equivalent, mechanical tensile/yield/Charpy results, 10% degraded scans (0.65-0.84 confidence), and 5% OCR character substitutions.
 
 - **Execution**:
   ```powershell

@@ -2,7 +2,7 @@
 generate_catalogs.py
 Generates 10,000+ realistic synthetic CPSE inventory catalogs across IOCL, ONGC, and BPCL.
 Implements distinct enterprise dialect noising profiles and inventory metadata.
-Author: Data Pipelines & Taxonomy Lead (Shaurya)
+Author: Data Pipelines & Taxonomy Team
 """
 
 import os
@@ -12,7 +12,7 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent
 TAXONOMY_DIR = DATA_DIR / "taxonomies"
-OUTPUT_DIR = DATA_DIR / "mock_cpes_catalogs"
+OUTPUT_DIR = DATA_DIR / "catalogs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 random.seed(42)
@@ -244,21 +244,23 @@ def generate_catalogs():
             )
             
             rows.append({
-                "local_code": local_code,
+                "sku_code": local_code,
                 "cpse": cpse,
-                "raw_description": raw_desc,
+                "description": raw_desc,
                 "canonical_id": item["canonical_id"],
                 "depot_id": depot_id,
                 "depot_location": depot_loc,
                 "quantity": quantity,
                 "unit_cost_inr": unit_cost,
-                "idle_days": idle_days,
-                "extracted_item_type": item["item_type"],
-                "extracted_size_nb_mm": item["size_nb_mm"],
-                "extracted_pressure_class": item["pressure_class"],
-                "extracted_metallurgy": item["metallurgy"],
-                "extracted_facing": item["facing_end"],
-                "extracted_standard": item["standard"]
+                "days_idle": idle_days,
+                "item_type": item["item_type"],
+                "size_nb_mm": item["size_nb_mm"],
+                "pressure_class": item["pressure_class"],
+                "metallurgy": item["metallurgy"],
+                "facing_end": item["facing_end"],
+                "standard": item["standard"],
+                "status": "SURPLUS_DECLARED" if idle_days >= 365 else ("POTENTIAL_SURPLUS" if idle_days >= 180 else "TO_BE_CONSUMED"),
+                "is_broadcasted_surplus": idle_days >= 180,
             })
             
         out_csv = OUTPUT_DIR / f"{cpse.lower()}_materials.csv"

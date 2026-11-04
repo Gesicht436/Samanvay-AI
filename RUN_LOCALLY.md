@@ -59,7 +59,7 @@ You should observe 5 healthy containers:
 - `samanvay-ai-frontend` (Port `3000`)
 
 > [!NOTE]
-> Upon initial startup, the backend automatically executes database migrations and seeds **5,000 authentic CPSE inventory items** from `datasets/inventory_catalog.csv` into PostgreSQL.
+> Upon initial startup, the backend automatically executes database migrations and seeds **5,000 authentic CPSE inventory items** from `data/catalogs/inventory_catalog.csv` into PostgreSQL.
 
 ### Step 4: Index the Canonical Material Master (First Run Only)
 To encode the 6,000+ national canonical items into the Qdrant vector database for semantic search:

@@ -1,7 +1,7 @@
 """
 Samanvay-AI Database & Vector Store Seeder.
 
-Seeds PostgreSQL with 5,000 catalog inventory lines from datasets/inventory_catalog.csv,
+Seeds PostgreSQL with 5,000 catalog inventory lines from data/catalogs/inventory_catalog.csv,
 populates initial Sovereign Audit Ledger entries with cryptographic SHA-256 seals,
 and indexes vectors into Qdrant.
 """
@@ -17,6 +17,7 @@ import pandas as pd
 # Add repository root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from backend.app.contracts.canonical_schema import normalize_catalog_row
 from backend.app.core.config import settings
 from backend.app.models.base import engine, SessionLocal, init_db
 from backend.app.models.tables import InventoryItem, SovereignAuditLedger
@@ -123,7 +124,7 @@ def seed_database():
         """))
         conn.commit()
 
-    csv_path = os.path.join(os.path.dirname(__file__), "..", "datasets", "inventory_catalog.csv")
+    csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "catalogs", "inventory_catalog.csv")
     if not os.path.exists(csv_path):
         print(f"[ERROR] Catalog file not found at {csv_path}")
         return
@@ -151,14 +152,15 @@ def seed_database():
             items_to_add = []
             
             for idx, row in df.iterrows():
-                sku = str(row["sku_code"]).strip()
-                cpse = str(row["cpse_name"]).strip().upper()
-                location = str(row["depot_location"]).strip()
-                desc = str(row["raw_description"]).strip()
+                norm = normalize_catalog_row(row.to_dict())
+                sku = str(norm["sku_code"]).strip()
+                cpse = str(norm["cpse"]).strip().upper()
+                location = str(norm["depot_location"]).strip()
+                desc = str(norm["description"]).strip()
                 qty = int(row["quantity"])
                 unit_cost = float(row["unit_cost_inr"])
-                days_idle = int(row["days_idle"])
-                depot_id = derive_depot_id(cpse, location)
+                days_idle = int(norm.get("days_idle", 0) or 0)
+                depot_id = norm.get("depot_id") or derive_depot_id(cpse, location)
 
                 # Dialect normalization & metadata extraction
                 meta = normalizer.normalize(desc)

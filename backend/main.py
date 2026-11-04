@@ -41,9 +41,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Pre-seed active learning cache from golden benchmarks
     try:
         import os
-        benchmarks_file = os.path.join(os.path.dirname(__file__), "../../datasets/golden_benchmarks.json")
+        benchmarks_file = os.path.join(os.path.dirname(__file__), "..", "data", "benchmarks", "golden_benchmarks.json")
         if os.path.exists(benchmarks_file):
-            from ml.active_learning.bootstrapper import seed_from_golden_benchmarks
+            from machine_learning.active_learning import seed_from_golden_benchmarks
             from backend.app.api.routers.match import active_cache
             seed_from_golden_benchmarks(active_cache, benchmarks_file)
     except Exception as e:
