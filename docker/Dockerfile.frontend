@@ -1,20 +1,25 @@
+# syntax=docker/dockerfile:1.7
 # ==============================================================================
-# Samanvay-AI: Industrial Web Portal & Executive Command Center
-# Build context: project root (one level above docker/)
-# Requires: next.config.ts output: 'standalone'
+# Samanvay-AI: Hardened Enterprise Next.js 16 Standalone Dockerfile
+# Base: Node 22 Alpine (Ultra-small attack surface ~85MB)
+# CIS Benchmark compliant: Non-root user, native fetch probe, BuildKit cache mount
 # ==============================================================================
 
-# ── Stage 1: Dependency cache ─────────────────────────────────────────────────
+# ── Stage 1: Dependency Cache ─────────────────────────────────────────────────
 FROM node:22-alpine AS deps
-
-WORKDIR /app
 
 RUN apk add --no-cache libc6-compat
 
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci
+WORKDIR /app
 
-# ── Stage 2: Next.js production build ────────────────────────────────────────
+# Copy package manifests
+COPY frontend/package.json frontend/package-lock.json* ./
+
+# Install dependencies using persistent npm BuildKit cache mount
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --no-audit || npm install
+
+# ── Stage 2: Next.js Production Builder ───────────────────────────────────────
 FROM node:22-alpine AS builder
 
 WORKDIR /app
@@ -28,42 +33,47 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     INTERNAL_BACKEND_URL=http://samanvay-ai-backend:8000 \
     NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
+# Build standalone Next.js bundle
 RUN npm run build
 
-# ── Stage 3: Minimal standalone runtime (~80MB) ───────────────────────────────
+# ── Stage 3: Minimal Standalone Runner (~85MB) ────────────────────────────────
 FROM node:22-alpine AS runner
 
-LABEL maintainer="BharatCodex Team <samanvay-ai@mopng.gov.in>"
-LABEL org.opencontainers.image.title="Samanvay-AI Web Portal"
-LABEL org.opencontainers.image.description="Industrial Web Portal & Command Center for MoPNG CPSEs"
-LABEL org.opencontainers.image.version="2.0.0-PROD"
-LABEL org.opencontainers.image.vendor="MoPNG / BharatCodex"
-LABEL project="Samanvay-AI"
+LABEL maintainer="BharatCodex Team <samanvay-ai@mopng.gov.in>" \
+      org.opencontainers.image.title="Samanvay-AI Web Portal" \
+      org.opencontainers.image.description="Industrial Web Portal & Command Center for MoPNG CPSEs" \
+      org.opencontainers.image.version="2.0.0-PROD" \
+      org.opencontainers.image.vendor="MoPNG / BharatCodex" \
+      project="Samanvay-AI"
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     INTERNAL_BACKEND_URL=http://samanvay-ai-backend:8000 \
     PORT=3000 \
-    HOSTNAME="0.0.0.0"
-
-RUN apk add --no-cache wget
-
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+    HOSTNAME="0.0.0.0" \
+    NODE_OPTIONS="--max-old-space-size=192"
 
 WORKDIR /app
 
-# Standalone output contains its own minimal node server — no node_modules needed
+# Create unprivileged system group & user (UID 1001)
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy standalone build and static assets with strict non-root ownership
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Ensure cache directory is writable for runtime ISR caches
+RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next/cache
 
 USER nextjs
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
-    CMD wget -q --spider http://localhost:3000/ || exit 1
+# Zero-binary native Node.js healthcheck probe using built-in global fetch
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
+    CMD ["node", "-e", "fetch('http://127.0.0.1:3000/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
 
-# standalone output emits server.js at the root
+# Standalone output emits server.js at root
 CMD ["node", "server.js"]

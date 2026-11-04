@@ -1,33 +1,46 @@
+# syntax=docker/dockerfile:1.7
 # ==============================================================================
-# Samanvay-AI: FastAPI Gateway & Physics Engine
-# Build context: project root (one level above docker/)
+# Samanvay-AI: Hardened Enterprise FastAPI + ML Gateway Dockerfile
+# Base: Python 3.12-slim-bookworm (glibc optimized for AI/ML wheels)
+# CIS Benchmark compliant: Non-root user, tini init reaper, AOT bytecode compilation
 # ==============================================================================
 
-# ── Stage 1: Dependency builder ───────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+# ── Stage 1: Dependency Builder ───────────────────────────────────────────────
+FROM python:3.12-slim-bookworm AS builder
+
+# Inherit official uv binary directly for reproducible, high-speed resolution
+COPY --from=ghcr.io/astral-sh/uv:0.5.26 /uv /uvx /bin/
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1
 
 WORKDIR /build
 
+# Minimal build tools for any C-extension compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv
+# Create dedicated virtual environment
+RUN uv venv /opt/venv
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
+# Copy package manifests first for optimal Docker layer caching
 COPY pyproject.toml ./
 
-RUN uv pip install --system --no-cache \
+# Install dependencies using persistent uv BuildKit cache mount
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --no-progress \
     fastapi \
     "uvicorn[standard]" \
     pydantic \
     pydantic-settings \
     email-validator \
     sqlalchemy \
+    "psycopg[binary]" \
     psycopg2-binary \
     python-dotenv \
     python-multipart \
@@ -36,6 +49,8 @@ RUN uv pip install --system --no-cache \
     pymupdf \
     numpy \
     pandas \
+    polars \
+    xgboost \
     openpyxl \
     scikit-learn \
     qrcode \
@@ -45,48 +60,69 @@ RUN uv pip install --system --no-cache \
     bcrypt \
     pyjwt
 
-# ── Stage 2: Production runtime ───────────────────────────────────────────────
-FROM python:3.12-slim AS runner
+# Ahead-Of-Time (AOT) bytecode compilation to eliminate cold-start JIT overhead
+RUN python -m compileall -q -f /opt/venv
 
-LABEL maintainer="BharatCodex Team <samanvay-ai@mopng.gov.in>"
-LABEL org.opencontainers.image.title="Samanvay-AI Backend"
-LABEL org.opencontainers.image.description="Sovereign AI-Powered Cross-CPSE Spare Parts Platform for MoPNG"
-LABEL org.opencontainers.image.version="2.0.0-PROD"
-LABEL org.opencontainers.image.vendor="MoPNG / BharatCodex"
-LABEL project="Samanvay-AI"
+# ── Stage 2: Production Runner ───────────────────────────────────────────────
+FROM python:3.12-slim-bookworm AS runner
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
-    PORT=8000 \
-    APP_ENV=production
+LABEL maintainer="BharatCodex Team <samanvay-ai@mopng.gov.in>" \
+      org.opencontainers.image.title="Samanvay-AI Backend" \
+      org.opencontainers.image.description="Sovereign AI-Powered Cross-CPSE Spare Parts Platform for MoPNG" \
+      org.opencontainers.image.version="2.0.0-PROD" \
+      org.opencontainers.image.vendor="MoPNG / BharatCodex" \
+      project="Samanvay-AI"
 
+# Install tini init reaper and runtime shared libraries (libgomp for OpenMP/XGBoost)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+    tini \
     libgomp1 \
     libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN groupadd -g 10001 samanvay && \
-    useradd -u 10001 -g samanvay -s /bin/bash -m samanvay
+# Create deterministic unprivileged non-root system user (UID 10001)
+RUN groupadd -g 10001 -r samanvay && \
+    useradd -u 10001 -r -g samanvay -s /sbin/nologin -M -d /nonexistent samanvay
 
 WORKDIR /app
 
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy compiled virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
 
-COPY --chown=samanvay:samanvay backend/ ./backend/
-COPY --chown=samanvay:samanvay ml/ ./ml/
-COPY --chown=samanvay:samanvay rules/ ./rules/
-COPY --chown=samanvay:samanvay graph/ ./graph/
-COPY --chown=samanvay:samanvay datasets/ ./datasets/
-COPY --chown=samanvay:samanvay pyproject.toml ./
+# Environment configuration
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH=/app \
+    PORT=8000 \
+    APP_ENV=production \
+    PYTHONUNBUFFERED=1 \
+    PYTHONOPTIMIZE=1 \
+    MALLOC_ARENA_MAX=2
 
+# Copy application source code with restricted permissions (read & execute only)
+COPY --chown=samanvay:samanvay --chmod=550 backend/ ./backend/
+COPY --chown=samanvay:samanvay --chmod=550 machine_learning/ ./machine_learning/
+COPY --chown=samanvay:samanvay --chmod=550 OCR/ ./OCR/
+COPY --chown=samanvay:samanvay --chmod=550 rules/ ./rules/
+COPY --chown=samanvay:samanvay --chmod=550 graph/ ./graph/
+COPY --chown=samanvay:samanvay --chmod=550 datasets/ ./datasets/
+COPY --chown=samanvay:samanvay --chmod=550 data/ ./data/
+COPY --chown=samanvay:samanvay --chmod=550 scripts/ ./scripts/
+COPY --chown=samanvay:samanvay --chmod=440 pyproject.toml ./
+
+# Precompile application code into bytecode
+RUN python -m compileall -q -f /app
+
+# Switch to unprivileged runtime user
 USER samanvay
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Zero-binary native Python healthcheck probe (zero external binary CVE exposure)
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).getcode() == 200 else 1)"]
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Use tini as PID 1 to handle kernel signal propagation and prevent zombie processes
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Exec-form command for Uvicorn with graceful shutdown timeout enforcement
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-graceful-shutdown", "25"]

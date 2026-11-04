@@ -1,28 +1,19 @@
+# syntax=docker/dockerfile:1.7
 # ==============================================================================
 # Samanvay-AI: Dedicated ML Inference Worker (RESERVED / NOT YET DEPLOYED)
 #
-# This Dockerfile defines a standalone ML microservice with sentence-transformers
-# + torch for a future split where embedding inference is offloaded from the
-# main backend to a dedicated GPU-enabled worker on port 8001.
-#
-# STATUS: Not referenced in docker-compose.yml. The backend currently handles
-#         all ML inference inline. Enable this when you need:
-#           - GPU acceleration for BAAI/bge-m3 embeddings
-#           - Independent scaling of the ML workload
-#           - Separate resource limits for CPU-heavy OCR / PaddleOCR
-#
-# To activate: add an `ml-worker` service to docker-compose.yml using this file
-# and mount it behind the backend with EMBEDDING_WORKER_URL=http://ml-worker:8001
+# Standalone ML microservice with sentence-transformers + torch for future
+# horizontal scaling where embedding inference is offloaded from backend.
 # ==============================================================================
 
-FROM python:3.12-slim AS runner
+FROM python:3.12-slim-bookworm AS runner
 
-LABEL maintainer="BharatCodex Team <samanvay-ai@mopng.gov.in>"
-LABEL org.opencontainers.image.title="Samanvay-AI ML Worker (Reserved)"
-LABEL org.opencontainers.image.description="Dedicated ML Worker for Local Sovereign Embedding & Document Intelligence"
-LABEL org.opencontainers.image.version="2.0.0-PROD"
-LABEL org.opencontainers.image.vendor="MoPNG / BharatCodex"
-LABEL project="Samanvay-AI"
+LABEL maintainer="BharatCodex Team <samanvay-ai@mopng.gov.in>" \
+      org.opencontainers.image.title="Samanvay-AI ML Worker (Reserved)" \
+      org.opencontainers.image.description="Dedicated ML Worker for Local Sovereign Embedding & Document Intelligence" \
+      org.opencontainers.image.version="2.0.0-PROD" \
+      org.opencontainers.image.vendor="MoPNG / BharatCodex" \
+      project="Samanvay-AI"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -32,17 +23,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+    tini \
     libgomp1 \
     libglib2.0-0 \
     libgl1 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN pip install --no-cache-dir uv
+# Inherit official uv binary
+COPY --from=ghcr.io/astral-sh/uv:0.5.26 /uv /uvx /bin/
 
 COPY pyproject.toml ./
 
-RUN uv pip install --system --no-cache \
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --no-progress \
     fastapi \
     "uvicorn[standard]" \
     pydantic \
@@ -55,16 +48,23 @@ RUN uv pip install --system --no-cache \
     pillow \
     torch --extra-index-url https://download.pytorch.org/whl/cpu
 
-RUN groupadd -g 10001 samanvay && \
-    useradd -u 10001 -g samanvay -s /bin/bash -m samanvay
+RUN groupadd -g 10001 -r samanvay && \
+    useradd -u 10001 -r -g samanvay -s /sbin/nologin -M -d /nonexistent samanvay
 
-COPY --chown=samanvay:samanvay ml/ ./ml/
-COPY --chown=samanvay:samanvay rules/ ./rules/
-COPY --chown=samanvay:samanvay datasets/ ./datasets/
-COPY --chown=samanvay:samanvay backend/ ./backend/
+COPY --chown=samanvay:samanvay --chmod=550 machine_learning/ ./machine_learning/
+COPY --chown=samanvay:samanvay --chmod=550 OCR/ ./OCR/
+COPY --chown=samanvay:samanvay --chmod=550 rules/ ./rules/
+COPY --chown=samanvay:samanvay --chmod=550 datasets/ ./datasets/
+COPY --chown=samanvay:samanvay --chmod=550 data/ ./data/
+COPY --chown=samanvay:samanvay --chmod=550 scripts/ ./scripts/
+COPY --chown=samanvay:samanvay --chmod=550 backend/ ./backend/
+
+RUN python -m compileall -q -f /app
 
 USER samanvay
 
 EXPOSE 8001
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001", "--timeout-graceful-shutdown", "25"]
