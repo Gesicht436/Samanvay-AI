@@ -1,110 +1,69 @@
-# Golden Benchmark Integration Test Suite (`tests/integration/`)
+# Integration & Golden Benchmark Test Suite (`tests/integration/`)
 
-**Total Test Count:** 150 Automated Benchmark Tests  
-**Dataset:** `datasets/golden_benchmarks.json`  
-**Core Engine:** `rules.tolerance.evaluate_pair`  
-**Target Milestone:** 100% Deterministic Safety & Zero False Tolerances  
+## 1. Architectural Role & Overview
 
-This directory houses the comprehensive integration test suite that evaluates the deterministic 21-rule engineering safety engine against **150 verified public sector Golden Benchmarks**.
+The `tests/integration/` package provides parameterized integration benchmarks validating the core safety, tolerance, and physics rules engines across all 150 standardized test scenarios in `datasets/golden_benchmarks.json`.
 
----
-
-## 1. Golden Benchmark Architecture
-
-The 150 Golden Benchmarks are curated from operational refinery and pipeline scenarios across IOCL, ONGC, and OIL, structured into three equal tiers of 50 test cases each:
+Unlike isolated unit tests, these integration tests verify the end-to-end evaluation pipeline of `rules.tolerance.evaluate_pair`, ensuring that query and candidate attribute specifications correctly traverse all 21 specialized engineering rules modules (ASME, ASTM, API, NACE, TEMA, EJMA).
 
 ```mermaid
 flowchart TD
-    JSON["datasets/golden_benchmarks.json<br/>(150 Expert-Verified Cases)"]
-    RUNNER["tests/integration/test_benchmarks.py<br/>(PyTest Parameterized Runner)"]
-    CORE["rules.tolerance.evaluate_pair()<br/>(21 Engineering Safety Rules)"]
+    GB["datasets/golden_benchmarks.json (150 Cases)"] --> Runner["test_benchmarks.py (@pytest.mark.parametrize)"]
 
-    JSON --> RUNNER
-    RUNNER --> CORE
+    Runner --> Case1["Tier 1: 50 Exact & Safe Over-Rating Cases"]
+    Runner --> Case2["Tier 2: 50 Functional Substitutes (HITL Sign-off)"]
+    Runner --> Case3["Tier 3: 50 Zero-Tolerance Fatal Hazard Traps"]
 
-    subgraph Benchmark Tiers
-        T1["Tier 1: Drop-In Identical (50 Cases)<br/>• GB-T1-0001 to GB-T1-0050<br/>• Exact match: size, rating, metallurgy<br/>• Expected: TIER_1_IDENTICAL, Compatible"]
-        T2["Tier 2: Qualified Substitutes (50 Cases)<br/>• GB-T2-0051 to GB-T2-0100<br/>• Safe upgrades: Cl 600 > Cl 300, A350 LF2 > A105<br/>• Expected: TIER_2_SUBSTITUTE, Compatible"]
-        T3["Tier 3: Fatal Failure Traps (50 Cases)<br/>• GB-T3-0101 to GB-T3-0150<br/>• Pressure down-rating, sour service, RF on FF<br/>• Expected: TIER_3_INCOMPATIBLE, Incompatible, ≥1 Violations"]
-    end
+    Case1 --> Engine["rules.tolerance: evaluate_pair()"]
+    Case2 --> Engine
+    Case3 --> Engine
 
-    CORE --> T1
-    CORE --> T2
-    CORE --> T3
+    Engine --> AssertTier["Assert result.compatibility_tier == expected_tier"]
+    Engine --> AssertCompat["Assert result.is_compatible == expected_is_compatible"]
+    Engine --> AssertViolations["Assert len(rule_violations) > 0 (for Tier 3)"]
 ```
 
 ---
 
-## 2. Benchmark Case Tier Breakdown
+## 2. Test File Inventory
 
-### A. Tier 1: Drop-In Identical Matches (Cases 1–50)
-- **ID Range:** `GB-T1-0001` through `GB-T1-0050`
-- **Criteria:** Exact match across all primary and secondary engineering dimensions (Nominal Bore mm, ANSI Pressure Class, ASTM Metallurgy Grade, Flange Facing Type, and Manufacturing Standard).
-- **Assertions:**
-  1. `compatibility_tier == "TIER_1_IDENTICAL"`
-  2. `is_compatible == True`
-  3. `len(rule_violations) == 0`
-
-### B. Tier 2: Qualified Safe Substitutes (Cases 51–100)
-- **ID Range:** `GB-T2-0051` through `GB-T2-0100`
-- **Criteria:** Safe engineering upgrades adhering to ASME B16.5 and API 6D over-specification principles:
-  - **Pressure Upgrade:** Supplying ANSI Class 600 when Class 300 is demanded (safe higher wall thickness and bolt rating).
-  - **Low-Temperature Metallurgy:** Supplying ASTM A350 LF2 normalized forged carbon steel (impact tested at $-46^\circ\text{C}$) in place of standard ambient ASTM A105.
-  - **Higher Schedule Pipe:** Supplying Schedule 80 or Schedule 160 when Schedule 40 was specified (provided fluid velocity drop is acceptable).
-  - **Stainless Upgrade:** Supplying Grade 316L in place of Grade 304 in non-critical utility lines.
-- **Assertions:**
-  1. `compatibility_tier == "TIER_2_SUBSTITUTE"`
-  2. `is_compatible == True`
-  3. `len(rule_violations) == 0`
-
-### C. Tier 3: Incompatible Fatal Failure Traps (Cases 101–150)
-- **ID Range:** `GB-T3-0101` through `GB-T3-0150`
-- **Criteria:** Catastrophic failure scenarios designed to catch subtle errors that naive semantic search engines fail to detect:
-  - **Pressure Down-Rating:** Supplying Class 150 for a Class 300 line (burst hazard).
-  - **Sour Service Non-Compliance:** Supplying standard carbon steel without NACE MR0175 / ISO 15156 hardness limits ($<22\text{ HRC}$) in wet sour gas environments (Sulfide Stress Cracking catastrophe).
-  - **Flange Facing Mismatch:** Mating Raised Face (RF) flanges to brittle Flat Face (FF) cast iron pump casings (bending moment flange cracking).
-  - **Piggable Line Obstruction:** Supplying reduced bore ball valves on piggable cross-country transmission pipelines (jamming intelligent pipeline inspection gauges).
-  - **Galvanic & Liquid Metal Traps:** Zinc/cadmium plated fasteners on austenitic stainless lines operating above $400^\circ\text{C}$ (liquid metal embrittlement).
-- **Assertions:**
-  1. `compatibility_tier == "TIER_3_INCOMPATIBLE"`
-  2. `is_compatible == False`
-  3. `len(rule_violations) > 0` (Must catch and identify the exact prevented failure mode).
+| Test File | Target Subsystem | Tested Specifications |
+| :--- | :--- | :--- |
+| [`test_benchmarks.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/integration/test_benchmarks.py) | `rules.tolerance.evaluate_pair()` | 150 parameterized test cases: 50 Tier-1 identical drop-ins, 50 Tier-2 qualified substitutes, and 50 Tier-3 fatal invariant failure modes across all 21 rules modules. |
+| [`__init__.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/integration/__init__.py) | Package initialization | Namespace anchor. |
 
 ---
 
-## 3. Test Runner Implementation
+## 3. Benchmark Verification Methodology
 
-In [test_benchmarks.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/integration/test_benchmarks.py):
+Each golden benchmark case in `datasets/golden_benchmarks.json` specifies:
+- `query_part`: Desired component dimensions, pressure rating, metallurgy, and equipment-specific properties.
+- `candidate_part`: Available surplus catalog item specifications.
+- `expected_tier`: Target classification (`TIER_1_IDENTICAL`, `TIER_2_SUBSTITUTE`, `TIER_3_INCOMPATIBLE`).
+- `expected_is_compatible`: Boolean compatibility flag (`True` for Tiers 1 and 2; `False` for Tier 3).
+- `expected_violation_code`: Specific failure mode code (e.g. `FATAL_PRESSURE_DOWN_RATING`, `FATAL_CRYOGENIC_BRITTLE_FRACTURE`, `FATAL_NACE_SOUR_SERVICE_VIOLATION`).
 
-```python
-@pytest.mark.parametrize("case", benchmarks, ids=lambda c: f"{c['test_id']}-{c['expected_tier']}")
-def test_golden_benchmark_case(case):
-    result = evaluate_pair(case["query_part"], case["candidate_part"])
-
-    # 1. Compatibility Tier
-    assert result.compatibility_tier.name == case["expected_tier"]
-
-    # 2. Boolean Compatibility Flag
-    assert result.is_compatible == case["expected_is_compatible"]
-
-    # 3. For Tier 3 Incompatible, must catch at least one deterministic rule violation
-    if case["expected_tier"] == "TIER_3_INCOMPATIBLE":
-        assert len(result.rule_violations) > 0
-```
+### 3.1. Tested Failure Mode Categories (Tier 3 Traps)
+1. **Pressure Down-Rating**: Capping Class 300 lines with Class 150 components (rupture hazard).
+2. **Cryogenic Brittle Fracture**: Non-impact-tested A105 carbon steel proposed for $-46^\circ\text{C}$ duty instead of impact-tested A350 LF2.
+3. **Hydrogen & High-Temperature Creep**: Carbon steel substituted for 2.25Cr-1Mo (P22) in $510^\circ\text{C}$ furnace lines.
+4. **Sour Gas & NACE MR0175**: Non-NACE valve ($> 22\text{ HRC}$) proposed for wet $\text{H}_2\text{S}$ duty (sulfide stress cracking).
+5. **Facing Incompatibility**: Mating Raised Face (RF) flanges to Ring Type Joint (RTJ) grooves.
+6. **Cast Iron Flat Face Fracture**: Bolting Raised Face steel flanges to Flat Face cast iron valve bodies.
+7. **Piggability Obstruction**: Installing reduced bore valves or short-radius elbows into piggable pipeline corridors.
+8. **Electrical Explosion**: Non-Ex safe-area motors proposed for Zone 1 hazardous areas.
 
 ---
 
-## 4. Running the Golden Benchmark Suite
+## 4. Running the Integration Benchmark Suite
 
-Execute the 150 benchmark test cases:
+```powershell
+# Run all 150 benchmark tests
+uv run pytest tests/integration/test_benchmarks.py -v
 
-```bash
-# Run all 150 integration benchmarks
-pytest tests/integration/test_benchmarks.py -v
+# Run only Tier 1 benchmark cases
+uv run pytest tests/integration/test_benchmarks.py -k "TIER_1" -v
 
-# Run only Tier 3 failure trap tests
-pytest tests/integration/test_benchmarks.py -k "GB-T3" -v
-
-# Run only Tier 1 exact match tests
-pytest tests/integration/test_benchmarks.py -k "GB-T1" -v
+# Run only Tier 3 zero-tolerance trap cases
+uv run pytest tests/integration/test_benchmarks.py -k "TIER_3" -v
 ```

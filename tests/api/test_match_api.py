@@ -2,9 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from ml.ner.normalizer import DialectNormalizer
+from machine_learning.ner_tagger import DialectNormalizer
 from rules.tolerance import evaluate_pair
-from ml.ranking.ranker import CompatibilityRanker
+from machine_learning.reranker.ranker import CompatibilityRanker
 from backend.app.schemas.material import MatchRequest, MatchSearchResponse
 from backend.app.services.match_service import (
     parse_query,

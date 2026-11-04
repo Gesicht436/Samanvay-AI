@@ -1,129 +1,156 @@
-# Deterministic Unit Test Suite (`tests/unit/`)
+# Samanvay AI — Unit Test Suite (`tests/unit/`)
 
-**Total Test Count:** 68 Automated Unit Tests  
-**Execution Speed:** ~0.85 Seconds (Fast, In-Memory, Deterministic)  
-**Target Milestone:** 100% Mathematical Precision, Mechanical Safety Compliance & Cryptographic Non-Repudiation  
-
-This directory contains focused unit tests that validate deterministic mathematical equations, metallurgical chemistry formulas, 21 engineering safety rules, Indian public procurement rules, and cryptographic security primitives of **Samanvay-AI**.
+> **Executive Scope**: The `tests/unit/` module encapsulates isolated, zero-dependency unit tests verifying deterministic mathematical formulations, physical engineering laws, Indian public procurement compliance policies, cryptographic hash-chain tamper-evidence, and ASME/ASTM engineering tolerance rules for Samanvay AI.
 
 ---
 
-## 1. Unit Testing Architecture & Domains
+## 1. Architectural Overview & Component Topology
+
+Unit tests execute directly in the Python runtime without spinning up external Docker services, PostgreSQL instances, Qdrant vector databases, or Neo4j graph databases. They validate deterministic logic with millisecond-scale execution speeds.
 
 ```mermaid
-flowchart TD
-    subgraph Deterministic Core Test Suites
-        TOL["test_tolerance.py (36 Tests)<br/>• 21 Engineering Safety Rules<br/>• Burst, Sour Service, Piggable Lines, RF/FF Mismatches"]
-        IND["test_indian_procurement_alignment.py (11 Tests)<br/>• BIS IS Standards (IS 1239, IS 14846, IS 2062, IS 1367)<br/>• OIL Logistics & Make In India (Class-I / Class-II)"]
-        CHEM["test_chemistry.py (3 Tests)<br/>• IIW Carbon Equivalent (CE_IIW)<br/>• Weldability & PREN Pitting Resistance"]
-        LOG["test_logistics.py (4 Tests)<br/>• Haversine & 1.25x Indian Road Circuity<br/>• BEE Freight CO2 Savings (62 g CO2/tonne-km)"]
-        SEC["test_security.py (4 Tests)<br/>• SHA-256 Merkle Chain Integrity & Tamper Detection<br/>• HMAC-SHA256 Digital Gate Pass Sealing"]
-        OCR["test_ocr_and_mtc.py (7 Tests)<br/>• PyMuPDF / CLAHE Image Processing<br/>• EN 10204 Type 3.1 MTC Chemistry Parsing"]
-        NORM["test_normalizer.py (3 Tests)<br/>• Unicode NFKC Normalization & Thesaurus Expansion"]
+graph TD
+    subgraph "Engineering & Physics Determinism"
+        TC[test_chemistry.py<br/>IIW CE & Weldability]
+        TT[test_tolerance.py<br/>36 Parametrized Engineering Rules]
+        TMTC[test_ocr_and_mtc.py<br/>Vector PDF Fast-Path & PREN]
     end
 
-    classDef unit fill:#ecfdf5,stroke:#059669,stroke-width:1.5px;
-    class TOL,IND,CHEM,LOG,SEC,OCR,NORM unit;
+    subgraph "Indian Public Procurement & MoPNG Governance"
+        TIPA[test_indian_procurement_alignment.py<br/>BIS/IS, MESC, EIL, MII Class-I]
+        TN[test_normalizer.py<br/>NFKC & Dialect Canonicalization]
+    end
+
+    subgraph "Cryptographic Integrity & Logistics"
+        TS[test_security.py<br/>SHA-256 Audit Blockchain & Gate Seals]
+        TL[test_logistics.py<br/>Haversine, Tortuosity & Green CO2]
+    end
+
+    TC --> EvalCore[Deterministic Evaluation Core]
+    TT --> EvalCore
+    TMTC --> EvalCore
+    TIPA --> EvalCore
+    TN --> EvalCore
+    TS --> EvalCore
+    TL --> EvalCore
 ```
 
 ---
 
-## 2. File-by-File Technical Breakdown
+## 2. Test File Catalog & Verification Coverage
 
-### 1. [test_tolerance.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/unit/test_tolerance.py) — 21 Engineering Safety Rules (36 Tests)
-- **Engine Under Test:** [rules/tolerance.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/rules/tolerance.py) (`evaluate_pair()`)
-- **Key Safety Enforcements:**
-  1. **Pressure Down-Rating:** Flags immediate `TIER_3_INCOMPATIBLE` if candidate pressure class is lower than demanded (prevents pipe rupture).
-  2. **Cryogenic Service:** Blocks carbon steel lacking Charpy V-notch impact testing at $-46^\circ\text{C}$ (prevents brittle fracture).
-  3. **Liquid Metal Embrittlement:** Disallows cadmium/zinc fasteners on stainless lines operating above $400^\circ\text{C}$.
-  4. **Safe Over-Specification:** Permits ANSI Class 600 substituting Class 300, and ASTM A350 LF2 substituting A105 (`TIER_2_SUBSTITUTE`).
-  5. **Flange Facing Mismatches:** Prohibits Raised Face (RF) flanges from mating with Flat Face (FF) cast iron casings.
-  6. **Sour Gas ($H_2S$) Service:** Mandates NACE MR0175 / ISO 15156 compliance with hardness $<22\text{ HRC}$.
-  7. **Piggable Line Safety:** Forbids reduced bore valves on piggable trunk pipelines to prevent trapping pipeline inspection gauges.
-  8. **Rotating Equipment Rules:** Evaluates pump flow rate, API 682 seal flush plans, motor voltage/frequency (415V 50Hz vs 480V 60Hz), and bearing types.
+| File | Primary Target Module | Target Functions / Classes | Core Verifications |
+| :--- | :--- | :--- | :--- |
+| [`test_chemistry.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_chemistry.py) | Mathematical Metallurgy | `calculate_carbon_equivalent()` | IIW formula accuracy, weldability grading thresholds (`GOOD`, `FAIR`, `POOR`). |
+| [`test_indian_procurement_alignment.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_indian_procurement_alignment.py) | [`machine_learning.ner_tagger`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/machine_learning/ner_tagger.py), [`graph.logistics`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/graph/logistics.py) | `DialectNormalizer`, `compute_route_summary`, `road_distance` | BIS/IS standards (IS 1239, IS 14846, IS 2062, IS 1367), OIL Duliajan logistics hub, PN-to-Class mapping, PPP-MII local content >= 50%. |
+| [`test_logistics.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_logistics.py) | Geodesic Routing | `calculate_haversine()`, `road_distance` | Great-circle distance (Mumbai-Delhi ~1,148 km), 1.28 tortuosity factor, 50 km/h transit, 0.15 kg CO2/ton-km. |
+| [`test_normalizer.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_normalizer.py) | Unicode Canonicalization | `normalize_text()` | NFKC ligature normalization (`ﬃ` -> `ffi`), dialect dictionary canonicalization (`spanner` -> `WRENCH`). |
+| [`test_ocr_and_mtc.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_ocr_and_mtc.py) | [`backend.app.ingestion`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/ingestion) | `OCREngine`, `MTCParser`, `compute_carbon_equivalent`, `compute_pren`, `validate_composition` | PyMuPDF vector PDF extraction (< 50ms SLA), 300 DPI image enhancement, Duplex 2205 PREN, ASTM A105 limits, HITL routing on sparse scans. |
+| [`test_security.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_security.py) | [`backend.app.core.security`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/core/security.py) | `compute_audit_hash`, `verify_audit_chain`, `compute_gate_pass_seal`, `compute_request_hash` | SHA-256 block hash consistency, tamper detection on broken chains, gate pass security seal, deterministic dictionary JSON hashing. |
+| [`test_tolerance.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_tolerance.py) | [`rules.tolerance`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/rules/tolerance.py) | `evaluate_material_compatibility` | 36 parametrized industrial scenarios: pressure down-rating, cryogenic fracture, NACE MR0175 sour service, liquid metal embrittlement, valve trims, API seal plans. |
 
 ---
 
-### 2. [test_chemistry.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/unit/test_chemistry.py) — Metallurgical Chemistry Formulas (3 Tests)
-- **Formulas Verified:**
-  - **International Institute of Welding (IIW) Carbon Equivalent:**
-    $$CE_{\text{IIW}} = \%C + \frac{\%Mn}{6} + \frac{\%Cr + \%Mo + \%V}{5} + \frac{\%Ni + \%Cu}{15}$$
-  - **Weldability Classification Matrix:**
-    - $CE_{\text{IIW}} \le 0.40 \implies \text{GOOD (No preheating required)}$
-    - $0.41 \le CE_{\text{IIW}} \le 0.45 \implies \text{FAIR (Preheat to } 100^\circ\text{C}-150^\circ\text{C})$
-    - $CE_{\text{IIW}} > 0.45 \implies \text{POOR (Mandatory strict preheat and PWHT)}$
-  - **Pitting Resistance Equivalent Number (PREN):**
-    $$\text{PREN} = \%Cr + 3.3\%Mo + 16\%N$$
-    Validates PREN $\ge 40$ for Super Duplex 2507 in marine and offshore service.
+## 3. Deep-Dive Specification Breakdown
+
+### 3.1. Chemical Composition & Weldability Verification
+[`test_chemistry.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_chemistry.py) tests the International Institute of Welding (IIW) carbon equivalent equation:
+
+$$\text{CE}_{\text{IIW}} = \text{C} + \frac{\text{Mn}}{6} + \frac{\text{Cr} + \text{Mo} + \text{V}}{5} + \frac{\text{Ni} + \text{Cu}}{15}$$
+
+- **Threshold Standards**:
+  - $\text{CE} \le 0.35\%$: `GOOD` (Standard weldable without preheat).
+  - $0.35\% < \text{CE} \le 0.45\%$: `FAIR` (Standard weldable, optional low-temp preheat).
+  - $\text{CE} > 0.45\%$: `POOR` (Requires mandatory preheating per ASME Section IX / AWS D1.1).
+
+### 3.2. Indian Public Procurement & MoPNG Alignment
+[`test_indian_procurement_alignment.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_indian_procurement_alignment.py) validates strict adherence to MoPNG mandates and CPSE interoperability:
+- **MESC Parsing**: Standardizes Oil India Limited (OIL) SAP MESC material codes (e.g., `03.10.45.19.04`).
+- **BIS Cross-Standard Resolution**:
+  - `IS 1239 Part 1 Heavy` $\iff$ `ASTM A106 Gr. B` / `API 5L PSL 2`.
+  - `IS 14846 FG 200` $\iff$ `API 600` / `ASTM A216 WCB`.
+  - `IS 2062 Grade E250` $\iff$ `ASTM A105` / `ASME B16.5`.
+  - `IS 1367 Part 3 Class 8.8` $\iff$ `ASTM A193 B7`.
+- **Make in India (PPP-MII) Compliance**:
+  - `Class-I Local Supplier`: Local content $\ge 50\%$.
+  - `Class-II Local Supplier`: $20\% \le \text{Local Content} < 50\%$.
+  - Generates compliance warning alerts when non-compliant materials are proposed for inter-CPSE procurement.
+- **OIL Logistics Topology**:
+  - Validates routing between OIL Duliajan HQ and regional installations (`OIL Moran`, `NRL Numaligarh`, `ONGC Nazira`, `OIL Guwahati`, `OIL Jodhpur`, `OIL Kakinada`, `Panipat Refinery`).
+
+### 3.3. Dual-Path OCR & MTC Conformance
+[`test_ocr_and_mtc.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_ocr_and_mtc.py) verifies the ingestion intelligence:
+- **Dual-Path Classification**: Differentiates between text-native `DIGITAL_VECTOR_PDF` and image-based `RASTER_SCANNED_PDF`.
+- **Fast-Path Latency**: In-memory PyMuPDF stream parsing must execute in under $50\text{ ms}$.
+- **PREN Corrosion Index**:
+  $$\text{PREN} = \text{Cr} + 3.3 \cdot \text{Mo} + 16 \cdot \text{N}$$
+  Verifies Duplex 2205 ($\text{PREN} \approx 35.11$).
+- **HITL Routing**: Sparse or smudged documents triggering a confidence score below $0.85$ are flagged with `requires_hitl = True` and populate `missing_attributes` without raising runtime exceptions.
+
+### 3.4. Cryptographic Security & Audit Integrity
+[`test_security.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_security.py) implements blockchain-inspired immutable record-keeping:
+- **Genesis Root Hash**: Starts from `GENESIS_ROOT_64_HEX` (`0000000000000000000000000000000000000000000000000000000000000000`).
+- **Chain Tamper Verification**: Any mutated byte in historic logs immediately invalidates subsequent SHA-256 links and returns the exact zero-based index of the tampered transaction block.
+- **Gate Pass Seal**: Generates deterministic 64-character hex seals binding material SKU, physical gate pass ID, driver ID, and issuing officer metadata.
+
+### 3.5. 36-Rule Parametric Tolerance Matrix
+[`test_tolerance.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/test_tolerance.py) runs 36 real-world cross-substitutability scenarios against [`evaluate_material_compatibility`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/rules/tolerance.py):
+
+| Test Case | Scenario / Query Attributes | Candidate Attributes | Tier Result | Expected Violation Keyword |
+| :---: | :--- | :--- | :---: | :--- |
+| **01** | Class 300 A105 RF Flange | Class 150 A105 RF Flange | **TIER 3** | `PRESSURE DOWN-RATING` |
+| **02** | ASTM A350 LF2 Flange (Cryo) | ASTM A105 Flange (Ambient) | **TIER 3** | `CRYOGENIC` |
+| **03** | A193 B7 Stud @ 350°C Bare | A193 B7 Stud Galvanized | **TIER 3** | `LIQUID METAL` |
+| **04** | SS304 (A351 CF8) Gate Valve | SS316 (A351 CF8M) Gate Valve | **TIER 2** | `None` (Safe Metallurgy Upgrade) |
+| **05** | 200mm Sch 40 A106-B Pipe | 200mm Sch 40 A106-B Pipe | **TIER 1** | `None` (Exact Parity) |
+| **06** | 250mm Sch 40 Pipe | 200mm Sch 40 Pipe | **TIER 3** | `DIMENSION` |
+| **07** | 200mm Sch 80 Pipe | 200mm Sch 40 Pipe | **TIER 3** | `SCHEDULE` (Down-rating) |
+| **08** | 200mm Sch 40 Pipe | 200mm Sch 80 Pipe | **TIER 2** | `None` (Safe Schedule Upgrade) |
+| **09** | Class 300 Raised Face (RF) | Class 300 Ring Type Joint (RTJ) | **TIER 3** | `FACING` |
+| **10** | 300 PSI Rated Pipe | 350 PSI Rated Pipe | **TIER 1** | `None` (Safe Pressure Over-rating) |
+| **11** | Hazardous Zone 1 Ex d Motor | Non-Ex General Purpose Motor | **TIER 3** | `EXPLOSION` |
+| **12** | NACE MR0175 Sour Service Flange | Non-NACE Commercial Flange | **TIER 3** | `SOUR` |
+| **13** | Gate Valve API Trim 8 (Hardfaced) | Gate Valve API Trim 1 (F6a) | **TIER 3** | `TRIM` (Erosive Downgrade) |
+| **14** | Piggable Pipeline Full Bore Ball Valve | Reduced Bore Ball Valve | **TIER 3** | `PIG` |
+| **15** | Toxic Service API Plan 53A Pump | API Plan 11 Standard Pump | **TIER 3** | `SEAL` |
+| **16** | A320 L7 Bolt (725 MPa) | A193 B7 Bolt (600 MPa) | **TIER 3** | `STRENGTH` |
+| **17** | Gasket Max Temp 200°C | Gasket Max Temp 300°C | **TIER 2** | `None` (Safe Temp Upgrade) |
+| **18** | Gasket Max Temp 200°C | Gasket Max Temp 150°C | **TIER 3** | `TEMPERATURE` |
+| **19** | NPT Threaded Fitting | BSPT Threaded Fitting | **TIER 3** | `THREAD` |
+| **20** | IP65 Ingress Protected Motor | IP54 Motor | **TIER 3** | `IP RATING` |
+| **21** | IP54 Ingress Protected Motor | IP65 Motor | **TIER 2** | `None` (Safe Enclosure Upgrade) |
+| **22** | 100 m³/h Process Pump | 80 m³/h Process Pump | **TIER 3** | `FLOW RATE` |
+| **23** | Flanged End Connection Valve | Buttweld End Connection Valve | **TIER 3** | `CONNECTION` |
+| **24** | Roller Bearing Assembly | Ball Bearing Assembly | **TIER 3** | `BEARING TYPE` |
+| **25** | API Plan 53B Compressor Seal | API Plan 52 Seal | **TIER 3** | `API PLAN` |
+| **26** | 415V 3-Phase Industrial Motor | 230V Single-Phase Motor | **TIER 3** | `VOLTAGE` |
+| **27** | 50 Hz Grid Frequency Motor | 60 Hz Frequency Motor | **TIER 3** | `FREQUENCY` |
+| **28** | Pneumatic Actuated Valve | Manual Handwheel Valve | **TIER 3** | `OPERATION` |
+| **29** | Flexible Shaft Coupling | Rigid Shaft Coupling | **TIER 3** | `COUPLING` |
+| **30** | Viton Fluoroelastomer O-Ring | NBR Nitrile O-Ring | **TIER 3** | `SEAL MATERIAL` |
+| **31** | NBR Nitrile O-Ring @ 100°C | Viton O-Ring @ 100°C | **TIER 2** | `None` (Safe Material Upgrade) |
+| **32** | Epoxy Phenolic Tank Coating | Alkyd Enamel Paint | **TIER 3** | `PAINT` |
+| **33** | 500 µm External Pipe Coating | 250 µm Pipe Coating | **TIER 3** | `THICKNESS` |
+| **34** | 250 µm External Pipe Coating | 500 µm Pipe Coating | **TIER 2** | `None` (Safe Coating Upgrade) |
+| **35** | 10 µm Micron Fuel Filter | 25 µm Micron Fuel Filter | **TIER 3** | `MICRON RATING` |
+| **36** | 25 µm Micron Fuel Filter | 10 µm Micron Fuel Filter | **TIER 2** | `None` (Superior Filtration Upgrade) |
 
 ---
 
-### 3. [test_indian_procurement_alignment.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/unit/test_indian_procurement_alignment.py) — Indian Standards & Public Procurement (11 Tests)
-- **Bureau of Indian Standards (BIS):**
-  - `IS 1239 (Part 1)`: Heavy mild steel piping extraction.
-  - `IS 14846`: Sluice/gate valves rating and nominal bore mapping.
-  - `IS 2062 Grade E250`: Structural steel flange parsing.
-  - `IS 1367 (Part 3) Class 8.8`: High-tensile carbon steel stud bolts.
-  - `PN / Bar` to ANSI Class equivalence.
-- **OIL Logistics Network:**
-  - Verifies exact depot coordinates across Assam (Duliajan, Moran, Digboi) and pan-India connectivity to Numaligarh, Panipat, Uran, and Visakh.
-- **Make In India (MII) Compliance:**
-  - Class-I Local Supplier ($\ge 50\%$ local content): Full preference granted.
-  - Class-II Local Supplier ($20\%-50\%$): Audit warning emitted for high-value tenders.
-  - Non-Local Supplier ($<20\%$): Purchase preference denied.
+## 4. Execution & Verification Guide
 
----
+Unit tests are designed to execute independently in an isolated virtual environment:
 
-### 4. [test_logistics.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/unit/test_logistics.py) — Transit Distance & Emissions (4 Tests)
-- **Formulas Verified:**
-  - **Haversine Great-Circle Distance:** Spherical trigonometric arc calculation.
-  - **Indian Road Circuity Factor:** Applies $1.25\times$ highway circuity multiplier to great-circle distance.
-  - **Transit Duration:** Calculates truck travel time based on $45\text{ km/h}$ average freight velocity.
-  - **BEE Carbon Footprint Savings:**
-    $$\text{Emission} = \text{Tonnage} \times \text{Distance (km)} \times 0.062\text{ kg } CO_2 / \text{tonne-km}$$
+```powershell
+# Run the complete unit test suite
+uv run pytest tests/unit/ -v
 
----
+# Run only the 36 parametric tolerance compatibility tests
+uv run pytest tests/unit/test_tolerance.py -v
 
-### 5. [test_security.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/unit/test_security.py) — Cryptographic Non-Repudiation (4 Tests)
-- **Verifications:**
-  - **SHA-256 Merkle Chain Integrity:** Verifies each block hash incorporates the preceding row's digest:
-    $$H_i = \text{SHA-256}(H_{i-1} \parallel \text{Timestamp} \parallel \text{Payload})$$
-  - **Tamper Detection:** Modifies historical audit row data and asserts that `verify_audit_chain()` immediately flags the index as invalid.
-  - **CISF Digital Gate Pass Seal:** Verifies HMAC-SHA256 generation using sovereign secret keys to generate offline-verifiable gate passes.
+# Run the Indian public procurement & Oil India Limited alignment suite
+uv run pytest tests/unit/test_indian_procurement_alignment.py -v
 
----
-
-### 6. [test_ocr_and_mtc.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/unit/test_ocr_and_mtc.py) — Document Vision & MTC Parsing (7 Tests)
-- **Verifications:**
-  - Fast-path vector PDF parsing with PyMuPDF.
-  - Raster preprocessing: CLAHE contrast enhancement and Otsu binarization.
-  - EN 10204 Type 3.1 inspection certificate table extraction for heat chemical composition ($\%C, \%Mn, \%Si, \%P, \%S, \%Cr, \%Ni, \%Mo$).
-  - Graceful degradation and fallback confidence scoring on sparse or degraded document scans.
-
----
-
-### 7. [test_normalizer.py](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/unit/test_normalizer.py) — Unicode & Dialect Normalization (3 Tests)
-- **Verifications:**
-  - Unicode NFKC normalization and fractional ligature replacement.
-  - Standardized expansion of oilfield colloquialisms and abbreviations.
-  - Extraction of structured engineering dictionary objects from normalized text.
-
----
-
-## 3. Running Unit Tests
-
-Execute the 68 unit tests:
-
-```bash
-# Run all 68 unit tests (runtime: < 1 second)
-pytest tests/unit/ -v
-
-# Run 21 engineering safety tolerance rules
-pytest tests/unit/test_tolerance.py -v
-
-# Run Indian procurement and BIS standards tests
-pytest tests/unit/test_indian_procurement_alignment.py -v
-
-# Run metallurgical chemistry tests
-pytest tests/unit/test_chemistry.py -v
+# Run the cryptographic audit and gate-pass security verification
+uv run pytest tests/unit/test_security.py -v
 ```

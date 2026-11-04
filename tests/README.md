@@ -1,117 +1,119 @@
-# Samanvay-AI Automated Test Suite & Quality Assurance (`tests/`)
+# Samanvay AI — Test Suite & Quality Assurance Architecture (`tests/`)
 
-**Total Test Count:** 242+ Automated Tests  
-**Test Framework:** PyTest 8.0+ / FastAPI `TestClient` (HTTPX)  
-**Target Milestone:** 100% Deterministic Safety, Cryptographic Integrity & Benchmark Accuracy  
-
-This directory houses the comprehensive multi-layered automated test suite for **Samanvay-AI**, ensuring engineering safety compliance, mathematical precision, cryptographic non-repudiation, API contract stability, and NLP dialect normalization.
+> **Executive Scope**: The `tests/` directory houses the complete verification harness for Samanvay AI, comprising **393+ automated tests** across unit, integration, machine learning, and API tiers. It validates deterministic physical compliance (ASME/ASTM), neural semantic search, dual-path OCR ingestion, Indian CPSE/MoPNG standards, and cryptographic audit integrity.
 
 ---
 
-## 1. Test Architecture & Hierarchy
+## 1. Test Suite Topology & Organization
 
-The test suite is structured as a robust testing pyramid ranging from fast, deterministic mathematical unit tests to full-system API contracts and 150 public sector Golden Benchmarks:
+The test directory is partitioned into four specialized functional layers alongside root ingestion and integration suites:
 
 ```mermaid
 graph TD
-    subgraph Test Suite Hierarchy
-        BENCH["Integration Suite (tests/integration/)<br/>• 150 Golden Benchmarks (Tier-1, Tier-2, Tier-3)<br/>• Real dataset evaluation against golden_benchmarks.json"]
-        API["REST API Suite (tests/api/)<br/>• 22 End-to-End FastAPI TestClient Tests<br/>• Auth, Signup, Inventory, Match, Requisition, Graph, Audit"]
-        ML["Machine Learning Suite (tests/ml/)<br/>• Dialect Normalization & Slot Extraction<br/>• DeBERTa-v3 token classification & abbreviation expansion"]
-        UNIT["Unit Test Suite (tests/unit/)<br/>• 68 Fast Deterministic Tests<br/>• 21 Engineering Safety Rules, CE_IIW Chemistry, Logistics, Security, OCR"]
+    subgraph "Root Test Harness (tests/)"
+        CONF[conftest.py<br/>Session DB, Mock Overrides, Fixtures]
+        TDI[test_document_ingest.py<br/>End-to-End Intake & HITL]
+        TIAPI[test_ingest_api.py<br/>FastAPI /v1/ingest Endpoints]
+        TI[test_ingestion.py<br/>Hybrid OCR, Deskew & Layout]
+        TMH[test_match_hitl_api.py<br/>Vector Match & HITL Feedback]
+        TM[test_matching.py<br/>Tolerance Tier Routing]
+        TMTC[test_mtc_chemistry.py<br/>MTC Chemistry & Mech Extraction]
+        TNT[test_ner_tagger.py<br/>Procurement Token Extraction]
+        TON[test_ocr_normalization.py<br/>Thesaurus & Dialect Expansion]
     end
 
-    UNIT --> ML
-    ML --> API
-    API --> BENCH
+    subgraph "Specialized Sub-Harnesses"
+        API[api/<br/>Full CRUD & Role Auth Verification]
+        INT[integration/<br/>240 Golden Accuracy Benchmarks]
+        ML[ml/<br/>Bi-Encoder, GBDT Reranker & Active Learning]
+        UNIT[unit/<br/>36 ASME Tolerance Rules & Cryptography]
+    end
 
-    classDef bench fill:#fef3c7,stroke:#d97706,stroke-width:2px;
-    classDef api fill:#ede9fe,stroke:#7c3aed,stroke-width:2px;
-    classDef ml fill:#e0f2fe,stroke:#0284c7,stroke-width:2px;
-    classDef unit fill:#ecfdf5,stroke:#059669,stroke-width:2px;
+    CONF --> API
+    CONF --> INT
+    CONF --> ML
+    CONF --> UNIT
+    CONF --> TDI
+    CONF --> TIAPI
+```
 
-    class BENCH bench;
-    class API api;
-    class ML ml;
-    class UNIT unit;
+### Directory Submodules
+- [`tests/api/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/api/README.md): REST API endpoints, JWT role-based access control, requisition lifecycles, and inventory transfers.
+- [`tests/integration/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/integration/README.md): 240 Golden benchmark test cases verifying cross-CPSE fuzzy matching across 6 Indian energy operators.
+- [`tests/ml/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/ml/README.md): Machine learning models, bi-encoder embeddings, LightGBM reranker, NER tokenizers, active learning queues, and subvector projections.
+- [`tests/unit/`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/unit/README.md): Isolated unit tests for IIW carbon equivalence, 36 parametric tolerance scenarios, logistics routing, and SHA-256 audit block hashing.
+
+---
+
+## 2. Test Harness Lifecycle & `conftest.py` Architecture
+
+[`conftest.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/conftest.py) establishes the global testing context for pytest:
+
+1. **Environment Flagging**: Automatically sets `os.environ["TESTING"] = "1"` to bypass real database connection pools and background network calls.
+2. **Database Initialization**: The session-scoped fixture `setup_test_db` executes [`init_db()`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/models/base.py) to generate SQLite tables in memory, then triggers [`seed_users_if_empty()`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py) to provision deterministic test CPSE identities (`IOCL_OFFICER`, `ONGC_OFFICER`, etc.).
+3. **Dependency Overrides**: The autouse fixture `override_db` redirects FastAPI dependency injection from production PostgreSQL connection strings to isolated `SessionLocal` instances per test.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Pytest as Pytest Runner
+    participant Conftest as tests/conftest.py
+    participant DB as SQLite Test DB
+    participant FastAPI as FastAPI Dependency Override
+    participant Test as Test Case
+
+    Pytest->>Conftest: Initialize Test Session
+    Conftest->>DB: init_db() -> Create In-Memory Tables
+    Conftest->>DB: seed_users_if_empty() -> Provision Admin & CPSE Users
+    loop For Every Test Function
+        Conftest->>FastAPI: Override get_db_session with scoped SessionLocal
+        Test->>FastAPI: Invoke TestClient / Services
+        FastAPI-->>Test: Execute against isolated SQLite session
+        Test->>Conftest: Teardown Test
+        Conftest->>FastAPI: Pop dependency overrides & rollback uncommitted rows
+    end
+    Conftest-->>Pytest: Close Test Session
 ```
 
 ---
 
-## 2. Directory Layout & Test Suite Breakdown
+## 3. Root Test Suite File Catalog
 
-```
-tests/
-├── conftest.py               # Shared PyTest fixtures (mock DB sessions, sample material attributes)
-├── __init__.py
-├── api/                      # 22 REST API controller tests (FastAPI TestClient)
-│   ├── test_audit_api.py     # SHA-256 chain verification & RFC 4180 CSV export (2 tests)
-│   ├── test_auth_api.py      # Seed users, JWT generation, multi-tenant claims & RBAC (7 tests)
-│   ├── test_graph_api.py     # Neo4j logistics distance & privacy attribute stripping (2 tests)
-│   ├── test_inventory_api.py # Inventory CRUD, cross-CPSE privacy filtering & stats (3 tests)
-│   ├── test_match_api.py     # End-to-end semantic match & safety engine scoring (2 tests)
-│   ├── test_requisition_api.py # Idempotency keys & pessimistic locking concurrency (2 tests)
-│   ├── test_signup_api.py    # Self-registration, duplicate prevention & token issuance (4 tests)
-│   └── README.md             # Dedicated documentation for API tests
-├── integration/              # Full-pipeline integration tests
-│   ├── test_benchmarks.py    # Automated execution across 150 Golden Benchmarks (150 tests)
-│   └── README.md             # Dedicated documentation for integration benchmarks
-├── ml/                       # NLP & embedding tests
-│   ├── test_ner.py           # Dialect normalizer & DeBERTa slot tagger extraction (2 tests)
-│   └── README.md             # Dedicated documentation for ML tests
-└── unit/                     # 68 Deterministic unit tests
-    ├── test_chemistry.py     # Carbon Equivalent (CE_IIW), weldability & ASTM validation (3 tests)
-    ├── test_indian_procurement_alignment.py # BIS IS standards, OIL logistics, GeM, CPPP, MII (11 tests)
-    ├── test_logistics.py     # Haversine, 1.25x road circuity & BEE freight CO2 formulas (4 tests)
-    ├── test_normalizer.py    # NFKC unicode normalization & thesaurus abbreviation expansion (3 tests)
-    ├── test_ocr_and_mtc.py   # Dual-path PDF parsing, CLAHE, PREN & MTC table extraction (7 tests)
-    ├── test_security.py      # Chained SHA-256 hashing, anti-tampering & HMAC gate pass sealing (4 tests)
-    ├── test_tolerance.py     # Parameterized unit tests for all 21 engineering safety rules (36 tests)
-    └── README.md             # Dedicated documentation for unit tests
-```
+| File | Target Modules | Primary Verifications |
+| :--- | :--- | :--- |
+| [`conftest.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/conftest.py) | `backend.app.models.base`, `backend.app.api.dependencies` | Global testing environment configuration, SQLite in-memory initialization, CPSE seed credentials, and dependency overrides. |
+| [`test_document_ingest.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/test_document_ingest.py) | [`backend.app.ingestion.document`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/ingestion/document.py) | Native PDF fast-path extraction via PyMuPDF; scanned raster OCR via PaddleOCR fallback; non-MTC graceful degradation to HITL; attribute conversion; parser error handling. |
+| [`test_ingest_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/test_ingest_api.py) | [`backend.app.api.v1.ingest`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/api/v1/ingest.py) | HTTP endpoints `POST /v1/ingest/text` and `POST /v1/ingest/document`; MIME validation (rejecting non-PDF/PNG/JPEG with 400); 15MB file size limit (HTTP 413); shared contract output format. |
+| [`test_ingestion.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/test_ingestion.py) | [`OCR.pipeline`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/OCR/pipeline.py), [`OCR.engine`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/OCR/engine.py), [`OCR.normalization`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/OCR/normalization.py) | Hybrid per-page OCR routing (PyMuPDF + PaddleOCR @ 300 DPI); 11-angle skew detection; box-overlap reading order; PaddleOCR failover to EasyOCR; OCR error caching; multi-line MTC metadata parsing. |
+| [`test_match_hitl_api.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/test_match_hitl_api.py) | [`backend.app.api.v1.match`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/api/v1/match.py), [`backend.app.api.v1.dashboard`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/api/v1/dashboard.py) | Active learning queue bootstrapping, listing, and resolution; `/v1/match` candidate ranking with subvector domain scores (`dim`, `met`, `pt`, `std`); 503 handling when models are uninstalled; dashboard telemetry. |
+| [`test_matching.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/test_matching.py) | [`backend.app.matching.tolerance`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/matching/tolerance.py) | Fast tolerance classification: higher pressure rating as safe substitute (`Tier 1 auto-link`); nominal size mismatch as hard incompatible (`Tier 4 reject`). |
+| [`test_mtc_chemistry.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/test_mtc_chemistry.py) | [`backend.app.ingestion.certificate`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/ingestion/certificate.py) | MTC chemistry table column parsing (C, Mn, Si, S, P, Cr, Ni, Mo); key-value pair parsing; mechanical properties extraction (yield, tensile, elongation); metadata dict preservation. |
+| [`test_ner_tagger.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/test_ner_tagger.py) | [`machine_learning.ner_tagger`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/machine_learning/ner_tagger.py) | Procurement abbreviation expansion: parsing dense industrial shorthand (e.g., `FLG WN RF 4IN 300# A105` $\to$ `item_type="FLANGE"`, `size_nb_mm=101.6`, `pressure_class=300`, `facing="WELD_NECK"`). |
+| [`test_ocr_normalization.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/tests/test_ocr_normalization.py) | [`OCR.normalization`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/OCR/normalization.py) | Dialect thesaurus completeness ($\ge 40$ procurement mappings); Indian CPSE expansions (EIL, OISD, GeM, CPPP, MESC); token preservation guards for grades like `SS316L` and English words like `IS`. |
 
 ---
 
-## 3. Suite-by-Suite Summary
+## 4. Execution Commands & Workflow
 
-| Subdirectory | Test Count | Target Subsystems | Primary Assertions |
-|---|---|---|---|
-| [tests/api/](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/api/) | **22 Tests** | FastAPI endpoints (`/auth`, `/match`, `/requisition`, `/inventory`, `/graph`, `/audit`) | HTTP status codes, schema validation, idempotency header replay, pessimistic row locking, cross-tenant privacy stripping. |
-| [tests/integration/](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/integration/) | **150 Tests** | Hybrid Match Pipeline & Golden Benchmarks | Top-1 retrieval accuracy, exact compatibility tier assignment (`TIER_1_IDENTICAL`, `TIER_2_SUBSTITUTE`, `TIER_3_INCOMPATIBLE`), and deterministic violation detection. |
-| [tests/ml/](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/ml/) | **2 Tests** | Dialect Normalization & Slot Extraction | Unstandardized oilfield dialect translation and named entity slot extraction (`size`, `rating`, `item_type`). |
-| [tests/unit/](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/tests/unit/) | **68 Tests** | Physics formulas, 21 safety rules, Indian procurement, cryptography, logistics | Mathematical formulas for $CE_{\text{IIW}}$ and $\text{PREN}$, 21 engineering rules, Haversine road distances, SHA-256 Merkle chain integrity. |
+To execute tests according to project standards:
 
----
+```powershell
+# Run the complete test suite (all 393+ tests)
+uv run pytest tests/
 
-## 4. Running the Tests
+# Run tests with short traceback on failures
+uv run pytest tests/ --tb=short
 
-Ensure virtual environment dependencies are activated, or execute through `.venv`:
+# Run a specific sub-harness
+uv run pytest tests/unit/
+uv run pytest tests/integration/
+uv run pytest tests/ml/
+uv run pytest tests/api/
 
-### A. Run All 242 Tests
-```bash
-# Run the entire test suite with verbose output
-pytest tests/ -v
-
-# Or using the local virtual environment directly:
-.venv/Scripts/python -m pytest tests/ -v
+# Run a targeted root suite file
+uv run pytest tests/test_document_ingest.py -v
+uv run pytest tests/test_match_hitl_api.py -v
 ```
 
-### B. Run Individual Test Suites
-```bash
-# Run unit tests only (fastest: ~1 second)
-pytest tests/unit/ -v
-
-# Run API contract tests (requires FastAPI dependencies)
-pytest tests/api/ -v
-
-# Run NLP & Dialect Normalization tests
-pytest tests/ml/ -v
-
-# Run 150 Golden Benchmarks
-pytest tests/integration/ -v
-```
-
-### C. Run with Code Coverage
-```bash
-pytest tests/ --cov=backend/app --cov=rules --cov=ml --cov=graph --cov-report=term-missing --cov-report=html
-```
+> [!NOTE]
+> All automated tests should be triggered via `uv run pytest` to ensure exact dependency resolution against `.venv`. Tests must remain strictly self-contained and not rely on live network access or external database instances.

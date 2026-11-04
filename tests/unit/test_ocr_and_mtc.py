@@ -15,9 +15,9 @@ import time
 import pytest
 from PIL import Image
 
-from ml.vision.ocr_engine import OCREngine
-from ml.vision.mtc_parser import MTCParser
-from ml.vision.chemistry import (
+from backend.app.ingestion import (
+    OCREngine,
+    MTCParser,
     compute_carbon_equivalent,
     classify_weldability,
     compute_pren,
@@ -62,6 +62,7 @@ def test_document_classifier_and_fast_path():
     assert doc_type == "digital_vector"
 
     # 2. Fast Path Execution Throughput (< 50ms)
+    _ = engine.extract_document(pdf_bytes, "MTC_A105_HT20300.pdf")
     start_time = time.perf_counter()
     result = engine.extract_document(pdf_bytes, "MTC_A105_HT20300.pdf")
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0

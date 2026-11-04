@@ -8,7 +8,7 @@ Validates:
 """
 
 import pytest
-from ml.ner.normalizer import DialectNormalizer, extract_metadata_from_dialect
+from machine_learning.ner_tagger import DialectNormalizer, extract_metadata_from_dialect
 from graph.logistics import DEPOT_COORDINATES, road_distance, estimate_transit_hours, compute_route_summary
 
 
