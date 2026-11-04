@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -18,6 +19,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from backend.app.models.base import Base
+
+JSONType = JSONB().with_variant(JSON(), "sqlite")
 
 
 class IngestedDocument(Base):
@@ -31,7 +34,7 @@ class IngestedDocument(Base):
     is_scanned = Column(Boolean, default=False)
     confidence = Column(Numeric(5, 4), nullable=False)
     raw_text = Column(Text, nullable=True)
-    parsed_metadata = Column(JSONB, nullable=False)
+    parsed_metadata = Column(JSONType, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
@@ -70,7 +73,7 @@ class InventoryItem(Base):
     local_content_percentage = Column(Numeric(5, 2), nullable=True, default=75.0)  # Make-in-India %
     pressure_rating_bar = Column(Numeric(8, 2), nullable=True)  # PN rating in Bar (e.g. 16.0, 20.0, 50.0)
     location_state = Column(String(64), nullable=True)  # Assam, Gujarat, Maharashtra, etc.
-    properties = Column(JSONB, default=dict)  # Equipment-specific: trim, port_bore, seal_plan
+    properties = Column(JSONType, default=dict)  # Equipment-specific: trim, port_bore, seal_plan
     quantity = Column(Integer, nullable=False)
     unit_cost_inr = Column(Numeric(14, 2), nullable=False)
     total_value_inr = Column(
@@ -225,7 +228,7 @@ class IdempotencyKey(Base):
     endpoint = Column(String(255), nullable=False)
     request_hash = Column(String(64), nullable=False)
     status_code = Column(Integer, nullable=False)
-    response_body = Column(JSONB, nullable=False)
+    response_body = Column(JSONType, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     expires_at = Column(DateTime(timezone=True), nullable=False)
 
@@ -239,7 +242,7 @@ class CdcOutbox(Base):
     table_name = Column(String(64), nullable=False, index=True)
     operation = Column(String(16), nullable=False)  # INSERT, UPDATE, DELETE
     record_id = Column(String(128), nullable=False, index=True)
-    payload = Column(JSONB, nullable=False)
+    payload = Column(JSONType, nullable=False)
     status = Column(String(20), nullable=False, default="PENDING", index=True)  # PENDING, PROCESSED, FAILED
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     processed_at = Column(DateTime(timezone=True), nullable=True)
@@ -266,5 +269,3 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_approved = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
-

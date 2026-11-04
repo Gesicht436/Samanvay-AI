@@ -10,3 +10,4 @@ node_modules/
 frontend/.env.local
 machine_learning/model_weights/*
 !machine_learning/model_weights/.gitkeep
+*.egg-info/

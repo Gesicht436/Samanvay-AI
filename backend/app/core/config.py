@@ -6,6 +6,7 @@ engineering thresholds, and runtime SLA parameters.
 All values are sourced from environment variables or .env files.
 """
 
+import os
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from typing import Optional
@@ -29,8 +30,15 @@ class Settings(BaseSettings):
 
     @property
     def postgres_url(self) -> str:
+        if os.getenv("TESTING") == "1" or os.getenv("USE_SQLITE", "").lower() in ("true", "1"):
+            return "sqlite:///:memory:"
+        driver = "postgresql+psycopg"
+        try:
+            import psycopg  # noqa: F401
+        except ImportError:
+            driver = "postgresql+psycopg2"
         return (
-            f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
+            f"{driver}://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
@@ -55,9 +63,9 @@ class Settings(BaseSettings):
     neo4j_password: str = Field(default="samanvay_graph", alias="NEO4J_PASSWORD")
 
     # ── ML Model Paths (Air-Gapped Local Inference) ──────────────
-    deberta_model_path: str = "ml/ner/models/deberta-v3-small-ner"
-    bge_m3_model_path: str = "ml/embeddings/models/bge-m3-onnx"
-    xgboost_model_path: str = "ml/ranking/models/compatibility_ranker.json"
+    deberta_model_path: str = "machine_learning/model_weights/ner_deberta"
+    bge_m3_model_path: str = "machine_learning/model_weights/bge-m3-onnx"
+    xgboost_model_path: str = "machine_learning/reranker/models/compatibility_ranker.json"
 
     # ── OCR Configuration ────────────────────────────────────────
     ocr_dpi: int = 300

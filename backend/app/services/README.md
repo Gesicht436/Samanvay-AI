@@ -1,191 +1,142 @@
-# Domain Business Logic & Services (`backend/app/services/`)
+# Business Logic Services & Workflows (`backend/app/services/`)
 
-This directory houses the core business logic layer of **Samanvay-AI**. It coordinates ACID database transactions, pessimistic row-level locking, multi-tenant consignment isolation, Segregation of Duties (SoD), cryptographic audit chain computation, real-time Change Data Capture (CDC), and cold-start database seeding.
+## 1. Architectural Role & Overview
+
+The `backend/app/services/` package encapsulates core business logic, domain workflows, and cross-subsystem orchestration for **Samanvay-AI**.
+
+It acts as the intermediary between the presentation layer (`backend/app/api/`), the relational persistence models (`backend/app/models/`), the machine learning inference services (`machine_learning/`), and the knowledge graph (`graph/`), implementing transactional safety, privacy firewalls, and audit integrity.
+
+```mermaid
+flowchart TD
+    subgraph APILayer["API Routers (backend/app/api/)"]
+        R_Match["routers/match.py"]
+        R_Inv["routers/inventory.py"]
+        R_Req["routers/requisition.py"]
+        R_Audit["routers/audit.py"]
+    end
+
+    subgraph ServiceLayer["Core Domain Services (backend/app/services/)"]
+        MS["match_service.py: Zero-Mock Matching Pipeline"]
+        IS["inventory_service.py: Privacy & Stock Management"]
+        RS["requisition_service.py: 2-Phase Locks & CISF Gate Passes"]
+        AS["audit_service.py: CVC/CAG SHA-256 Hash Chaining"]
+        CDC["cdc_manager.py: Real-Time PostgreSQL -> Neo4j CDC"]
+        SEED["seeder.py: Auto-Provisioning & Seed Personas"]
+    end
+
+    subgraph ExternalBackends["Engines & Storage Engines"]
+        PG[(PostgreSQL 16)]
+        NEO[(Neo4j Graph)]
+        ML[ML Models & Safety Rules]
+    end
+
+    R_Match --> MS
+    R_Inv --> IS
+    R_Req --> RS
+    R_Audit --> AS
+
+    MS --> ML
+    MS --> PG
+    IS --> PG
+    IS --> AS
+    RS --> PG
+    RS --> AS
+    CDC --> PG
+    CDC --> NEO
+    SEED --> PG
+```
 
 ---
 
-## 1. Concurrency Architecture & Pessimistic Locking
+## 2. Service Inventory
 
-To guarantee that concurrent requests from different CPSEs cannot simultaneously reserve or over-allocate the same surplus part, the requisition service employs **Pessimistic Row-Level Locking (`SELECT ... FOR UPDATE`)**:
+| Service File | Core Functions | Architectural Responsibility |
+| :--- | :--- | :--- |
+| [`match_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/match_service.py) | `search_matches()`, `parse_query()`, `retrieve_candidates()`, `score_candidate()`, `compute_logistics()` | End-to-end zero-mock matching pipeline combining 21 safety rules (70%), GBDT ML ranker (30%), Indian standard equivalence, and Make-in-India scoring. |
+| [`requisition_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py) | `create_requisition()`, `approve_requisition()`, `reject_requisition()`, `generate_gate_pass()`, `dispatch_requisition()`, `deliver_requisition()` | Multi-depot transactional inventory reservations (`SELECT ... FOR UPDATE`), inter-CPSE transfer lifecycle, and CISF SVG gate passes with digital seals. |
+| [`inventory_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/inventory_service.py) | `list_inventory()`, `get_item()`, `transition_status()`, `get_surplus_radar()`, `get_inventory_stats()` | Plant stock queries, lifecycle transitions, attribute-level privacy enforcement (cost stripping), and ministry metrics computation. |
+| [`audit_service.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/audit_service.py) | `create_audit_entry()`, `verify_chain()`, `list_audit_entries()`, `export_csv()` | Tamper-evident CVC/CAG cryptographic hash chaining, continuous integrity verification, and RFC 4180 CSV export with UTF-8 BOM. |
+| [`cdc_manager.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py) | `init_cdc_schema()`, `start_cdc_worker()`, `process_pending_events()`, `backfill_graph_if_empty()` | Real-time PostgreSQL Change Data Capture using advisory locks (`0x53414D41`), outbox triggers, `LISTEN/NOTIFY`, and Neo4j mirroring. |
+| [`seeder.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py) | `seed_database_if_empty()`, `seed_users_if_empty()` | Automated startup provisioning loading 5,000 catalog items, Genesis audit entry, and 23 seed persona accounts across 7 CPSEs. |
+| [`__init__.py`](file:///C:/Users/mayank/Development/Hackathons/Samanvay-AI/backend/app/services/__init__.py) | Package initialization | Namespace anchor. |
+
+---
+
+## 3. Deep-Dive Service Architecture
+
+### 3.1. Zero-Mock Matching Pipeline (`match_service.py`)
+
+The matching service executes a 6-stage evaluation pipeline for cross-CPSE spare part discovery:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Engineer1 as Site Engineer (OIL)
-    actor Engineer2 as Site Engineer (ONGC)
-    participant RequisitionSvc as Requisition Service
-    participant DB as PostgreSQL (inventory_items)
-    participant Locks as inventory_locks Table
+    participant Client
+    participant Service as match_service.py
+    participant Normalizer as DialectNormalizer
+    participant DB as PostgreSQL
+    participant Rules as 21 Safety Modules
+    participant ML as CompatibilityRanker
+    participant GIS as graph.logistics
 
-    Note over Engineer1,Engineer2: Both engineers attempt to reserve the same 1 remaining Gate Valve
-    Engineer1->>RequisitionSvc: create_requisition(SKU: OIL-VLV-100, Qty: 1)
-    Engineer2->>RequisitionSvc: create_requisition(SKU: OIL-VLV-100, Qty: 1)
-
-    activate RequisitionSvc
-    RequisitionSvc->>DB: SELECT * FROM inventory_items WHERE sku_code='...' FOR UPDATE
-    Note over DB: Transaction 1 acquires exclusive row lock on SKU
-    DB-->>RequisitionSvc: Return Item (Qty: 1 available)
-    
-    RequisitionSvc->>DB: UPDATE inventory_items SET quantity = quantity - 1 (Qty -> 0)
-    RequisitionSvc->>Locks: INSERT INTO inventory_locks (locked_qty: 1, active: true)
-    RequisitionSvc->>DB: COMMIT Transaction 1
-    deactivate RequisitionSvc
-    Note over DB: Exclusive lock released; Transaction 2 acquires row lock
-
-    activate RequisitionSvc
-    RequisitionSvc->>DB: SELECT * FROM inventory_items WHERE sku_code='...' FOR UPDATE
-    DB-->>RequisitionSvc: Return Item (Qty: 0 available)
-    RequisitionSvc-->>Engineer2: Raise ValueError("Insufficient stock: requested 1, available 0")
-    deactivate RequisitionSvc
+    Client->>Service: search_matches(payload, cpse)
+    Service->>Normalizer: parse_query(payload)
+    Normalizer-->>Service: query_part & normalized_query
+    Service->>DB: retrieve_candidates() (Combined OR Query)
+    DB-->>Service: Candidate InventoryItems
+    loop For Every Candidate
+        Service->>Rules: evaluate_pair(query_part, cand_part)
+        Rules-->>Service: ToleranceResult (Score, Violations)
+        Service->>ML: predict(query_part, cand_part)
+        ML-->>Service: ml_score (0.0 to 1.0)
+        Service->>Service: Composite = 0.7*Rule + 0.3*ML + MII Boost
+        Service->>GIS: compute_logistics(source_coord, item)
+        GIS-->>Service: Road Distance (km) & Transit Time (hrs)
+        Service->>Service: Enforce Attribute Privacy (Strip prices if cross-CPSE)
+    end
+    Service->>Service: Sort candidates descending by compatibility score
+    Service-->>Client: MatchSearchResponse
 ```
 
----
-
-## 2. Service-by-Service Breakdown
-
-### A. [`requisition_service.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py) — Consignments, SoD & Digital Gate Passes
-Coordinates the full lifecycle of inter-enterprise spare parts transfers:
-
-- **Multi-Tenant Consignment Isolation:**
-  - [`list_requisitions_for_user(db, user)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py#L33-L59):
-    Implements multi-tenant shielding. Regular engineers and warehouse officers see **only**:
-    1. Requisitions authored by themselves (`requested_by == current_user.username`), OR
-    2. Incoming transfer requests targeting their specific depot (`source_depot == current_user.depot_id`), OR
-    3. Requests targeting their enterprise (`source_cpse == current_user.cpse`).
-    Consignments between unrelated CPSEs are completely shielded and invisible. Unrestricted visibility is granted only to `SUPER_ADMIN` and `VIGILANCE_AUDITOR` via [`list_requisitions(db, cpse, depot)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py#L17-L30).
-
-- **Strict Segregation of Duties (SoD):**
-  - [`approve_requisition(db, req_id, approved_by)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py#L145-L167):
-    Enforces that requesters cannot approve their own requests (blocked with `HTTP 403 Forbidden` in the router), and only Materials Managers belonging to the **supplying CPSE** holding the surplus asset can authorize stock release. Transitions status to `APPROVED` and appends an `APPROVE_REQUISITION` block to the audit ledger.
-  - [`reject_requisition(db, req_id, reason)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py#L169-L201):
-    Transitions status to `REJECTED`, releases the [`InventoryLock`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L134-L152), and restores debited stock back to [`InventoryItem`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L41-L97).
-
-- **CISF Digital Gate Pass Generation:**
-  - [`generate_gate_pass(db, req_id, gate_pass_request)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py#L203-L280):
-    Issued by Central Industrial Security Force (CISF) personnel upon truck inspection:
-    - Calculates highway transit distance via `road_distance` ($1.28\times$ road tortuosity factor).
-    - Estimates transit hours based on average freight speed ($40\text{ km/h}$).
-    - Calculates greenhouse gas emission savings ($CO_2\text{ kg}$) achieved by avoiding fresh manufacturing.
-    - Computes an unforgeable SHA-256 digital signature:
-      $$\text{Seal} = \text{SHA-256}(\text{gp\_no} \parallel \text{vehicle} \parallel \text{driver\_id} \parallel \text{sku} \parallel \text{qty} \parallel \text{officer} \parallel \text{timestamp})$$
-    - Generates a standalone vector SVG QR code using `qrcode.image.svg.SvgImage` for verification at physical gates.
-    - Transitions requisition status to `GATE_PASS_ISSUED`.
-
-- **Out-Gate Dispatch & In-Gate Delivery:**
-  - [`dispatch_requisition(db, req_id)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py#L282-L303): Transitions status to `DISPATCHED`, recording timestamp and audit block.
-  - [`deliver_requisition(db, req_id)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/requisition_service.py#L305-L334): Transitions status to `DELIVERED`, records delivery timestamp, permanently deactivates the [`InventoryLock`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L134-L152), and reconciles the inventory ledger.
+- **Attribute-Level Privacy Firewall**: If `item.cpse != requester_cpse`, commercial prices (`unit_cost_inr`, `total_value_inr`, `po_no`) are stripped before transmission.
+- **Cross-Standard Equivalence Engine**: Detects dual-certified materials (e.g., `IS 1239` $\longleftrightarrow$ `ASTM A106 Gr. B` / `API 5L`, `IS 2062` $\longleftrightarrow$ `ASTM A105`, `IS 14846` $\longleftrightarrow$ `API 600 WCB`).
+- **Make-in-India (PPP-MII) Compliance**: Rewards Class-I local content ($\ge 50\%$) with a $+0.03$ score bonus while flagging non-local materials with compliance warnings.
 
 ---
 
-### B. [`inventory_service.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/inventory_service.py) — Catalog Operations & Attribute-Level Privacy
-Coordinates enterprise master inventory queries and enforces cross-CPSE data masking:
+### 3.2. Inter-CPSE Requisitions & Consignment Lifecycle (`requisition_service.py`)
 
-- **Attribute-Level Privacy Stripping:**
-  - [`list_inventory(db, filters, pagination, requesting_cpse)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/inventory_service.py#L9-L48) & [`get_item(db, sku_code, requesting_cpse)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/inventory_service.py#L50-L66):
-    When the caller's enterprise (`requesting_cpse`) differs from the owning CPSE (`item.cpse`), proprietary financial attributes are stripped automatically:
-    ```python
-    if item.cpse != requesting_cpse:
-        item_dict.pop("unit_cost_inr", None)
-        item_dict.pop("total_value_inr", None)
-        item_dict.pop("po_no", None)
-    ```
-- **Surplus Radar & HITL Triage:**
-  - [`get_surplus_radar(db, requesting_cpse)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/inventory_service.py): Identifies parts declared as surplus across all CPSEs with commercial prices protected.
-  - [`get_hitl_queue(db)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/inventory_service.py): Retrieves parts requiring Human-In-The-Loop review (stained/unreadable MTCs or $>90$ days idle).
-- **Status Transitions & Auditing:**
-  - [`transition_status(db, sku_code, new_status, reason, officer)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/inventory_service.py#L89-L135): Updates inventory lifecycle status and immediately appends an immutable `STATUS_CHANGE` block to the audit ledger.
+Enforces financial and physical asset custody transitions:
 
----
-
-### C. [`match_service.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/match_service.py) — Material Matching, Safety Rules & ML Re-Ranking
-Coordinates the complete multi-stage matching pipeline, decoupling business orchestration from HTTP controllers:
-
-- **Query Normalization (`parse_query`):**
-  Uses [`DialectNormalizer`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/ml/ner/normalizer.py) to resolve colloquial CPSE equipment descriptions into structured engineering specifications (nominal bore size `size_nb_mm`, pressure rating `pressure_class`/`pressure_rating_bar`, metallurgy `material_grade`, and facing type `facing`).
-- **SQL Candidate Pre-Filtering (`fetch_candidates`):**
-  Executes high-performance indexed queries against `inventory_items` in PostgreSQL, retrieving active candidates with status `SURPLUS_DECLARED` or `AVAILABLE` while filtering out the requesting enterprise's own stock or inactive assets.
-- **21 Codified Deterministic Safety Rules (`evaluate_pair`):**
-  Applies the physics and standards engine ([`rules/tolerance.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/rules/tolerance.py)) to verify mechanical and chemical interchangeability (ASME B16.5 / B16.47 pressure/facing limits, NACE MR0175 sour service metallurgy, API 6D fire safety, API 600 valve trim, and ASME Sec VIII heat exchanger tube layouts).
-  > [!IMPORTANT]
-  > **Invariant #1 (Hard Safety Gate):** Safety rules strictly veto ML continuous scores. If any critical safety rule fails (`passed_rules = False`), the candidate is immediately rejected with a compatibility score of `0.0`.
-- **Continuous ML Scoring & Active Learning (`CompatibilityRanker`):**
-  For safety-cleared candidates, computes a continuous 0.0–1.0 score combining dense vector semantic similarity, dimensional tolerance closeness, and historical feedback adjustments from [`ActiveLearningCache`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/ml/active_learning/cache.py).
-- **Logistics & Carbon Footprint Computation:**
-  Integrates [`graph.logistics`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/graph/logistics.py) to calculate highway route distances ($1.28\times$ road tortuosity factor), freight transit time ($40\text{ km/h}$ average freight speed), and Bureau of Energy Efficiency (BEE) freight carbon savings ($62\text{ g } CO_2 / \text{tonne-km}$).
-- **Commercial Data Shielding:**
-  Automatically masks proprietary procurement data (`unit_cost_inr`, `total_value_inr`, `po_no`) for any candidate items belonging to external CPSEs.
+1. **Two-Phase Reservation Locking**:
+   - Executes `SELECT ... FOR UPDATE` on `InventoryItem`.
+   - Inserts `InventoryLock` record with 7-day TTL expiration.
+   - Debits `quantity` immediately to prevent double-allocation across concurrent plant requests.
+2. **Rejection Rollback**:
+   - If rejected, releases the active `InventoryLock` and atomically restores `item.quantity`.
+3. **CISF Digital Gate Pass Issuance**:
+   - Requires `status == "APPROVED"`.
+   - Computes SHA-256 seal: $\text{Seal} = \text{SHA256}(\text{GatePassNo} \parallel \text{Vehicle} \parallel \text{Driver} \parallel \text{SKU} \parallel \text{Qty} \parallel \text{Officer} \parallel \text{Time})$.
+   - Embeds vector SVG QR code for offline field scanning at refinery security gates.
+   - Calculates road distance and carbon emissions saved ($\text{CO}_2\text{ saved in kg}$).
+4. **Dispatch & Delivery**:
+   - Transitions state from `APPROVED` $\longrightarrow$ `GATE_PASS_ISSUED` $\longrightarrow$ `DISPATCHED` $\longrightarrow$ `DELIVERED`.
+   - Permanently deactivates the reservation lock upon verified delivery.
 
 ---
 
-### D. [`audit_service.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/audit_service.py) — Sovereign Cryptographic Audit Ledger
-Implements the immutable, mathematically verifiable SHA-256 blockchain-style ledger:
+### 3.3. Change Data Capture Manager (`cdc_manager.py`)
 
-- **Block Creation:**
-  - [`create_audit_entry(db, request)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/audit_service.py#L24-L81):
-    1. Fetches the previous entry's `sha256_hash` (or `GENESIS_ROOT_64_HEX` if empty).
-    2. Deterministically serializes JSON payload details (sorting keys).
-    3. Computes the chained hash:
-       $$H_i = \text{SHA-256}(H_{i-1} \parallel \text{log\_id} \parallel \text{timestamp} \parallel \text{actor} \parallel \text{action} \parallel \text{reference\_id} \parallel \text{details})$$
-    4. Persists the block into [`SovereignAuditLedger`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L182-L200).
-- **Automated Chain Verification:**
-  - [`verify_chain(db)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/audit_service.py): Traverses the entire audit table from Genesis to the latest block, recomputing each block's SHA-256 hash. Detects any unauthorized retroactive SQL updates, row deletions, or re-ordering.
-- **Statutory Compliance Export:**
-  - [`export_csv(db, filters)`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/audit_service.py): Generates RFC 4180 compliant CSV exports containing all block hashes and parent links for formal submission to CVC and CAG authorities.
+Maintains sub-millisecond real-time synchronization between relational PostgreSQL records and the Neo4j knowledge graph:
+- **Startup Concurrency Control**: Uses PostgreSQL transaction advisory lock (`0x53414D41`) to guarantee idempotent DDL execution across multi-worker deployments.
+- **Dual Triggers**: Attaches `fn_cdc_capture()` triggers to `inventory_items` and `requisitions`, writing mutations to `cdc_outbox` and emitting `pg_notify('samanvay_cdc_channel')`.
+- **Worker Loop**: Listens on the PostgreSQL notification channel using non-blocking `select.select(..., 2.0)` with automated outbox backlog draining upon reconnects.
 
 ---
 
-### E. [`cdc_manager.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py) — Real-Time Change Data Capture (CDC) Worker
-Provides real-time event streaming between PostgreSQL and the Neo4j Knowledge Graph:
+### 3.4. Sovereign Cryptographic Audit Ledger (`audit_service.py`)
 
-```mermaid
-flowchart TD
-    subgraph "PostgreSQL Transaction"
-        Mutation["INSERT / UPDATE / DELETE<br/>on inventory_items or requisitions"]
-        Trigger["fn_cdc_capture() Trigger"]
-        Outbox["INSERT INTO cdc_outbox<br/>(status: 'PENDING')"]
-        Notify["PERFORM pg_notify<br/>('samanvay_cdc_channel', payload)"]
-        
-        Mutation --> Trigger --> Outbox --> Notify
-    end
-
-    subgraph "Samanvay-CDC-Worker Thread"
-        Worker["LISTEN samanvay_cdc_channel<br/>(select.select polling)"]
-        Batch["Batch Pending Outbox Events"]
-        Sync["Neo4jSyncer.sync_item() / sync_requisition()"]
-        UpdateStatus["UPDATE cdc_outbox<br/>SET status = 'PROCESSED'"]
-
-        Notify -.->|Sub-millisecond IPC| Worker
-        Worker --> Batch --> Sync --> UpdateStatus
-    end
-
-    subgraph "Neo4j 5 Knowledge Graph"
-        GraphNode[("Updated Graph Nodes<br/>& Corridors")]
-        Sync --> GraphNode
-    end
-```
-
-- **PostgreSQL Advisory Lock Concurrency Protection:**
-  [`init_cdc_schema()`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py#L31-L100) executes `SELECT pg_advisory_xact_lock(0x53414D41)` (`1396789057`, ASCII for `'SAMA'`). This session-level exclusive lock guarantees that when multiple Uvicorn workers boot concurrently, only one worker performs DDL and trigger attachment while others wait cleanly, eliminating startup race conditions.
-- **PostgreSQL Triggers:**
-  - Attaches `trg_inventory_cdc` and `trg_requisition_cdc` to `inventory_items` and `requisitions`.
-  - Every row mutation automatically writes a row snapshot to [`cdc_outbox`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/models/tables.py#L233-L247) and broadcasts a JSON notification via `pg_notify('samanvay_cdc_channel', ...)`.
-- **Background Worker Thread ([`start_cdc_worker`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/cdc_manager.py)):**
-  - Runs in a dedicated background daemon thread started during FastAPI lifespan.
-  - Listens on `samanvay_cdc_channel` with non-blocking `select.select()`.
-  - Replays row mutations into Neo4j graph nodes and corridor relationships via `Neo4jSyncer`, updating outbox status to `PROCESSED`.
-
----
-
-### F. [`seeder.py`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py) — Cold-Start Database Seeder
-Ensures zero manual setup is required on fresh deployment volumes:
-
-- **5,000 Inventory Items Seeding ([`seed_database_if_empty`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py#L25-L162)):**
-  - Runs on startup; if `inventory_items` is empty, reads `datasets/inventory_catalog.csv`.
-  - Passes descriptions through [`DialectNormalizer`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/ml/ner/normalizer.py) to extract nominal size, pressure class, metallurgy, and facing.
-  - Classifies surplus: `days_idle >= 365` $\rightarrow$ `SURPLUS_DECLARED`, `days_idle >= 180` $\rightarrow$ `POTENTIAL_SURPLUS`.
-  - Bulk saves items into PostgreSQL.
-  - Seals the Genesis entry (`LOG-GENESIS-00001`) in the Sovereign Audit Ledger.
-- **25 Persona Accounts Seeding ([`seed_users_if_empty`](file:///C:/Users/mayan/Development/Hackathons/Samanvay-AI/backend/app/services/seeder.py#L164-L227)):**
-  - Idempotently populates the 25 pre-configured demo user accounts across the 7 CPSEs (OIL, IOCL, ONGC, GAIL, BPCL, HPCL, NRL) + MoPNG Central.
-  - Sets default master password `Samanvay@2026` (hashed via bcrypt).
-  - Ensures accounts have `is_active = True` and `is_approved = True`.
+Implements tamper-evident audit trails for CVC and CAG compliance:
+- Anchors each new event to the previous record's SHA-256 digest ($H_0 = \text{"0"}^{64}$).
+- `verify_chain()` scans ledger height in chronological sequence, confirming parent pointer continuity and recomputing SHA-256 hashes.
+- `export_csv()` formats records to RFC 4180 with UTF-8 Byte Order Mark (`\ufeff`) for seamless Excel and audit software import.

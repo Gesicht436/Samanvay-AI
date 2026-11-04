@@ -12,7 +12,7 @@ import pandas as pd
 
 from backend.app.models.base import SessionLocal, init_db
 from backend.app.models.tables import InventoryItem, SovereignAuditLedger
-from ml.ner.normalizer import DialectNormalizer
+from machine_learning.ner_tagger import DialectNormalizer
 
 logger = logging.getLogger("samanvay.seeder")
 
@@ -223,4 +223,3 @@ def seed_users_if_empty(db=None):
     finally:
         if close_db:
             db.close()
-

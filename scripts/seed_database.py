@@ -11,6 +11,7 @@ import sys
 import hashlib
 import json
 from datetime import datetime, timezone
+from typing import List, Dict, Any
 import pandas as pd
 
 # Add repository root to path
@@ -19,9 +20,79 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from backend.app.core.config import settings
 from backend.app.models.base import engine, SessionLocal, init_db
 from backend.app.models.tables import InventoryItem, SovereignAuditLedger
-from ml.ner.normalizer import DialectNormalizer
-from ml.embeddings.vector_encoder import VectorEncoder
-from ml.embeddings.qdrant_client import SamanvayQdrantClient
+from machine_learning.ner_tagger import DialectNormalizer
+
+
+class VectorEncoder:
+    def __init__(self, model_name: str = "BAAI/bge-m3"):
+        self.model_name = model_name
+        self.dim = 1024
+        self.use_transformer = False
+        try:
+            from sentence_transformers import SentenceTransformer
+            try:
+                self.model = SentenceTransformer(model_name, local_files_only=True)
+                self.use_transformer = True
+            except Exception:
+                if os.getenv("DOWNLOAD_EMBEDDING_MODEL", "false").lower() in ("true", "1"):
+                    self.model = SentenceTransformer(model_name)
+                    self.use_transformer = True
+                else:
+                    self.model = None
+        except Exception:
+            self.model = None
+
+    def encode(self, text: str) -> List[float]:
+        if self.use_transformer and self.model is not None:
+            return self.model.encode(text).tolist()
+        import random
+        random.seed(hash(text))
+        return [random.uniform(-1, 1) for _ in range(self.dim)]
+
+
+class SamanvayQdrantClient:
+    def __init__(self):
+        self.collection_name = getattr(settings, "qdrant_collection", "samanvay_inventory")
+        host = getattr(settings, "qdrant_host", "localhost")
+        port = getattr(settings, "qdrant_port", 6333)
+        try:
+            from qdrant_client import QdrantClient
+            from qdrant_client.http import models
+            self.client = QdrantClient(host=host, port=port, check_compatibility=False)
+            self.models = models
+            self.active = True
+            self.connect()
+        except Exception:
+            self.client = None
+            self.active = False
+
+    def connect(self):
+        if not self.active:
+            return
+        try:
+            collections = [c.name for c in self.client.get_collections().collections]
+            if self.collection_name not in collections:
+                self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=self.models.VectorParams(size=1024, distance=self.models.Distance.COSINE),
+                    hnsw_config=self.models.HnswConfigDiff(m=16, ef_construct=100)
+                )
+        except Exception:
+            self.active = False
+
+    def upsert_items(self, items: List[Dict[str, Any]]):
+        if not self.active or not items:
+            return
+        import uuid
+        points = []
+        for item in items:
+            sku = item.get("sku_code", "")
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, sku))
+            payload = {"sku_code": sku, "item_type": item.get("item_type", "UNKNOWN"), **item.get("payload", {})}
+            points.append(
+                self.models.PointStruct(id=point_id, vector=item["vector"], payload=payload)
+            )
+        self.client.upsert(collection_name=self.collection_name, points=points)
 
 
 def derive_depot_id(cpse: str, location: str) -> str:

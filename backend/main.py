@@ -14,6 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
 from backend.app.models.base import init_db
 from backend.app.api.routers import ingest, match, inventory, requisition, graph, audit, auth
+from backend.app.api.v1 import dashboard as v1_dashboard
+from backend.app.api.v1 import match as v1_match
+from backend.app.api.v1 import ingest as v1_ingest
 
 
 @asynccontextmanager
@@ -28,13 +31,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         import logging
         logging.getLogger("samanvay.startup").warning(f"Auto-seed notification: {e}")
 
-    # Pre-seed active learning cache from golden benchmarks
+    # Pre-seed active learning cache from golden benchmarks using Hariom's ML engine
     try:
         import os
-        benchmarks_file = os.path.join(os.path.dirname(__file__), "../../datasets/golden_benchmarks.json")
+        benchmarks_file = os.path.join(os.path.dirname(__file__), "../datasets/golden_benchmarks.json")
+        if not os.path.exists(benchmarks_file):
+            benchmarks_file = os.path.join(os.path.dirname(__file__), "datasets/golden_benchmarks.json")
         if os.path.exists(benchmarks_file):
-            from ml.active_learning.bootstrapper import seed_from_golden_benchmarks
-            from backend.app.api.routers.match import active_cache
+            from machine_learning.active_learning import seed_from_golden_benchmarks
+            from backend.app.services.match_service import active_cache
             seed_from_golden_benchmarks(active_cache, benchmarks_file)
     except Exception as e:
         import logging
@@ -70,19 +75,22 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# ── CORS Middleware ────────────────────────────────────────────────────────
+# ── CORS Middleware ──────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "http://127.0.0.1:3000",
         "http://localhost:3001",
+        "http://127.0.0.1:3001",
     ],
+    allow_origin_regex=r"^https?://(?:localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}):3000$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── API Router Registration ───────────────────────────────────────────────
+# ── Core Enterprise API Routers (/api/v1) ────────────────────────────────────
 app.include_router(auth.router, prefix=settings.api_v1_prefix, tags=["Authentication"])
 app.include_router(ingest.router, prefix=settings.api_v1_prefix, tags=["Ingestion"])
 app.include_router(match.router, prefix=settings.api_v1_prefix, tags=["Matching"])
@@ -90,6 +98,14 @@ app.include_router(inventory.router, prefix=settings.api_v1_prefix, tags=["Inven
 app.include_router(requisition.router, prefix=settings.api_v1_prefix, tags=["Requisition"])
 app.include_router(graph.router, prefix=settings.api_v1_prefix, tags=["Graph"])
 app.include_router(audit.router, prefix=settings.api_v1_prefix, tags=["Audit"])
+
+# ── Hariom's Contract-First Endpoints (/api/v1 and /v1 aliases) ──────────────
+app.include_router(v1_dashboard.router, prefix=f"{settings.api_v1_prefix}/dashboard", tags=["Dashboard Summary"])
+app.include_router(v1_match.router, prefix=f"{settings.api_v1_prefix}/match", tags=["Matching Contract & HITL"])
+
+app.include_router(v1_dashboard.router, prefix="/v1/dashboard", tags=["Dashboard Summary (v1)"])
+app.include_router(v1_match.router, prefix="/v1/match", tags=["Matching Contract (v1)"])
+app.include_router(v1_ingest.router, prefix="/v1/ingest", tags=["Ingest Contract (v1)"])
 
 
 @app.get("/health", tags=["System"])
