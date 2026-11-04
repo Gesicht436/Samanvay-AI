@@ -28,6 +28,7 @@ dependencies = [
   "email-validator>=2.0.0",
   "qrcode>=8.0",
   "scikit-learn>=1.4.0",
+  "alembic>=1.14,<2",
 ]
 
 [project.optional-dependencies]

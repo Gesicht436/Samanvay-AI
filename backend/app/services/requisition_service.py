@@ -58,6 +58,47 @@ def list_requisitions_for_user(db: Session, user: Any) -> List[Dict[str, Any]]:
     ]
 
 
+def get_requisition_for_user(db: Session, req_id: str, user: Any) -> Dict[str, Any]:
+    """
+    Single-record read scoped by the same visibility rule as
+    ``list_requisitions_for_user``, applied at query level:
+
+    1. Requisitions created by the authenticated user (requested_by == username)
+    2. Requisitions sourced from the user's own depot or CPSE
+
+    Visibility is derived exclusively from the authenticated session identity
+    (username / cpse / depot_id), never from request input. A requisition that
+    is out of scope is reported as not found so the endpoint does not disclose
+    the existence of another tenant's consignment.
+    """
+    username = getattr(user, "username", str(user))
+    user_cpse = getattr(user, "cpse", None)
+    user_depot = getattr(user, "depot_id", None)
+
+    conditions = [
+        Requisition.requested_by == username,
+    ]
+    if user_depot:
+        conditions.append(Requisition.source_depot == user_depot)
+        conditions.append(Requisition.source_depot.ilike(f"%{user_depot}%"))
+    if user_cpse:
+        conditions.append(Requisition.source_cpse == user_cpse)
+
+    from sqlalchemy import or_
+    req = db.query(Requisition).filter(
+        Requisition.requisition_id == req_id,
+        or_(*conditions),
+    ).first()
+    if not req:
+        raise ResourceNotFoundError(f"Requisition {req_id} not found")
+    data = {c.name: getattr(req, c.name) for c in req.__table__.columns}
+    # Include associated gate pass if available
+    gp = db.query(DigitalGatePass).filter(DigitalGatePass.requisition_id == req_id).first()
+    if gp:
+        data["gate_pass"] = {c.name: getattr(gp, c.name) for c in gp.__table__.columns}
+    return data
+
+
 def get_requisition(db: Session, req_id: str) -> Dict[str, Any]:
     req = db.query(Requisition).filter(Requisition.requisition_id == req_id).first()
     if not req:

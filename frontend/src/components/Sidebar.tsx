@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from './ThemeProvider';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -13,9 +13,6 @@ import {
   Truck,
   ShieldCheck,
   UserCheck,
-  Search,
-  FileText,
-  CheckCircle2,
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
@@ -40,7 +37,17 @@ export function Sidebar({
   const pathname = usePathname();
   const { cpse } = useTheme();
   const { user, logout } = useAuth();
+  const router = useRouter();
   const [internalCollapsed, setInternalCollapsed] = useState<boolean>(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  // Clear error after 4s when shown
+  useEffect(() => {
+    if (logoutError) {
+      const timer = setTimeout(() => setLogoutError(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [logoutError]);
 
   // Sync with local storage
   useEffect(() => {
@@ -82,11 +89,8 @@ export function Sidebar({
   const navItems = [
     { name: 'Command Center', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Surplus Discovery', href: '/discover', icon: Layers },
-    { name: 'Deduplication', href: '/deduplication', icon: Search },
     { name: 'Stock Ledger', href: '/inventory', icon: Package },
     { name: 'MTC Intake', href: '/upload', icon: Upload },
-    { name: 'Document OCR', href: '/ingest', icon: FileText },
-    { name: 'Review Queue', href: '/hitl', icon: CheckCircle2 },
     { name: 'Consignments', href: '/requests', icon: Truck },
     { name: 'Audit Ledger', href: '/audit', icon: ShieldCheck },
   ];
@@ -231,9 +235,22 @@ export function Sidebar({
             )}
             {!isCollapsed && (
               <button
-                onClick={logout}
-                className="p-1 rounded text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
-                title="Sign out"
+                onClick={async () => {
+                  try {
+                    await logout();
+                    router.push('/login');
+                  } catch {
+                    // Non-401/retryable logout failure: identity is not cleared
+                    // and no redirect is performed. Surface the failure so the
+                    // operator knows the sign-out did not complete.
+                    setLogoutError('Failed to sign out. Please try again.');
+                  }
+                }}
+                className={`p-1 rounded transition-colors cursor-pointer ${logoutError
+                  ? 'text-rose-600 dark:text-rose-400'
+                  : 'text-zinc-400 hover:text-rose-600 dark:hover:text-rose-600 transition-colors'
+                  }`}
+                title={logoutError || 'Sign out'}
               >
                 <LogOut size={13} />
               </button>

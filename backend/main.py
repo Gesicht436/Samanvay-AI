@@ -12,17 +12,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.core.config import settings
-from backend.app.models.base import init_db
+from backend.app.models.base import init_db, verify_schema_version
 from backend.app.api.routers import ingest, match, inventory, requisition, graph, audit, auth
-from backend.app.api.v1 import dashboard as v1_dashboard
-from backend.app.api.v1 import match as v1_match
-from backend.app.api.v1 import ingest as v1_ingest
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan: initialize DB tables, auto-seed, and start CDC worker."""
-    init_db()
+    """Application lifespan: verify/prepare DB schema, auto-seed, and start CDC worker.
+
+    Schema provisioning is an explicit deployment operation and is NEVER performed
+    automatically here.  In production we only *verify* the schema is the
+    migration-managed baseline the application expects and fail closed otherwise;
+    we never create, upgrade, or stamp tables at startup.  In development/test we
+    retain the create_all() bootstrap for convenience and test compatibility.
+    """
+    if settings.is_production:
+        verify_schema_version()
+    else:
+        init_db()
     try:
         from backend.app.services.seeder import seed_database_if_empty, seed_users_if_empty
         seed_database_if_empty()
@@ -31,15 +38,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         import logging
         logging.getLogger("samanvay.startup").warning(f"Auto-seed notification: {e}")
 
-    # Pre-seed active learning cache from golden benchmarks using Hariom's ML engine
+    # Pre-seed active learning cache from golden benchmarks
     try:
         import os
-        benchmarks_file = os.path.join(os.path.dirname(__file__), "../datasets/golden_benchmarks.json")
-        if not os.path.exists(benchmarks_file):
-            benchmarks_file = os.path.join(os.path.dirname(__file__), "datasets/golden_benchmarks.json")
+        benchmarks_file = os.path.join(os.path.dirname(__file__), "../../datasets/golden_benchmarks.json")
         if os.path.exists(benchmarks_file):
-            from machine_learning.active_learning import seed_from_golden_benchmarks
-            from backend.app.services.match_service import active_cache
+            from ml.active_learning.bootstrapper import seed_from_golden_benchmarks
+            from backend.app.api.routers.match import active_cache
             seed_from_golden_benchmarks(active_cache, benchmarks_file)
     except Exception as e:
         import logging
@@ -71,26 +76,26 @@ app = FastAPI(
         "& Compatibility Platform for MoPNG (SIH26099)"
     ),
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # AUTH-5J.3 (D-5J.3-4, frozen AUTH-006 Section 2 final target):
+    # documentation and OpenAPI are development-only surfaces. Production
+    # deployments must not expose /docs, /redoc or /openapi.json.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
-# ── CORS Middleware ──────────────────────────────────────────────────────────
+# ── CORS Middleware ────────────────────────────────────────────────────────
+# Cookie-authenticated requests require an explicit Origin allowlist plus
+# credentials. Origins come from configuration only (never from Host headers).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-    ],
-    allow_origin_regex=r"^https?://(?:localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}):3000$",
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Core Enterprise API Routers (/api/v1) ────────────────────────────────────
+# ── API Router Registration ───────────────────────────────────────────────
 app.include_router(auth.router, prefix=settings.api_v1_prefix, tags=["Authentication"])
 app.include_router(ingest.router, prefix=settings.api_v1_prefix, tags=["Ingestion"])
 app.include_router(match.router, prefix=settings.api_v1_prefix, tags=["Matching"])
@@ -98,14 +103,6 @@ app.include_router(inventory.router, prefix=settings.api_v1_prefix, tags=["Inven
 app.include_router(requisition.router, prefix=settings.api_v1_prefix, tags=["Requisition"])
 app.include_router(graph.router, prefix=settings.api_v1_prefix, tags=["Graph"])
 app.include_router(audit.router, prefix=settings.api_v1_prefix, tags=["Audit"])
-
-# ── Hariom's Contract-First Endpoints (/api/v1 and /v1 aliases) ──────────────
-app.include_router(v1_dashboard.router, prefix=f"{settings.api_v1_prefix}/dashboard", tags=["Dashboard Summary"])
-app.include_router(v1_match.router, prefix=f"{settings.api_v1_prefix}/match", tags=["Matching Contract & HITL"])
-
-app.include_router(v1_dashboard.router, prefix="/v1/dashboard", tags=["Dashboard Summary (v1)"])
-app.include_router(v1_match.router, prefix="/v1/match", tags=["Matching Contract (v1)"])
-app.include_router(v1_ingest.router, prefix="/v1/ingest", tags=["Ingest Contract (v1)"])
 
 
 @app.get("/health", tags=["System"])

@@ -1,0 +1,1609 @@
+# Shourya — System & Development Runbook
+
+**Project:** Samanvay-AI / BharatCodex
+**Developer:** Shourya Mishra
+**Primary Environment:** Windows + PowerShell
+**Repository:** `C:\Users\HP\Samanvay-AI`
+
+---
+
+## 1. Purpose
+
+This document records the local development environment, known system limitations, recurring errors, and the correct execution procedure for work on Samanvay-AI.
+
+The purpose is to prevent repeated environment mistakes, unnecessary setup attempts, wasted coding-agent tokens, and incorrect conclusions about implementation status.
+
+Before performing implementation, testing, debugging, or verification work, the relevant sections of this document MUST be considered.
+
+---
+
+# 2. System Environment
+
+## Operating System
+
+* Windows
+* Primary shell: PowerShell
+
+## User Environment
+
+```text
+User profile:
+C:\Users\HP
+```
+
+## Repository
+
+```text
+C:\Users\HP\Samanvay-AI
+```
+
+## Python
+
+```text
+Python 3.13
+```
+
+The project uses a Python virtual environment for Samanvay-AI.
+
+Typical environment:
+
+```text
+(samanvay-ai)
+```
+
+The environment should be activated before running project Python commands.
+
+## C/C++ Toolchain
+
+MinGW is installed at:
+
+```text
+C:\mingw64\bin\g++.exe
+```
+
+This is available when native compilation is required.
+
+## Conda / Jupyter
+
+Installed development tooling includes:
+
+* Anaconda
+* JupyterLab
+* Python development tooling
+
+These should not be introduced into a task unless the task actually requires them.
+
+---
+
+# 3. Primary Development Rules
+
+The following rules apply to coding-agent work on this machine.
+
+### Rule 1 — Inspect before modifying
+
+Do not immediately implement.
+
+First inspect:
+
+* relevant file
+* relevant function/class
+* existing helper
+* existing tests
+* current git status/diff when relevant
+
+Only inspect the minimum required scope.
+
+### Rule 2 — Reuse existing project utilities
+
+Before creating a new helper, dependency, schema, or mechanism:
+
+1. Search the relevant module.
+2. Check existing utilities.
+3. Reuse existing project conventions.
+
+Do not introduce a new implementation when an existing project mechanism already performs the required job.
+
+### Rule 3 — Do not install dependencies unnecessarily
+
+Do not install:
+
+* new Python packages
+* new authentication libraries
+* new database software
+* new security libraries
+* new tooling
+
+unless the task explicitly requires it and the existing project cannot satisfy the requirement.
+
+### Rule 4 — Do not perform broad refactoring
+
+A bounded task means a bounded change.
+
+Do not:
+
+* redesign unrelated modules
+* rename unrelated functions
+* reorganize the repository
+* rewrite existing security architecture
+* clean up unrelated code
+* update unrelated documentation
+
+---
+
+# 4. Database Environment
+
+## PostgreSQL Status
+
+The local PostgreSQL server is currently unavailable.
+
+Known result:
+
+```text
+connection to server at "localhost" (::1),
+port 5432 failed:
+Connection refused
+(0x0000274D/10061)
+```
+
+Therefore:
+
+```text
+localhost:5432
+```
+
+must NOT be assumed to have a running PostgreSQL server.
+
+## Important Rule
+
+Do NOT automatically:
+
+* install PostgreSQL
+* start PostgreSQL
+* create a database
+* modify database configuration
+* create migrations
+* change the project's database architecture
+
+merely because a test requires PostgreSQL.
+
+If database availability is not part of the current task, leave the environment unchanged.
+
+If a test genuinely requires PostgreSQL and the server is unavailable:
+
+```text
+REPORT TEST AS BLOCKED BY DATABASE AVAILABILITY
+```
+
+Do not claim that the test passed.
+
+Do not fake a test result.
+
+---
+
+# 5. Correct Database Diagnostic
+
+If database connectivity must be verified, use a minimal diagnostic.
+
+Expected failure in the current environment:
+
+```text
+localhost:5432 → Connection refused
+```
+
+The important distinction is:
+
+```text
+Implementation problem
+        ≠
+Database environment unavailable
+```
+
+A connection-refused error alone does NOT prove that the application implementation is incorrect.
+
+---
+
+# 6. PowerShell Rules
+
+PowerShell is the primary shell.
+
+Commands must be written using valid PowerShell syntax.
+
+Do not repeatedly attempt malformed shell commands.
+
+When a command becomes complex, prefer:
+
+1. a simple PowerShell command,
+2. a temporary script only when genuinely necessary,
+3. removal of the temporary script afterward.
+
+Do not leave diagnostic scripts or temporary files in the repository.
+
+---
+
+# 7. Temporary Files
+
+Temporary diagnostic files may be created only when required.
+
+Examples:
+
+```text
+test_db_check.py
+debug_*.py
+tmp_*.py
+```
+
+After use:
+
+1. verify the diagnostic is complete,
+2. remove the temporary file,
+3. check `git status`,
+4. confirm no unintended repository change remains.
+
+Temporary diagnostics must never become accidental project files.
+
+---
+
+# 8. Git Safety
+
+Before implementation:
+
+```text
+Check git status.
+```
+
+After implementation:
+
+```text
+Check git diff.
+Check git status.
+```
+
+The agent must report:
+
+* files intentionally modified
+* files unexpectedly modified
+* temporary files
+* generated files
+* unexpected configuration changes
+
+Do not commit or push unless explicitly requested.
+
+---
+
+# 9. Correct Work Sequence
+
+For any bounded Samanvay-AI task, follow this order.
+
+```text
+1. Read task specification
+        ↓
+2. Identify exact allowed files
+        ↓
+3. Inspect relevant symbols
+        ↓
+4. Inspect existing utilities/helpers
+        ↓
+5. Inspect relevant tests
+        ↓
+6. Check environment only if required
+        ↓
+7. Implement minimum required change
+        ↓
+8. Inspect git diff
+        ↓
+9. Run focused tests
+        ↓
+10. Separate implementation result from environment failures
+        ↓
+11. Report final status
+```
+
+Do NOT begin with:
+
+```text
+Full repository audit
+```
+
+unless the task explicitly requires it.
+
+---
+
+# 10. Coding-Agent Token Protection
+
+Coding agents have limited model/tool budgets.
+
+Therefore every task should be tightly bounded.
+
+The agent should:
+
+* inspect only relevant files
+* search only relevant symbols
+* avoid dumping entire files
+* avoid broad repository scans
+* avoid repeated searches
+* avoid repeated database diagnostics
+* avoid speculative architecture changes
+* avoid unnecessary tests
+* avoid unrelated cleanup
+
+The agent should stop investigating once sufficient evidence exists.
+
+---
+
+# 11. Authentication Architecture Constraint
+
+The implemented authentication model is organizational username/password with a server-side session cookie.
+
+Verification currently runs against the local account store using bcrypt. The repository has NO implemented external identity provider or organizational credential integration: there is no LDAP, Active Directory, OIDC, SAML, directory, or federation integration in the codebase.
+
+Rules for future agents:
+
+1. Do not assume an external identity provider exists. It does not.
+2. Do not invent LDAP, Active Directory, OIDC, SAML, Google OAuth, directory, or federation integration.
+3. The credential-authority direction is already decided: **External Organizational Authority / Federation** — Samanvay must not become the authoritative organizational password store (`docs/authentication/10_DECISIONS.md` D-CRED-1). However, the exact provider/protocol is not yet selected — **OPEN ARCHITECTURE DECISION**. Agents MUST NOT invent LDAP, Active Directory, OIDC, SAML, Kerberos, REST, or another identity integration. Until the integration contract is formally specified, preserve the current local-bcrypt implementation and do not implement an external provider.
+4. Follow the currently implemented session-cookie authentication: `POST /auth/login` → server-side `AuthSession` → hashed session secret → HttpOnly session cookie (`__Host-samanvay_session` in production) → CSRF-protected unsafe requests.
+5. Read this runbook before performing any authentication work.
+6. Describe the local bcrypt verification only as the **prototype credential authority**, **development/demo authentication**, or **local prototype credential verification**. Never describe it as an organizational identity provider, an organizational credential integration, or the production CPSE identity architecture. In a real organizational deployment, credential verification is expected to be delegated to the organization-approved identity infrastructure; the exact provider/protocol is deployment-specific and unresolved (`docs/authentication/10_DECISIONS.md` D-CRED-1).
+
+Do NOT independently introduce:
+
+* Google Login
+* a new OIDC implementation
+* a new JWT authentication architecture
+* bearer tokens or localStorage/sessionStorage authentication credentials
+* another identity provider
+
+unless the project architecture is explicitly changed.
+
+The submitted prototype's implemented conceptual flow (prototype credential authority — development/demo authentication):
+
+```text
+username + password
+        ↓
+prototype credential verification
+        ↓
+account-state checks
+        ↓
+Samanvay AuthSession
+        ↓
+__Host-samanvay_session
+```
+
+The real organizational deployment flow (target direction; exact provider/protocol deployment-specific and unresolved):
+
+```text
+organizational username + password
+        ↓
+organization-approved credential authority
+        ↓
+successful identity/authentication handoff
+        ↓
+Samanvay AuthSession
+        ↓
+__Host-samanvay_session
+```
+
+The local prototype credential verification is NOT the organization's authoritative credential store and is NOT the production CPSE identity architecture. The external authority owns organizational credential verification and password lifecycle; Samanvay owns application session management, authorization, RBAC, CPSE/resource boundaries, CSRF protection, application security events, session revocation, and application-level account-state enforcement where applicable. The session architecture is identical in both flows and is unchanged.
+
+Authentication architecture must not be redesigned during unrelated authorization tasks.
+
+---
+
+# 12. Authentication/Security Work Rules
+
+For authentication and authorization tasks:
+
+Do not modify unrelated:
+
+* RBAC
+* CPSE isolation
+* session architecture
+* CSRF semantics
+* workflow semantics
+* audit architecture
+* database schema
+
+unless explicitly included in the task.
+
+Security telemetry should observe security decisions rather than change those decisions.
+
+---
+
+# 13. Security Telemetry Convention
+
+The canonical authorization-failure event is:
+
+```text
+AUTHORIZATION_FAILURE
+```
+
+When adding telemetry:
+
+* use the existing event mechanism
+* use existing helper functions
+* use `success=False`
+* record the server-side actor identity where available
+* use existing reason/action conventions
+* never record passwords
+* never record session tokens
+* never record authentication secrets
+
+Do not create a second telemetry mechanism when the existing security-event infrastructure is sufficient.
+
+---
+
+# 14. Existing Authorization Telemetry
+
+The following already have canonical authorization-failure telemetry:
+
+```text
+require_permission
+require_any_permission
+```
+
+Do not duplicate their telemetry.
+
+If a task involves them, first verify existing behavior before modifying anything.
+
+---
+
+# 15. Known Authentication/Security Implementation Areas
+
+The security work has already covered authorization boundaries including:
+
+```text
+Requisition
+Inventory
+Ingest
+Graph
+Matching
+Audit
+Account administration
+Provisioning
+Document reads
+Frontend session authentication
+CSRF protection
+Security telemetry
+```
+
+Before implementing a new security task, inspect the existing implementation first.
+
+Do not assume that an older audit finding is still unresolved.
+
+The current repository implementation is authoritative.
+
+---
+
+# 16. Known Recurring Error — Database Connection
+
+### Error
+
+```text
+OperationalError
+psycopg2.OperationalError
+
+connection to server at "localhost" (::1),
+port 5432 failed:
+Connection refused
+```
+
+### Meaning
+
+The local PostgreSQL service is unavailable.
+
+### Correct response
+
+```text
+Do not modify application code solely because of this.
+Do not fake test results.
+Report the test as environment-blocked.
+```
+
+Only address PostgreSQL if database setup is explicitly part of the task.
+
+---
+
+# 17. Known Recurring Error — Malformed PowerShell Commands
+
+Previous work encountered repeated PowerShell command syntax/quoting problems.
+
+### Prevention
+
+Use simple commands.
+
+Prefer:
+
+```powershell
+git status
+git diff
+Get-Content <file>
+Select-String -Path <file> -Pattern "<pattern>"
+```
+
+over unnecessarily complex nested shell commands.
+
+If a command fails because of shell syntax, fix the command before drawing any conclusion about the project.
+
+A shell syntax failure is NOT an application implementation failure.
+
+---
+
+# 18. Known Recurring Error — Agent Runs Out of Model Limit
+
+A previous implementation attempt consumed the available coding-agent model budget before completing verification.
+
+### Prevention
+
+For implementation tasks:
+
+```text
+Discovery
+→ Minimal implementation
+→ Diff inspection
+→ Focused tests
+→ Final report
+```
+
+Do not combine:
+
+```text
+Full security audit
++
+Architecture redesign
++
+Implementation
++
+Database setup
++
+Full test suite
+```
+
+into one task.
+
+Split work into bounded phases.
+
+---
+
+# 19. Known Recurring Error — Claiming Completion Without Verification
+
+An agent must NOT report:
+
+```text
+Implementation complete
+```
+
+merely because code was edited.
+
+Completion requires evidence.
+
+At minimum:
+
+```text
+Git diff inspected
+Relevant files verified
+Focused tests attempted
+Environment limitations reported
+```
+
+If testing is blocked:
+
+```text
+IMPLEMENTATION STATUS: complete / requires review
+TEST STATUS: blocked by environment
+```
+
+Do not combine the two into a false "all verified" statement.
+
+---
+
+## Known Recurring Error — Runbook Path Mismatch
+
+### Issue
+
+The runbook is located under:
+
+```text
+docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md
+```
+
+not:
+
+```text
+docs/development/SHOURYA_SYSTEM_RUNBOOK.md
+```
+
+The previously referenced path `docs/development/SHOURYA_SYSTEM_RUNBOOK.md` does not exist.
+
+### Prevention
+
+Coding agents must read the actual path `docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md` before beginning Samanvay-AI work.
+
+---
+
+## Known Recurring Error — AUTH-TELEMETRY Implementation Defects
+
+### A. Missing helper import
+
+Lesson: when adding an existing helper call, verify the helper is imported before claiming implementation completion.
+
+### B. Dependency-scope error
+
+Lesson: never reference a FastAPI dependency variable such as `db` at route/dependency factory definition time unless it is actually in lexical scope; inspect the existing dependency pattern first.
+
+### C. User object vs user_id mismatch
+
+Lesson: verify helper parameter types against the actual call-site value. An integer ID must not be passed where an object with `.id` is expected.
+
+### D. Constant name vs constant value
+
+Lesson: when using policy reason constants, inspect the actual constant value and pass that value rather than inventing/prefixing a string.
+
+### E. Telemetry must not change authorization semantics
+
+Lesson: instrumentation changes must preserve the original authorization guard, permission requirement, and response behavior.
+
+---
+
+## Known Recurring Error — Task 17 Tooling: Shell-Integration Capture Failure and Malformed PowerShell
+
+### Issue A — shell-integration output capture failure and stray artifact file
+
+During Task 17, the initial `git status --short` output could not be captured through shell integration ("output could not be captured through shell integration ... command may still be running"). The command was re-run later and its output verified normally. In the same session window an untracked stray file named `tatus --short` (a colored `git diff --stat` capture, evidently a redirect/typo artifact) appeared in the repository root. Task 17 issued no command containing output redirection; the file remains untracked, is not referenced by any document or code, was not committed, and is reported in the Task 17 final report rather than deleted because its origin is uncertain.
+
+### Issue B — malformed PowerShell one-liner
+
+A single-line byte-inspection command constructed during Task 17 contained invalid nested ternary syntax and failed with `ParserError: Missing ')' in method call`. A simpler byte-scan loop was used instead and succeeded. A later `git show --stat | Select-Object -First 3` reported exit code 1 only because `-First 3` closed the pipeline early; the required output had already been captured.
+
+### Prevention
+
+* Prefer simple PowerShell commands (Section 17); avoid clever one-liners.
+* When shell integration reports uncaptured output, re-run the command and verify results before drawing conclusions.
+* Never rely on output-redirect artifacts; do not commit stray files.
+* Treat pipeline-stop exit codes from `Select-Object -First N` as non-failures when the required output was already obtained.
+
+---
+
+## Known Recurring Error — Task 18 Session Lifecycle Verification
+
+### Issue A — Task 18 WIP found in `git stash`, not on the working tree
+
+At resume, `git status --short` was clean and the Task 18 files
+(`tests/unit/test_session_security.py`,
+`tests/api/test_session_lifecycle.py`, plus the implementation delta in
+`backend/app/services/auth_session_service.py`,
+`backend/app/api/dependencies.py`, `backend/app/api/routers/auth.py`)
+were absent from the working tree but present as
+`stash@{0}` ("WIP: Task 18 session lifecycle hardening"). The same files
+were referenced by stale `.pytest_cache` entries and orphaned
+`__pycache__` bytecode, which confirmed they had been executed before but
+never committed. No work was redone: the stash was popped and the
+untracked test files restored from the stash state, then verification
+continued from the checkpoint.
+
+Bare `stash@{0}` references fail under PowerShell (brace expansion splits
+the argument: "Too many revisions specified: 'stash@' ..."). Quote the
+ref (`'stash@{0}'`).
+
+### Issue B — legacy-route API test initially failed on FastAPI's own docs scaffolding
+
+`test_no_legacy_authentication_routes_registered` initially asserted that
+no registered route path matches `(oauth|oidc|google|sso|saml|jwks|/token)`
+and failed only because FastAPI registers its built-in
+`/docs/oauth2-redirect` Swagger-UI redirect route. That route is framework
+documentation scaffolding: it authenticates nothing, registers no OAuth
+flow, and disappears in production where docs are disabled (D-5J.3-4).
+The security boundary was NOT weakened to make the test pass — the test
+explicitly allowlists exactly that one framework route while still failing
+on any real legacy authentication endpoint.
+
+### Issue C — PostgreSQL-dependent session lifecycle tests are BLOCKED
+
+The DB-backed session lifecycle tests (`test_successful_authentication_...`,
+`test_login_response_cookie_attributes`,
+`test_raw_session_secret_is_never_stored_in_database`) error at the
+application-lifespan fixture with
+`psycopg2.OperationalError: connection to server at "localhost", port 5432
+failed: Connection refused`. Per Sections 4, 16 and 22 these are reported
+as BLOCKED by database availability, never as PASS or as implementation
+failures. The DB-free properties (15/15 unit primitives plus the 6 static
+API checks: missing-cookie 401, Bearer-is-not-auth, legacy-route audit,
+backend/frontend machinery audit, no dependency overrides) were executed
+and passed in this environment; the remaining end-to-end properties hold
+only via the committed test definitions plus code inspection until a
+database is available.
+
+### Prevention
+
+* Check `git stash list` when a checkpoint claims work exists but the tree
+  is clean; never re-implement before looking there.
+* Do not confuse FastAPI's built-in `/docs/oauth2-redirect` with an
+  authentication route.
+* Report DB-dependent session tests as BLOCKED while PostgreSQL is
+  unavailable; do not fake their results.
+
+---
+
+## Known Recurring Error — Task 19 CSRF + Origin Enforcement
+
+### Approved decision — `POST /match/search` is a protected POST
+
+The Task 19 audit found `POST /api/v1/match/search`
+(`backend/app/api/routers/match.py::search_matches`) was the only
+mutating-route decorator without `require_csrf` (19/20 covered). The
+project owner approved treating it as an authenticated protected POST
+under the existing strict-Origin + session-bound-token policy — no
+read-only exemption merely because the response looks read-shaped, and
+no change to token construction, Origin semantics, cookie/session
+design, CORS, or error vocabulary.
+
+### Changes made
+
+* `backend/app/api/routers/match.py`: added the existing
+  `_csrf: AuthSession = Depends(require_csrf)` dependency to
+  `search_matches` (import + parameter, following the inventory /
+  requisition / ingest / audit pattern). No handler, service, permission,
+  or tenant logic changed. No unrelated routes or frontend files touched.
+* `tests/unit/test_csrf_origin.py` (new, 15 tests, DB-free): HMAC token
+  construction vs an independently computed `hmac.new(...)` expectation;
+  token verify matrix (valid / wrong / cross-session / missing / empty /
+  whitespace / non-string / malformed stored hash); Origin matrix (exact
+  allowlist hit / missing / malformed / untrusted / suffix-spoof /
+  trailing-slash contract); `require_csrf` ordering through the real
+  dependency with stub request/session/DB doubles (Origin-denied → 403
+  before token validation; token-denied → 403 with the handler never
+  reached); route-wiring assertion that `match/search` declares
+  `require_csrf`.
+
+### Test outcomes (actual)
+
+* `python -m pytest tests/unit/test_csrf_origin.py -q` → **15 passed**.
+* `python -m pytest tests/unit/test_session_security.py
+  tests/unit/test_security.py -q` → **19 passed** (Task 18 regression
+  intact).
+* DB-free lifecycle subset (6 checks) → **6 passed**; DB-free auth
+  regression (seed-users / me-unauthorized / retired-seed) →
+  **3 passed**.
+* DB-backed CSRF acceptance/rejection over HTTP (real token issuance →
+  protected mutation → 403-negative cases) remains **BLOCKED**:
+  PostgreSQL unavailable at `localhost:5432` (Runbook sections 4, 16,
+  22). Not executed, never claimed as PASS.
+
+### Implementation notes
+
+* No genuine implementation errors were encountered. The new test file
+  was written in three editor calls only because a single write exceeded
+  the editor payload limit; the intermediate state briefly dropped one
+  test, which was restored before any test run — no test was ever run
+  against the partial file.
+* `require_csrf` is called directly (not via FastAPI injection) in the
+  ordering tests, so its `Depends(...)` defaults are bypassed by passing
+  explicit stub doubles — the real function body, including both 403
+  branches and telemetry staging, is what executes.
+
+---
+
+# 20. Test Reporting Convention
+
+Every test report should distinguish:
+
+### PASS
+
+The test actually executed and passed.
+
+### FAIL
+
+The test actually executed and failed.
+
+### BLOCKED
+
+The test could not execute because of an environment dependency.
+
+### NOT RUN
+
+The test was intentionally not executed.
+
+Never convert:
+
+```text
+BLOCKED
+```
+
+into:
+
+```text
+PASS
+```
+
+---
+
+# 21. Focused Testing Rule
+
+For a bounded code change, run the smallest relevant test set first.
+
+Preferred:
+
+```text
+Targeted test
+        ↓
+Related regression test
+        ↓
+Broader test suite only if necessary
+```
+
+Do not automatically run the entire repository test suite for every small change.
+
+---
+
+# 22. Test Environment Limitation
+
+If PostgreSQL is unavailable and the relevant tests require database access:
+
+```text
+Focused test execution may be blocked.
+```
+
+The correct final report should explicitly state:
+
+```text
+Test execution blocked because PostgreSQL is unavailable at localhost:5432.
+No database setup was performed.
+```
+
+---
+
+
+## Task 20 — Migration Infrastructure Recovery
+
+### Audit findings
+* `backend/alembic/baseline_schema.py` previously lacked `BASELINE_REVISION` and
+  `BASELINE_TABLES`, causing an import error in `tests/unit/test_migration_integrity.py`.
+  **Resolved:** added `BASELINE_REVISION = "0001"` and `BASELINE_TABLES` (12 tables in
+  teardown-safe order, matching `reversed(list(Base.metadata.sorted_tables))`).
+* `backend/app/services/schema_verification.py` previously had an IndentationError around
+  line 444. A syntax check subsequently passed; the file was verified for duplicated or
+  overlapping code regions and none found. **No change required.**
+* `scripts/generate_baseline_schema.py` appeared to contain potentially duplicated code.
+  Syntax check passed and the generator was reviewed in full; no functional defect found —
+  the `header`/`body`/`footer` string-splitting is intentional and produces the frozen
+  baseline correctly. **No change required.**
+
+### Files modified (Task 20)
+* `backend/alembic/baseline_schema.py` (added baseline identity + table list)
+* `backend/alembic/versions/0001_baseline.py` (new, baseline migration)
+* `backend/alembic/env.py` (new)
+* `backend/alembic/__init__.py` (new)
+* `backend/app/services/schema_verification.py` (new)
+* `scripts/adopt_schema.py` (new)
+* `scripts/generate_baseline_schema.py` (new)
+* `tests/unit/test_migration_integrity.py` (new)
+
+### Test outcomes (actual)
+* `python -m pytest tests/unit/test_migration_integrity.py -q` → **BLOCKED**:
+  `ModuleNotFoundError: No module named 'pydantic_settings'` at import time
+  (`backend/app/models/base.py` → `backend/app/core/config.py` → `pydantic_settings.BaseSettings`).
+  Not executed, never claimed as PASS or FAIL.
+* DB-free auth regression tests (`tests/unit/test_csrf_origin.py`,
+  `tests/unit/test_session_security.py`, `tests/unit/test_security.py`) → **BLOCKED**:
+  `ModuleNotFoundError: No module named 'fastapi'` at import time. Not executed, never
+  claimed as PASS or FAIL.
+
+### Outstanding PostgreSQL-dependent verification
+* Live PostgreSQL schema verification (`scripts/adopt_schema.py --dry-run`, `--stamp`)
+  is BLOCKED because PostgreSQL is unavailable at `localhost:5432`.
+* Production startup verification (`verify_schema_version`) is BLOCKED for the same reason.
+* These remain BLOCKED; only the DB-free static checks (syntax, import of baseline module,
+  AST-based migration-chain inspection) are available.
+
+### Completion pass (Task 20, October 2026) — verified findings
+
+#### Symptom A — eight failing tests, reproducible
+`python -m pytest tests/unit/test_migration_integrity.py -q` → **8 failed,
+20 passed**. The three `verify_*_fails_closed` tests reported
+"DID NOT RAISE RuntimeError"; four `test_adopt_*` tests returned exit 3 with
+`psycopg2.OperationalError ... Connection refused`; the idempotent-stamp test
+reported `connect` called twice.
+
+#### Root cause A (established)
+* The three verify tests set rows attributes on the object returned by
+  `_fake_engine()` — the **engine** mock — while the inner **connection**
+  mock kept its default `[("0001",)]`, so verification legitimately saw a
+  matching revision and did not raise. The implementation was proven correct
+  for all three cases by supplying rows through `_fake_engine(rows=...)`.
+* The four adopt tests patched `sqlalchemy.inspect` and
+  `adopt_schema.actual_from_inspector` but never patched
+  `adopt_schema.engine`, so `_verify()` used the real module-level engine
+  and attempted a live connection to `localhost:5432`.
+* The idempotent-stamp test (i) asserted `connect.assert_called_once()`
+  although the design performs two read-only connects (verify + stamp
+  pre-check), and (ii) configured fake rows via `fetchall.return_value`
+  although `_alembic_version_rows` iterates the Result directly
+  (a MagicMock `__iter__` defaults to empty), so the fake reported "not
+  stamped" and the stamp proceeded to `begin()`.
+
+#### Resolution A (verified)
+`tests/unit/test_migration_integrity.py`: rows now supplied via
+`_fake_engine(rows=...)`; every `main()`-invoking adopt test patches both
+`adopt_schema.engine` and `adopt_schema.inspect`; the fake result implements
+`fetchall()` and `__iter__()`; connect-count assertions assert the verified
+two-read flow while write safety is asserted by `_assert_no_writes()`
+(a statement-class scan of every `execute()` call) plus `engine.begin`
+assertions. Result: **35 passed** (28 original + 7 new), no assertion was
+weakened to obtain the result.
+
+#### Symptom B — live dry-run could never match (code-level defect)
+`schema_verification.py` documents a `pg_index` query in
+`scripts/adopt_schema.py` that did not exist, so on a live database every
+index predicate would be `UNVERIFIABLE` and `_compare_table` would report a
+difference for all 23 indexes even on an exactly matching schema.
+
+#### Root cause B (established)
+`_verify()` never supplied `index_predicates`, and SQLAlchemy's Inspector
+does not expose partial-index predicates.
+
+#### Resolution B (verified with fake connections)
+`scripts/adopt_schema.py` now runs a read-only
+`SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname =
+current_schema()` and extracts predicates with `predicate_from_indexdef()`
+(anchor on `) WHERE`, normalize via `check_tokens`, balance via `_balanced`).
+No WHERE clause → verified `None` (ordinary non-partial index); empty or
+unbalanced predicate → `ValueError` → adoption aborts exit 3 with no write;
+missing entry → stays `UNVERIFIABLE` → exit 1. Tests cover matching partial
+index, predicate mismatch, missing entry, unparseable definition, and the
+plain non-partial index — all DB-free.
+
+#### Preventive instructions
+* When faking an engine for code that uses a module-level binding, patch the
+  binding the code actually uses (`adopt_schema.engine`,
+  `adopt_schema.inspect`); patching `sqlalchemy.inspect` only affects
+  modules that import `inspect` **inside** the function.
+* Configure BOTH `fetchall()` and `__iter__()` on fake SQLAlchemy results;
+  production code may iterate a Result directly.
+* **TIMESTAMP symmetry:** a reflected PostgreSQL column type renders through
+  `str()` as bare `'TIMESTAMP'` for both tz and naive spellings, and the
+  expected-side baseline parser also produces `'TIMESTAMP'` for
+  `TIMESTAMP WITH TIME ZONE` — the two sides must stay equal. Do not
+  "normalize" only one side (e.g. changing the parser to emit `TIMESTAMPTZ`)
+  or every datetime column will mismatch on a live database.
+* `pg_indexes.tablename` is the **table** name, not the schema name.
+
+#### Test outcomes (completion pass, actual)
+* `python -m pytest tests/unit/test_migration_integrity.py -q` → **35 passed**
+  (plus one benign Alembic `path_separator` DeprecationWarning originating
+  from `backend/alembic.ini`; the config was left untouched).
+* `python -m pytest tests/unit/test_csrf_origin.py
+  tests/unit/test_session_security.py tests/unit/test_security.py -q` →
+  **34 passed** (Task 18/19 regression intact).
+* Offline `ScriptDirectory` head check → `heads == ['0001']`, one revision.
+* Baseline regeneration check → 35/35 statements and the table order are
+  identical to the frozen `baseline_schema.py`.
+* Still BLOCKED: anything requiring live PostgreSQL (unchanged from above).
+
+---
+
+## Task 21 — Frontend Authentication Cutover (Steps 1–2)
+
+### Audit findings (Step 1, read-only)
+* Commit `175e4ae` ("auth: harden frontend session auth UX (AUTH-006)")
+  deleted the `export function PublicNavbar() {` /
+  `export function LandingAuthCTA() {` wrapper lines while adding the
+  `isProductionBuild` signup gating, leaving `useAuth()` and the top-level
+  `return` outside any function — a hard compile error in modules imported
+  by `AppShell`/root `page.tsx`, so the entire frontend failed to build.
+* The same commit added `router.push('/login')` to `Sidebar.tsx` and
+  `UserHeaderBadge.tsx` without `const router = useRouter();` ("Cannot
+  find name 'router'").
+* `Sidebar.tsx` logout catch was empty (silent failure) although its
+  `logoutError` state existed; `UserHeaderBadge` already surfaced it.
+* `api.seedUsers()` targeted the retired `POST /auth/seed` route (404)
+  and had zero call sites.
+* No mid-session 401 handling existed: a session revoked/expired after
+  page load left a stale in-memory identity and CSRF token until reload.
+* Verified already aligned (no change needed): login/me/csrf/logout
+  request-response shapes, cookie-only identity, `credentials:'include'`,
+  CSRF acquisition + `X-CSRF-Token` transmission, ProtectedRoute
+  loading/authenticated/unauthenticated states, signup retirement,
+  production gating of seed/persona surfaces.
+
+### Changes made (Step 2 — 6 files, frontend only)
+* `frontend/src/components/PublicNavbar.tsx`,
+  `frontend/src/components/LandingAuthCTA.tsx`: restored the deleted
+  component wrapper lines; the `isProductionBuild` const and the
+  `{!isProductionBuild && ...}` signup gating are kept intact.
+* `frontend/src/components/Sidebar.tsx`: added
+  `const router = useRouter();`; logout catch now calls
+  `setLogoutError('Failed to sign out. Please try again.')`, matching
+  `UserHeaderBadge` behavior.
+* `frontend/src/components/UserHeaderBadge.tsx`: added
+  `const router = useRouter();`.
+* `frontend/src/lib/api.ts`: removed the dead `seedUsers()` method
+  (provisioning methods `getUsers`/`approveUser`/`rejectUser` untouched);
+  added module-level `setUnauthorizedHandler` registration and a 401
+  notification in `fetchAPI` that fires for every 401 EXCEPT
+  `POST /auth/login` (the login 401 is a credential error owned by the
+  login flow). 403 CSRF/Origin failures and network errors never trigger
+  it; handler exceptions are swallowed so they cannot mask the API error.
+* `frontend/src/context/AuthContext.tsx`: `AuthProvider` registers
+  `clearIdentity` through `setUnauthorizedHandler` (and unregisters on
+  unmount), clearing stale identity + CSRF token on any mid-session 401.
+  The handler is idempotent (safe under concurrent 401s) and performs no
+  navigation (no redirect loops); `ProtectedRoute` then renders the
+  unauthenticated state. Startup restore, login and logout semantics are
+  unchanged.
+* No backend, migration, schema, dependency, lockfile or configuration
+  change; no package installed; no service started.
+
+### Test outcomes (actual)
+* `python -m pytest tests/unit/test_csrf_origin.py
+  tests/unit/test_session_security.py tests/unit/test_security.py -q`
+  → **34 passed** (Task 18/19 regression intact).
+* `tests/api/test_session_lifecycle.py` DB-free static subset
+  (missing-cookie 401, Bearer-is-not-auth, legacy-route audit,
+  backend/frontend JWT-Bearer machinery audit, no dependency overrides)
+  → **6 passed, 3 deselected**.
+* `tests/api/test_signup_api.py` → **2 passed** (public signup retired).
+* `tests/api/test_auth_api.py` static subset (seed-users,
+  me-unauthorized, seed-route-retired) → **3 passed, 4 deselected**.
+* DB-backed lifecycle/auth tests (`test_successful_authentication_...`,
+  `test_login_response_cookie_attributes`,
+  `test_raw_session_secret_is_never_stored_in_database`, the lifespan
+  auth tests) → **BLOCKED**: `psycopg2.OperationalError ... Connection
+  refused` at `localhost:5432` (Sections 4/16/22). Never claimed PASS;
+  no database setup performed.
+* Frontend `tsc --noEmit` / `next build` → **BLOCKED**: `node_modules` is
+  absent and installing dependencies is out of task scope. Substitute
+  structural scan over `frontend/src` (every `router.` use has a
+  `const router = useRouter`; every `useAuth()` consumer is an exported
+  component) → clean; the previously broken files parse per manual
+  diff review.
+
+### Error encountered and resolution (shell, Task 17 recurring class)
+* One pytest invocation was mangled by shell integration: the
+  `.venv\Scripts\python.exe` path lost its leading dot (invoked as
+  `venv\Scripts\python.exe` → "The module 'venv' could not be loaded")
+  and the output was not captured. Resolution: re-ran with the quoted
+  call operator `& '.\.venv\Scripts\python.exe' -m pytest ...`; the
+  command completed and the real results are reported above. No
+  application conclusion was drawn from the shell failure.
+
+---
+
+## Task 22 — Legacy JWT/OIDC Removal Verification (Steps 1–2)
+
+### Audit findings (Step 1, read-only)
+* **F1 — dead code:** `get_optional_user` in `backend/app/api/dependencies.py`
+  was a JWT-era leftover. Its implementation had already been migrated to
+  the session cookie (fail-closed: absent cookie -> `None`; presented
+  malformed/expired/revoked/inactive -> 401 + cookie clear), so it was NOT
+  an authentication weakness — but it had **zero callers** in routers,
+  tests, scripts, ML/graph code, or the frontend.
+* **F2 — stale documentation:** four in-tree READMEs still described the
+  pre-migration system as current: `backend/app/api/README.md` (Bearer
+  JWT mermaid flow, `HTTPAuthorizationCredentials`/`jwt_secret_key`/HS256,
+  `get_optional_user`, `X-CPSE-ID`-derived tenancy),
+  `backend/app/api/routers/README.md` (JWT-issuing login, `POST /auth/signup`,
+  `POST /auth/seed`, seed-users "with the default password"),
+  `backend/app/README.md` (JWT in mermaid/Security/directory comments), and
+  `frontend/README.md` (one-click persona "JWT Bearer token injection",
+  "AuthContext JWT storage", `/signup` JWT issuance, `PUT /admin/users`).
+* Harmless/verified-clean (no action, recorded not to re-flag): all
+  executable surfaces (backend `*.py`, frontend `src`, scripts, deps,
+  env/docker config) contain no JWT/OIDC/Bearer machinery; `.kilo/`
+  worktrees hold old code but are untracked, unreachable, and excluded
+  from Docker images by COPY scoping; `architecture.md`/`context.md`/
+  `MATCH_ENDPOINT_AUDIT_REPORT.md`/`docs/authentication/*` are historical
+  or migration records; `/docs/oauth2-redirect` is FastAPI scaffolding
+  (known false positive, section 21-era note).
+* Out-of-approved-scope observation (reported, NOT edited):
+  `backend/app/core/README.md` still documents `jwt_secret_key`,
+  `jwt_algorithm`, `jwt_access_token_expire_minutes`,
+  `create_access_token`/`decode_access_token` — none of which exist in
+  `backend/app/core/security.py` or `config.py`. Candidate for a future
+  docs-only task.
+
+### Changes made (Step 2 — 6 approved files)
+* `backend/app/api/dependencies.py`: removed the unused `get_optional_user`
+  function only. Pre-edit grep across backend/tests/scripts/ml/graph/
+  frontend confirmed the definition was the sole reference; post-edit
+  import check confirms the module loads and the symbol is gone. No imports
+  orphaned (`Request`, `settings`, `Optional`, `session_service` all still
+  used by remaining functions); `get_current_session`, `get_current_user`,
+  session validation, cookie-clearing, `require_permission`,
+  `require_any_permission`, `require_csrf`, `validate_idempotency_key`,
+  `verify_cpse_access`, and `require_roles` untouched.
+* `backend/app/api/README.md`: intro wording; mermaid request-lifecycle
+  flow rewritten to the session-cookie + CSRF + permission model; section B
+  now documents `get_current_session`/`get_current_user` and states no
+  optional-auth helper exists; section C documents `require_permission`,
+  legacy `require_roles`, and `require_csrf` with the real 403 error codes;
+  section E documents session-derived `verify_cpse_access` (X-CPSE-ID never
+  establishes tenant authority); auth router row updated (logout/csrf/
+  provisioning endpoints; signup retired).
+* `backend/app/api/routers/README.md`: section A rewritten — session-cookie
+  login (generic 401, rate-limited), CSRF-protected idempotent logout,
+  cookie-only `/me`, session-bound `/csrf`, credential-free `seed-users`
+  (404 in production), `SYSTEM_ADMIN` listing, `ACCOUNT_PROVISION`/
+  `ACCOUNT_APPROVE`/`ACCOUNT_REJECT` + CSRF operations, and explicit 404
+  status of `/auth/signup` and `/auth/seed`. Permission identifiers
+  verified against `auth.py:316,331,404,433` before writing.
+* `backend/app/README.md`: five JWT references replaced (mermaid Security
+  label, api-layer header description, `security.py` description, and the
+  directory-layout comments for `dependencies.py`/`auth.py`/`security.py`/
+  schemas `auth.py`).
+* `frontend/README.md`: persona-hub paragraph rewritten (username prefill
+  only, operator-typed password, hidden in production, HttpOnly session
+  cookie, memory-only identity, `/auth/me` restore, CSRF on unsafe
+  requests); directory comments for `login/`, `signup/`, `AuthContext.tsx`;
+  route table rows for `/login`, `/signup` (retired), and `/admin/users`
+  (corrected to `GET /auth/users`, `POST /auth/users/{id}/approve|reject`).
+* `docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md`: this entry.
+* No router, model, migration, dependency, lockfile, env, or Docker file
+  changed; no package installed; no service started; no `.kilo/`,
+  `architecture.md`, `context.md`, `MATCH_ENDPOINT_AUDIT_REPORT.md`, or
+  `docs/authentication/*` design record touched.
+
+
+## Task 23 — Step 2: Minimal Rate-Limiting Improvements
+
+### Changes made (5 approved files)
+* `tests/unit/test_rate_limit.py` (new, 7 tests, DB-free): boundary
+  (10 allowed / 11th denied at limit=10); login rate-limit settings defaults and validation; fixed-window
+  reset via monkeypatched `time.monotonic` (no sleeping); scope/subject
+  isolation; `Retry-After` bounds (1 <= N <= window); fail-closed on
+  internal error (setting `_buckets` or `_lock` to `None` produces `AttributeError` ->
+  `allowed=False`, `reason_code=RATE_LIMIT_BACKEND_FAILURE`).
+* `backend/app/core/config.py`: `auth_login_rate_limit_attempts: int =
+  Field(default=10, ge=1, le=1000, alias="AUTH_LOGIN_RATE_LIMIT_ATTEMPTS")`
+  and `auth_login_rate_limit_window_seconds: int = Field(default=60,
+  ge=1, le=3600, alias="AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS")` — bounds
+  follow the file's existing `Field` convention (defaults preserved
+  exactly: 10 attempts / 60 s).
+* `backend/app/api/routers/auth.py`: login guard now reads
+  `settings.auth_login_rate_limit_attempts` /
+  `settings.auth_login_rate_limit_window_seconds` instead of literals.
+  Default behavior unchanged (settings import verified: attempts=10,
+  window=60).
+* `frontend/src/app/login/page.tsx`: `catch` shows "Too many sign-in
+  attempts. Please wait a minute and try again." when
+  `err?.status === 429` (ApiError carries `.status`); all other errors
+  unchanged. Error banner JSX untouched (rose styling preserved).
+* `docs/authentication/development/SHOURYA_SYSTEM_RUNBOOK.md`: this entry.
+
+### Tests run (real outcomes)
+* `pytest tests/unit/test_rate_limit.py tests/unit/test_csrf_origin.py
+  tests/unit/test_session_security.py tests/unit/test_security.py` ->
+  **41 passed** (7 new + 34 existing).
+* `pytest tests/api/test_session_lifecycle.py -k '<6 static tests>'
+  tests/api/test_signup_api.py` -> **6 passed, 5 deselected**.
+* `pytest tests/api/test_auth_api.py -k 'test_get_seed_users or
+  test_get_me_unauthorized or test_legacy_public_seed_route_retired'` ->
+  **3 passed, 4 deselected**.
+* `git diff --check` on approved files -> clean.
+
+### Errors encountered and resolutions
+* Two PowerShell invocations returned uncaptured output via shell
+  integration (Task 17 recurring class): a trivial `Test-Path
+  frontend/node_modules` probe and the `Settings` attribute print.
+  Re-ran both with the call-operator/quoted form; results obtained
+  (`node_modules` absent; field names `auth_login_rate_limit_*`).
+* My own verification typo used `login_rate_limit_attempts` (missing
+  `auth_` prefix) -> AttributeError; corrected and re-verified
+  (attempts=10, window=60). No conclusion drawn from the typo.
+* A duplicated 429 branch was introduced in `login/page.tsx` by two
+  overlapping edits. Detected via `git diff`; repaired to a single clean
+  429 branch with the banner JSX byte-identical to HEAD. No unrelated UI
+  change.
+* Final `git diff` review caught the runbook documenting `le=1000`/
+  `le=3600` upper bounds while `config.py` had only `ge=1`. Aligned the
+  code to the documented form (a huge limit would silently disable the
+  limiter; a huge window would lock users out). Bounds rejection proven:
+  `AUTH_LOGIN_RATE_LIMIT_ATTEMPTS=0` / `WINDOW_SECONDS=99999` raise
+  `ValidationError` at import (`settings = Settings()`); defaults
+  re-verified as attempts=10, window=60. Full unit suite re-run green.
+* `read_files` returned stale `[outdated]` cached views of
+  `login/page.tsx` twice; shell `Get-Content`/`Select-String` used as
+  authoritative source per Task 17 lesson.
+
+### Known limitations
+* Process-local budget (no shared/Redis provider), no per-IP dimension,
+  thresholds still development placeholders pending deployment policy.
+* DB-backed auth tests BLOCKED (PostgreSQL unavailable); frontend
+  `tsc`/`next build` BLOCKED (`frontend/node_modules` absent,
+  `Test-Path` = False; nothing installed).
+
+### SECURITY / REGRESSION CHECK
+
+Pass — 41 unit + 9 API-static green; login defaults unchanged (10/60);
+no admin-write, logout, CSRF, session, migration, model, Docker,
+dependency, lockfile, env, or `.kilo/` change.
+
+### REMAINING ACTION
+
+Awaiting owner review/commit. Nothing staged, committed, or pushed.
+
+## Task 24 — HIBP Pwned Password Prevention
+
+### Changes made (3 files)
+* `backend/app/services/hibp_service.py` (new): privacy-preserving range lookup
+  implementing SHA-1 truncation, k-anonymity range request, local suffix
+  comparison, bounded 5s read timeout, and retryable `HIBPVerificationError`
+  on network/HTTP/malformed failures. No new dependencies.
+* `backend/app/api/routers/auth.py`: `provision_user` now calls
+  `hibp_service.check_password_against_hibp(payload.password)` before the
+  bcrypt hash. Breached password -> HTTP 400 with a safe, generic message;
+  HIBP unavailable -> HTTP 503 with `Retry-After` instead of silently
+  accepting the unchecked password.
+* `tests/unit/test_hibp_service.py` (new, 19 DB-free tests): matching,
+  non-matching, valid parsing (single + multiple entries), malformed
+  rejection, count edge cases (signed, whitespace-padded, non-ASCII-digit),
+  client lifecycle, prefix-only upstream leak, HTTP error, network failure.
+
+### Tests run (real outcomes)
+* `pytest tests/unit/test_hibp_service.py -q` -> **19 passed**
+* `pytest tests/unit -q` -> **159 passed**
+
+### Security contract
+* Plaintext password and the full 40-character SHA-1 hash never leave the
+  process.
+* Only the first 5 hex characters (SHA-1 range prefix) are sent to
+  `https://api.pwnedpasswords.com/range/{prefix}`.
+* The response suffix map is parsed into a temporary in-memory dict for local
+  suffix matching; the suffix comparison happens locally, and only the
+  matching suffix/count pair is returned to the caller.
+* No email-breach API is used.
+* All error paths return safe, generic messages with no internal keys
+  exposed.
+
+### Errors encountered and resolutions
+* PowerShell array-of-tuples was misparsed by the shell layer; commands were
+  re-issued as single semicolon-separated strings.
+* `test_hibp_service.py` fixtures used six-character suffixes (`ABC123`,
+  `DEF456`, `00000`) instead of the required 35-character hex suffixes; the
+  tests were corrected to derive 35-char suffixes from dependency hashes and
+  to explicitly cover empty responses, signed/whitespace-padded/non-ASCII
+  counts, client lifecycle (injected vs. service-created), and the
+  prefix-only upstream leak.
+* Final `git diff` confirmed only the expected files changed; nothing was
+  staged or committed.
+
+### Known limitations
+* Only the provision path (`POST /auth/users`) is covered; there is no
+  change-password route to extend.
+* The public HIBP range endpoint is contacted with a 5s read timeout on each
+  password set; no corpus cache is introduced (no dependency/DB).
+
+
+## Task 25 — Harden Provisioning Role Validation
+
+### Changes made (2 files)
+* `backend/app/api/routers/auth.py`: `provision_user` now enforces role validity
+  server-side before constructing or persisting the `User`. An invalid role that
+  is not in `perm.VALID_ROLES` raises HTTP 422
+  (`Invalid role: the assigned role is not a valid sovereign functional role.`).
+  The `ACCOUNT_PROVISION` permission requirement is unchanged.
+* `tests/api/test_auth5j3_account_provisioning.py` (new, 1 test):
+  `test_provision_invalid_role_rejected` proves an invalid role is rejected
+  with HTTP 422 before any user INSERT.
+
+### Tests run (real outcomes)
+* `pytest tests/unit -q` -> **159 passed** (unit tests do not require a database)
+* `pytest tests/api/test_auth5j3_account_provisioning.py -q` -> **BLOCKED**
+  (`PostgreSQL 16` unavailable at `localhost:5432`; endpoint-layer provisioning
+  tests require a live database and were never executed)
+
+### Errors encountered and resolutions
+* `Select-String -Path` with multiple files does not accept `-Recurse`; the
+  search was done with explicit single-file paths.
+
+### Known limitations
+* Only the provisioning role-validation hardening was performed. No other audit
+  remediation was attempted. Session absolute expiry, login rate-limiting
+  (multi-instance), frontend dependency install, live HIBP integration, and
+  Alembic baseline migration against an empty PostgreSQL 16 database remain
+  BLOCKED by database/deployment environment unavailability.
+
+
+
+After every implementation:
+
+```text
+[ ] git status checked
+[ ] git diff checked
+[ ] only expected files changed
+[ ] no temporary files remain
+[ ] no debug files remain
+[ ] no unexpected dependency changes
+[ ] no unexpected configuration changes
+```
+
+---
+## Task 26 — Material Workflow Authorization Regression Tests
+
+Addresses audit finding F-1: route-level authorization for the material
+management workflow had no automated route-level regression coverage. This task
+adds genuine `TestClient` route tests; it does **not** redesign the
+authorization system and made **no production code changes** because inspection
+revealed no authorization defect.
+
+### Changes made (1 new file)
+
+- `tests/api/test_material_workflow_authorization.py` (new) — 54 route-level
+  authorization tests.
+
+No production file was modified. The existing AUTH-007 authorization design was
+inspected and confirmed correct, so nothing was changed to make tests pass.
+
+### Actual workflow route / permission map (verified from the code)
+
+| Action | Route | Method | Gate (dependency) | Authorized roles |
+|---|---|---|---|---|
+| Create requisition | `/api/v1/requisition` | POST | `require_permission(REQUISITION_CREATE)` + `require_csrf` + idempotency | `SITE_ENGINEER` |
+| List requisitions | `/api/v1/requisition` | GET | `require_permission(REQUISITION_READ)` | reader roles |
+| Get requisition | `/api/v1/requisition/{id}` | GET | `require_permission(REQUISITION_READ)` | reader roles |
+| Approve | `/api/v1/requisition/{id}/approve` | PUT | `require_any_permission(REQUISITION_APPROVE_STANDARD, REQUISITION_APPROVE_TECHNICAL)` + `require_csrf` | `MATERIALS_MANAGER`, `TECHNICAL_AUTHORITY` |
+| Reject | `/api/v1/requisition/{id}/reject` | PUT | `require_permission(REQUISITION_REJECT)` + `require_csrf` | approval roles |
+| Security gate / gate pass | `/api/v1/requisition/{id}/gatepass` | POST | `require_permission(REQUISITION_GATEPASS)` + `require_csrf` | `CISF_SECURITY` |
+| Dispatch | `/api/v1/requisition/{id}/dispatch` | PUT | `require_permission(REQUISITION_DISPATCH)` + `require_csrf` | `MATERIALS_MANAGER` |
+| Deliver / receipt | `/api/v1/requisition/{id}/deliver` | PUT | `require_permission(REQUISITION_RECEIVE)` + `require_csrf` | `SITE_ENGINEER` |
+| Create inventory | `/api/v1/inventory` | POST | `_inventory_mutation_identity(INVENTORY_CREATE)` + `require_csrf` | `MATERIALS_MANAGER` |
+| Change inventory status | `/api/v1/inventory/{sku}/status` | PUT | `_inventory_mutation_identity(INVENTORY_STATUS_CHANGE)` + `require_csrf` + idempotency | `MATERIALS_MANAGER` |
+
+Confirmed authorization design (not assumed): route bodies also enforce
+resource-level rules independent of the RBAC gate — segregation of duties
+(requester cannot approve own requisition, no `SUPER_ADMIN` exemption,
+`requisition.py:120-130`), CPSE tenant boundary on approve/reject/dispatch/deliver
+(`requisition.py:132-142, 169-179, 252-262, 295-305`), and workflow-state
+transitions (dispatch requires `GATE_PASS_ISSUED` → else 409,
+`requisition.py:265-269`; deliver requires `DISPATCHED` → else 409,
+`requisition.py:308-312`). The centralized gate
+(`backend/app/core/authorization.evaluate`) has no universal `SUPER_ADMIN`
+bypass (`authorization.py:13-18, 158-179`).
+
+### How the tests exercise real routes
+
+The real FastAPI app, real registered routes, and the **real** `require_permission`
+/ `require_any_permission` / `require_csrf` dependencies are under test. Only the
+leaf identity/DB dependencies are overridden (`get_db_session` → in-memory fake
+session, `get_current_user` / `get_current_session` → synthetic principal + a
+session carrying a known token hash so the real CSRF check passes). The
+data/service layer (`*_service` functions) is mocked so an authorized request
+completes without a database. A guard test asserts the authorization dependencies
+themselves are never placed in `dependency_overrides`.
+
+These are **route-level authorization tests, not full database integration
+tests.** They prove the authorization boundary (401/403/2xx/409 and resource-level
+denials), not persistence. The application lifespan (DB init + seed) is never
+started: `TestClient` is used without a context manager.
+
+### Tests run (real outcomes)
+
+- `.venv\Scripts/python.exe -m pytest tests/api/test_material_workflow_authorization.py -q` → **54 passed** (20.52s).
+- `.venv/Scripts/python.exe -m pytest tests/unit -q` → **159 passed** (26.15s) — no regressions.
+- `git diff --check` → only the pre-existing `backend/app/models/base.py:98`
+  "new blank line at EOF" warning (Task 23, unrelated to this task). The new
+  untracked test file was separately whitespace-scanned (0 trailing-space lines;
+  `git diff --check` on an intent-to-add produced no errors).
+
+Coverage: anonymous→401 for all 8 write routes; unprivileged role→403 with
+`error=AUTHORIZATION_DENIED` / `reason=PERMISSION_NOT_GRANTED`; auditor read-only
+(403 on all writes); `SUPER_ADMIN` cannot bypass any workflow write (403);
+authorized role→2xx for each action; segregation-of-duties self-approval→403;
+cross-tenant dispatch→403; invalid workflow transition→409.
+
+### Errors encountered and resolutions
+
+- No authorization defect was found; no production fix was required.
+- `git diff --check` does not validate untracked files, so the new test file was
+  inspected explicitly (intent-to-add + `--cached --check`, plus a trailing-
+  whitespace scan) to avoid missing whitespace issues the default check skips.
+
+### Known limitations
+
+- PostgreSQL-backed full-stack route tests (`tests/api/test_auth5k_read_hardening.py`
+  and similar) remain BLOCKED: PostgreSQL 16 is unavailable at `localhost:5432`.
+  This task's tests deliberately use faked data/identity dependencies and do not
+  claim database-backed workflow coverage.
+- Resource-level checks are exercised with a fake DB returning a scripted record;
+  real concurrent/transaction behavior still requires a live database.
+
+
+
+# 24. Final Agent Report Format
+
+For bounded implementation tasks, the agent should report:
+
+```text
+### IMPLEMENTATION STATUS
+
+[Completed / Partial / Issue Found]
+
+### MODIFIED FILES
+
+[List only actually modified files]
+
+### TEST STATUS
+
+[Passed / Failed / Blocked / Not Run]
+
+### ENVIRONMENT ISSUES
+
+[Only actual environment issues]
+
+### SECURITY / REGRESSION CHECK
+
+[Pass / Fail]
+
+### REMAINING ACTION
+
+[Exact next action]
+```
+
+Do not provide a long unrelated repository summary.
+
+---
+
+# 25. Golden Rule
+
+The most important operational rule for this environment is:
+
+> **Do not change the project to compensate for an environment problem unless the environment change is explicitly part of the task.**
+
+And:
+
+> **Do not treat an environment failure, shell error, or unavailable database as evidence that the application implementation is wrong.**
+
+Every future coding task should separate:
+
+```text
+APPLICATION CODE
+ENVIRONMENT
+TEST EXECUTION
+ARCHITECTURE
+```
+
+and report them independently.
+
+---
+
+# 26. Quick Pre-Flight Checklist
+
+Before starting a new coding-agent task:
+
+```text
+[ ] Read the exact task
+[ ] Identify allowed files
+[ ] Check git status
+[ ] Inspect existing implementation
+[ ] Inspect existing helpers
+[ ] Inspect relevant tests
+[ ] Confirm whether DB is actually required
+[ ] Do not start/install PostgreSQL automatically
+[ ] Do not introduce new dependencies unnecessarily
+[ ] Implement only requested scope
+[ ] Inspect diff
+[ ] Run focused tests
+[ ] Distinguish PASS / FAIL / BLOCKED
+[ ] Check git status again
+[ ] Report exact next action
+```
+
+---
+
+## Task 27 — Audit Findings and Targeted Corrections (10 October 2026)
+
+### Audit verification (read-only phase, before any edit)
+1. **Login page JSX (CONFIRMED, working tree).** Commit `8268a0a` shipped
+   `frontend/src/app/login/page.tsx` with `{showEvaluationHub && (` / `<>`
+   opened before the left persona-hub column and no closing `</>` / `)}` at
+   all (unbalanced JSX). The working tree had appended `</>` / `)}` at the
+   END of the file (after the right "Standard Credentials" column), which
+   balanced the syntax but wrapped BOTH columns in `showEvaluationHub`.
+   Since `showEvaluationHub = !isProductionBuild`, a production build would
+   have rendered NO login form at all. Intent (per the file's own comment):
+   only the persona hub is dev-only; the credentials form must always render.
+2. **Alembic template (CONFIRMED).** `backend/alembic/script.py.mako` was
+   deleted in the working tree; `backend/app/script.py.mako` (untracked)
+   held a byte-identical copy (SHA-256 verified against HEAD). `alembic.ini`
+   has `script_location = alembic`, so only `backend/alembic/script.py.mako`
+   is the operative path; `alembic upgrade head` was unaffected, only
+   `alembic revision` generation would fail.
+3. **Frontend API fallback (CONFIRMED).** `frontend/src/lib/api.ts`
+   server-side last-resort fallback was `http://samanvay-ai-backend:8000`
+   (Docker-only hostname, unresolvable on host-local runs). The env override
+   chain (`INTERNAL_BACKEND_URL` → `NEXT_PUBLIC_API_BASE_URL` →
+   `NEXT_PUBLIC_API_URL`) and browser-side relative `/api/v1` were intact.
+   Docker Compose sets `INTERNAL_BACKEND_URL` explicitly, so changing only
+   the fallback default is Docker-safe. `frontend/next.config.ts` had
+   already been corrected to `http://127.0.0.1:8000` in the working tree
+   (kept); `UserHeaderBadge.tsx` (`useState` from `react`) was already
+   correct (kept).
+4. **PostgreSQL (ENVIRONMENT).** No listener on `127.0.0.1:5432`; no
+   Windows PostgreSQL service, no Docker CLI, no `Program Files\PostgreSQL`
+   installation. `backend/main.py` lifespan in development calls
+   `init_db()` → `create_all()` → connection refused → uvicorn aborts
+   startup (only seeding is wrapped in try/except). In production,
+   `verify_schema_version()` fails closed by design. All auth/session
+   features (login, `/me`, logout, `auth_sessions`, provisioning, audit
+   ledger) are DB-backed and unavailable without PostgreSQL. Per the Golden
+   Rule (section 25), no application code was changed to compensate.
+
+### Changes made (approved: fixes 1–3 only)
+* `frontend/src/app/login/page.tsx`: moved the `</>` / `)}` pair from the
+  end of the conditional (after the right column) to immediately after the
+  left persona-hub column closes, so `showEvaluationHub` wraps only the hub
+  and the standard credentials form always renders. Two-line move.
+* `frontend/src/lib/api.ts`: server-side fallback changed to
+  `http://127.0.0.1:8000`. Env-var override chain and browser relative
+  path untouched.
+* `backend/alembic/script.py.mako`: restored byte-identical to HEAD from
+  the kept untracked copy `backend/app/script.py.mako` (user elected to
+  keep that copy; it remains untracked).
+* No commit, no push, no migration, no schema/credential/dependency change.
+
+### Test outcomes (actual)
+* `npx tsc --noEmit` (frontend) → **PASS** (exit 0).
+* `python -m pytest tests/unit -q` → **159 passed** in 21.48s (includes
+  migration-integrity + csrf/session/security suites).
+* `npm run build` → **NOT RUN** by user decision: a live Next.js server
+  (PID 11792, from a prior session) holds port 3000 and the shared
+  `.next` directory; left untouched.
+* DB-backed `tests/api/*` → **BLOCKED**: PostgreSQL unavailable (see
+  Environment Issues).
+
+### Environment issues
+* PostgreSQL 16 is not installed/running on this machine at all (no
+  service, no Docker, no binaries). Backend startup and every DB-backed
+  feature remain BLOCKED until PostgreSQL is provisioned by the user.
+* A leftover Next.js server from a prior (interrupted) session is serving
+  port 3000 from `frontend/.next`; it predates these fixes and does NOT
+  reflect them. Restart it (commands below) to pick up the corrections.
+
+### Local deployment commands (verified environment, PowerShell)
+
+Start (each in its own terminal, repository root `C:\Users\HP\Samanvay-AI`):
+
+```powershell
+# Terminal 0 — PostgreSQL: NOT installed on this machine. Until it is
+# provisioned (user action), the backend will refuse to start and all
+# auth/session features stay unavailable. Do not run migrations yet.
+
+# Terminal 1 — Backend (development)
+cd C:\Users\HP\Samanvay-AI
+.\.venv\Scripts\Activate.ps1
+$env:APP_ENV = "development"
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Terminal 2 — Frontend (first stop the stale server if still running)
+$conn = Get-NetTCPConnection -State Listen -LocalPort 3000 -ErrorAction SilentlyContinue
+if ($conn) { Stop-Process -Id $conn[0].OwningProcess -Force }
+cd C:\Users\HP\Samanvay-AI\frontend
+npm run dev
+```
+
+Verify: `http://127.0.0.1:8000/health` (backend) and `http://127.0.0.1:3000/login`
+(frontend; the standard credentials form must be visible — production
+builds show it without the persona hub).
+
+Shutdown (reverse order, per terminal):
+
+```powershell
+# Frontend and backend terminals: press Ctrl+C.
+# If a terminal is lost, stop by port:
+foreach ($p in 3000, 8000) {
+  $c = Get-NetTCPConnection -State Listen -LocalPort $p -ErrorAction SilentlyContinue
+  if ($c) { Stop-Process -Id $c[0].OwningProcess -Force }
+}
+```
+
+### Known limitation
+* `npm run build` (production compile) has not been re-verified since the
+  login-page fix; `tsc --noEmit` passes on the fixed file. Run
+  `npm run build` in `frontend/` when port 3000 is free.
+
+
+## Document Status
+
+**Purpose:** Local development and execution guardrail
+**Scope:** Shourya's Samanvay-AI development environment
+**Authority:** Operational guidance; does not override frozen project architecture or security contracts
+**Last updated:** October 2026
+

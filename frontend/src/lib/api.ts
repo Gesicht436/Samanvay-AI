@@ -1,14 +1,4 @@
-import {
-  User,
-  SeedUser,
-  AuthTokenResponse,
-  UserSignupRequest,
-  MatchResult,
-  ReviewQueueItem,
-  HitlResolution,
-  DashboardSummary,
-  IngestResult,
-} from './types';
+import { User, SeedUser, CsrfTokenResponse } from './types';
 
 function resolveApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
@@ -24,11 +14,57 @@ function resolveApiBaseUrl(): string {
     process.env.INTERNAL_BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
-    'http://samanvay-ai-backend:8000';
+    'http://127.0.0.1:8000';
   return serverBackend.endsWith('/api/v1') ? serverBackend : `${serverBackend.replace(/\/+$/, '')}/api/v1`;
 }
 
 const API_BASE_URL = resolveApiBaseUrl();
+
+// ── AUTH-006 session-cookie foundation (Phase 1) ─────────────────────────────
+// Authentication state lives in the server-side session (HttpOnly cookie).
+// This module keeps the session-bound CSRF synchronizer token in memory ONLY.
+// It is never written to localStorage/sessionStorage, never logged, and never
+// persisted. No JWT/Bearer handling exists anywhere in this module.
+let sessionCsrfToken: string | null = null;
+
+export function setSessionCsrfToken(token: string | null): void {
+  sessionCsrfToken = token;
+}
+
+export function clearSessionCsrfToken(): void {
+  sessionCsrfToken = null;
+}
+
+// Mid-session 401 notification. AuthProvider registers a handler so a stale
+// in-memory identity (and its CSRF token) is cleared whenever the server
+// rejects the session with 401 on any request except the login attempt
+// itself, whose 401 is a credential error owned by the login flow. The
+// callback-registration pattern keeps this module free of a circular import
+// of the AuthContext. Handlers must be idempotent; they perform no
+// navigation, so concurrent 401 responses cannot create redirect loops.
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
+function isUnsafeMethod(method?: string): boolean {
+  const m = (method || 'GET').toUpperCase();
+  return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
+}
+
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, detail: string) {
+    super(`API Error ${status}: ${detail}`);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+export function isAuthenticationFailure(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401;
+}
 
 async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
@@ -37,105 +73,53 @@ async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise
     headers['Content-Type'] = 'application/json';
   }
 
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('samanvay_auth_token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+  // Unsafe requests carry the in-memory CSRF token when a session holds one.
+  // The login request has no token yet and is sent without it.
+  const method = (options.method || 'GET').toUpperCase();
+  if (isUnsafeMethod(method) && sessionCsrfToken) {
+    headers['X-CSRF-Token'] = sessionCsrfToken;
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
+    credentials: 'include',
     headers: {
       ...headers,
       ...(options.headers as Record<string, string>),
     },
   });
 
+  // Empty success responses (e.g. 204 from POST /auth/logout) carry no body.
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   if (!response.ok) {
-    let errorDetail = response.statusText;
+    let errorDetail: string = response.statusText;
     try {
       const errJson = await response.json();
-      errorDetail = errJson.detail || errorDetail;
+      const rawDetail = errJson.detail || errorDetail;
+      errorDetail = typeof rawDetail === 'string' ? rawDetail : JSON.stringify(rawDetail);
     } catch {
       // Ignore text parse failure
     }
-    throw new Error(`API Error ${response.status}: ${errorDetail}`);
+    // Mid-session 401: notify the registered handler (AuthProvider) so the
+    // stale in-memory identity and CSRF token are cleared. The login
+    // request's own 401 is a credential error and never triggers it.
+    // Network failures never reach this branch, and 403 CSRF/Origin
+    // failures deliberately do not sign the user out.
+    if (response.status === 401 && endpoint !== '/auth/login' && unauthorizedHandler) {
+      try {
+        unauthorizedHandler();
+      } catch {
+        // A handler failure must never mask the original API error.
+      }
+    }
+    throw new ApiError(response.status, errorDetail);
   }
 
   return response.json();
 }
-
-// ─────────────────────────────────────────────────────────────
-// Standalone Named Functions for Hariom's Contract-First Pages
-// ─────────────────────────────────────────────────────────────
-
-export async function submitDocumentForOcr(file: File): Promise<IngestResult> {
-  const form = new FormData();
-  form.append('file', file);
-  return fetchAPI<IngestResult>('/ingest/document', {
-    method: 'POST',
-    body: form,
-  });
-}
-
-export async function submitTextForParsing(rawText: string): Promise<IngestResult> {
-  return fetchAPI<IngestResult>('/ingest/text', {
-    method: 'POST',
-    body: JSON.stringify({ raw_text: rawText }),
-  });
-}
-
-export async function matchDescription(
-  raw_description: string,
-  top_k = 5,
-): Promise<MatchResult | null> {
-  return fetchAPI<MatchResult | null>('/match/contract', {
-    method: 'POST',
-    body: JSON.stringify({ raw_description, top_k, rerank: true }),
-  });
-}
-
-export async function getHitlQueue(): Promise<ReviewQueueItem[]> {
-  try {
-    const payload = await fetchAPI<{ items: ReviewQueueItem[] }>('/match/hitl-queue');
-    return payload.items || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function getHitlTrainingExamples(): Promise<any[]> {
-  try {
-    const payload = await fetchAPI<{ items?: any[]; examples?: any[] }>('/match/hitl-examples');
-    return payload.items || payload.examples || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function resolveHitlItem(
-  itemId: string,
-  accepted: boolean,
-  correctedCandidate?: string,
-): Promise<HitlResolution> {
-  return fetchAPI<HitlResolution>('/match/hitl-resolve', {
-    method: 'POST',
-    body: JSON.stringify({
-      item_id: itemId,
-      accepted,
-      corrected_candidate: correctedCandidate || null,
-    }),
-  });
-}
-
-export async function getDashboardSummary(): Promise<DashboardSummary> {
-  return fetchAPI<DashboardSummary>('/dashboard/summary');
-}
-
-// ─────────────────────────────────────────────────────────────
-// Enterprise Core API Client Object (from main)
-// ─────────────────────────────────────────────────────────────
 
 export const api = {
   // Inventory & Stock Ledger
@@ -278,20 +262,26 @@ export const api = {
     fetchAPI<any>(`/ingest/documents?skip=${skip}&limit=${limit}`),
   getDocumentById: (docId: number) => fetchAPI<any>(`/ingest/documents/${docId}`),
 
-  // Sovereign Authentication & Access Control
+  // Sovereign Authentication & Access Control (AUTH-006 session-cookie contract).
+  // The server owns the session: login sets the HttpOnly cookie and returns the
+  // user profile (no access_token). Identity is established via /auth/me and
+  // unsafe requests are CSRF-verified with the memory-only token.
   login: (payload: { username: string; password: string }) =>
-    fetchAPI<AuthTokenResponse>('/auth/login', {
+    fetchAPI<User>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
-  signup: (payload: UserSignupRequest) =>
-    fetchAPI<AuthTokenResponse>('/auth/signup', {
+  getCsrfToken: async () => {
+    const data = await fetchAPI<CsrfTokenResponse>('/auth/csrf');
+    setSessionCsrfToken(data.csrf_token);
+    return data;
+  },
+  logout: () =>
+    fetchAPI<void>('/auth/logout', {
       method: 'POST',
-      body: JSON.stringify(payload),
     }),
   getMe: () => fetchAPI<User>('/auth/me'),
-  getSeedUsers: () => fetchAPI<{ default_password: string; users: SeedUser[] }>('/auth/seed-users'),
-  seedUsers: () => fetchAPI<{ status: string; total_users: number }>('/auth/seed', { method: 'POST' }),
+  getSeedUsers: () => fetchAPI<{ users: SeedUser[] }>('/auth/seed-users'),
 
   getUsers: () => fetchAPI<User[]>('/auth/users'),
   approveUser: (userId: number) => fetchAPI<User>(`/auth/users/${userId}/approve`, { method: 'POST' }),

@@ -9,8 +9,13 @@ Powered by Hariom's OCR Pipeline (OCR.pipeline) and MTC Ingestion Intelligence
    - EN 10204 3.1 MTC chemistry, IIW CE, and mechanical ASTM validation
    - Relational persistence into PostgreSQL IngestedDocument table
 2. ERP Inventory Catalog Batch Streaming:
-   - CSV / Excel batch import with schema validation
+   - CSV / Excel batch import with schema validation & CPSE tenant enforcement
 3. Ingested Document Ledger Queries.
+
+Protected by centralized AUTH-007 permission and CSRF boundaries:
+- INGEST_DOCUMENT for document upload and parsing
+- INGEST_CATALOG for batch ERP inventory catalog import
+- DOCUMENT_READ for document retrieval
 """
 
 import io
@@ -20,8 +25,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import pandas as pd
 
-from backend.app.api.dependencies import get_db_session
-from backend.app.models.tables import IngestedDocument, InventoryItem
+from backend.app.api.dependencies import (
+    get_db_session,
+    require_csrf,
+    require_permission,
+    verify_cpse_access,
+)
+from backend.app.core import permissions as perm
+from backend.app.models.tables import AuthSession, IngestedDocument, InventoryItem, User
 from backend.app.ingestion.document import process_document, clean_text, parse_mtc_certificate
 
 router = APIRouter(prefix="/ingest", tags=["Ingest"])
@@ -36,6 +47,8 @@ class TextIngestRequest(BaseModel):
 @router.post("/document")
 async def upload_document(
     file: UploadFile = File(...),
+    current_user: User = Depends(require_permission(perm.INGEST_DOCUMENT)),
+    _csrf: AuthSession = Depends(require_csrf),
     db: Session = Depends(get_db_session),
 ):
     """
@@ -146,7 +159,11 @@ async def upload_document(
 
 
 @router.post("/text")
-async def ingest_text(request: TextIngestRequest) -> dict:
+async def ingest_text(
+    request: TextIngestRequest,
+    current_user: User = Depends(require_permission(perm.INGEST_DOCUMENT)),
+    _csrf: AuthSession = Depends(require_csrf),
+) -> dict:
     """
     Ingests raw MTC or certificate text directly for parsing and validation.
     """
@@ -165,10 +182,15 @@ async def ingest_text(request: TextIngestRequest) -> dict:
 @router.post("/catalog")
 async def upload_catalog(
     file: UploadFile = File(...),
+    current_user: User = Depends(require_permission(perm.INGEST_CATALOG)),
+    _csrf: AuthSession = Depends(require_csrf),
+    session_cpse: str = Depends(verify_cpse_access),
     db: Session = Depends(get_db_session),
 ):
     """
     Batch imports ERP inventory catalog CSV or Excel spreadsheet into plant stock ledger.
+    Requires INGEST_CATALOG and a CSRF-verified session. The authenticated
+    session CPSE is authoritative: rows declaring a different CPSE are rejected.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="Invalid filename.")
@@ -190,6 +212,24 @@ async def upload_catalog(
     col_map = {c: c.lower().strip() for c in df.columns}
     df.rename(columns=col_map, inplace=True)
 
+    # Tenant boundary: the authenticated session CPSE is authoritative.
+    effective_cpse = session_cpse.strip().upper()
+    if "cpse" in df.columns:
+        declared = {
+            str(value).strip().upper()
+            for value in df["cpse"].tolist()
+            if pd.notna(value) and str(value).strip()
+        }
+        foreign = sorted(value for value in declared if value != effective_cpse)
+        if foreign:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Catalog declares CPSE values outside the authenticated session "
+                    f"tenant ({foreign}). Ingestion is restricted to {session_cpse}."
+                ),
+            )
+
     imported_count = 0
     errors = []
 
@@ -205,7 +245,7 @@ async def upload_catalog(
 
             item = InventoryItem(
                 sku_code=sku,
-                cpse=str(row.get("cpse", "IOCL")).strip(),
+                cpse=effective_cpse,
                 depot_id=str(row.get("depot_id", "DEFAULT_DEPOT")).strip(),
                 depot_location=str(row.get("depot_location", "Main Plant")).strip(),
                 description=str(row.get("description", "")).strip(),
@@ -216,7 +256,7 @@ async def upload_catalog(
                 metallurgy=str(row.get("metallurgy")) if pd.notna(row.get("metallurgy")) else None,
                 facing_end=str(row.get("facing_end")) if pd.notna(row.get("facing_end")) else None,
                 standard=str(row.get("standard")) if pd.notna(row.get("standard")) else None,
-                available_qty=int(row.get("available_qty", row.get("quantity", 1))),
+                quantity=int(row.get("available_qty", row.get("quantity", 1))),
                 days_idle=int(row.get("days_idle", 0)),
                 unit_cost_inr=float(row.get("unit_cost_inr", 0.0)) if pd.notna(row.get("unit_cost_inr")) else 0.0,
                 status="SURPLUS" if int(row.get("days_idle", 0)) >= 90 else "ACTIVE",
@@ -244,6 +284,7 @@ async def upload_catalog(
 def list_documents(
     skip: int = 0,
     limit: int = 20,
+    _current_user: User = Depends(require_permission(perm.DOCUMENT_READ)),
     db: Session = Depends(get_db_session),
 ):
     """
@@ -273,6 +314,7 @@ def list_documents(
 @router.get("/documents/{doc_id}")
 def get_document(
     doc_id: int,
+    _current_user: User = Depends(require_permission(perm.DOCUMENT_READ)),
     db: Session = Depends(get_db_session),
 ):
     """

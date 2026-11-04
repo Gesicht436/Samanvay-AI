@@ -9,18 +9,17 @@ from sqlalchemy import (
     Computed,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
-    JSON,
     Numeric,
     String,
     Text,
+    text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from backend.app.models.base import Base
-
-JSONType = JSONB().with_variant(JSON(), "sqlite")
 
 
 class IngestedDocument(Base):
@@ -34,7 +33,7 @@ class IngestedDocument(Base):
     is_scanned = Column(Boolean, default=False)
     confidence = Column(Numeric(5, 4), nullable=False)
     raw_text = Column(Text, nullable=True)
-    parsed_metadata = Column(JSONType, nullable=False)
+    parsed_metadata = Column(JSONB, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
@@ -73,7 +72,7 @@ class InventoryItem(Base):
     local_content_percentage = Column(Numeric(5, 2), nullable=True, default=75.0)  # Make-in-India %
     pressure_rating_bar = Column(Numeric(8, 2), nullable=True)  # PN rating in Bar (e.g. 16.0, 20.0, 50.0)
     location_state = Column(String(64), nullable=True)  # Assam, Gujarat, Maharashtra, etc.
-    properties = Column(JSONType, default=dict)  # Equipment-specific: trim, port_bore, seal_plan
+    properties = Column(JSONB, default=dict)  # Equipment-specific: trim, port_bore, seal_plan
     quantity = Column(Integer, nullable=False)
     unit_cost_inr = Column(Numeric(14, 2), nullable=False)
     total_value_inr = Column(
@@ -228,7 +227,7 @@ class IdempotencyKey(Base):
     endpoint = Column(String(255), nullable=False)
     request_hash = Column(String(64), nullable=False)
     status_code = Column(Integer, nullable=False)
-    response_body = Column(JSONType, nullable=False)
+    response_body = Column(JSONB, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     expires_at = Column(DateTime(timezone=True), nullable=False)
 
@@ -242,7 +241,7 @@ class CdcOutbox(Base):
     table_name = Column(String(64), nullable=False, index=True)
     operation = Column(String(16), nullable=False)  # INSERT, UPDATE, DELETE
     record_id = Column(String(128), nullable=False, index=True)
-    payload = Column(JSONType, nullable=False)
+    payload = Column(JSONB, nullable=False)
     status = Column(String(20), nullable=False, default="PENDING", index=True)  # PENDING, PROCESSED, FAILED
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     processed_at = Column(DateTime(timezone=True), nullable=True)
@@ -266,6 +265,80 @@ class User(Base):
     )  # SITE_ENGINEER, MATERIALS_MANAGER, TECHNICAL_AUTHORITY, CISF_SECURITY, VIGILANCE_AUDITOR, SUPER_ADMIN
     cpse = Column(String(32), nullable=False, index=True)  # OIL, NRL, IOCL, ONGC, BPCL, HPCL, GAIL, MoPNG
     depot_id = Column(String(64), nullable=False, index=True)  # e.g. DEPOT-OIL-DLJ, DEPOT-IOCL-PNP, CENTRAL
-    is_active = Column(Boolean, default=True)
-    is_approved = Column(Boolean, default=False)
+    is_active = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    is_approved = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class AuthSession(Base):
+    """AUTH-005 server-side, revocable browser authentication session.
+
+    ``id`` is an application-generated UUIDv4 database identifier and is NOT the
+    browser credential. The browser carries a 256-bit random secret; only its
+    lowercase 64-char SHA-256 hex digest is stored in ``session_token_hash``.
+    """
+
+    __tablename__ = "auth_sessions"
+
+    id = Column(UUID(as_uuid=False), primary_key=True)
+    session_token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    last_seen_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_auth_sessions_user_expires_active",
+            "user_id",
+            "expires_at",
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+    )
+
+
+class SecurityEvent(Base):
+    """AUTH-005 authoritative authentication/security telemetry store.
+
+    ``event_metadata`` maps the PostgreSQL column ``metadata`` (SQLAlchemy
+    reserves the Python attribute name ``metadata`` on declarative classes).
+    ``user_id`` and ``session_id`` are nullable so events survive account/session
+    deletion (ON DELETE SET NULL).
+    """
+
+    __tablename__ = "security_events"
+
+    id = Column(UUID(as_uuid=False), primary_key=True)
+    event_type = Column(String(64), nullable=False, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    session_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("auth_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    success = Column(Boolean, nullable=False, default=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+    event_metadata = Column("metadata", JSONB, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("ix_security_events_user_created", "user_id", "created_at"),
+        Index("ix_security_events_session_created", "session_id", "created_at"),
+        Index("ix_security_events_type_created", "event_type", "created_at"),
+    )
+
+

@@ -6,9 +6,8 @@ engineering thresholds, and runtime SLA parameters.
 All values are sourced from environment variables or .env files.
 """
 
-import os
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, model_validator
 from typing import Optional
 
 
@@ -30,15 +29,8 @@ class Settings(BaseSettings):
 
     @property
     def postgres_url(self) -> str:
-        if os.getenv("TESTING") == "1" or os.getenv("USE_SQLITE", "").lower() in ("true", "1"):
-            return "sqlite:///:memory:"
-        driver = "postgresql+psycopg"
-        try:
-            import psycopg  # noqa: F401
-        except ImportError:
-            driver = "postgresql+psycopg2"
         return (
-            f"{driver}://{self.postgres_user}:{self.postgres_password}"
+            f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
@@ -63,9 +55,9 @@ class Settings(BaseSettings):
     neo4j_password: str = Field(default="samanvay_graph", alias="NEO4J_PASSWORD")
 
     # ── ML Model Paths (Air-Gapped Local Inference) ──────────────
-    deberta_model_path: str = "machine_learning/model_weights/ner_deberta"
-    bge_m3_model_path: str = "machine_learning/model_weights/bge-m3-onnx"
-    xgboost_model_path: str = "machine_learning/reranker/models/compatibility_ranker.json"
+    deberta_model_path: str = "ml/ner/models/deberta-v3-small-ner"
+    bge_m3_model_path: str = "ml/embeddings/models/bge-m3-onnx"
+    xgboost_model_path: str = "ml/ranking/models/compatibility_ranker.json"
 
     # ── OCR Configuration ────────────────────────────────────────
     ocr_dpi: int = 300
@@ -108,15 +100,68 @@ class Settings(BaseSettings):
     golden_benchmarks_path: str = "datasets/golden_benchmarks.json"
     ocr_payloads_path: str = "datasets/ocr_payloads.json"
 
-    # ── JWT Authentication & RBAC ────────────────────────────────
-    jwt_secret_key: str = Field(
-        default="samanvay_ai_sovereign_mopng_oil_jwt_secret_key_2026_super_secure_sha256",
-        alias="JWT_SECRET_KEY",
+    # ── Server-side Session Authentication (AUTH-005 / AUTH-006) ──
+    # NOTE: absolute session expiry, idle/session policy, concurrency and
+    # retention are deployment/product inputs and are NOT fixed by the frozen
+    # architecture. The value below is a configurable default.
+    app_env: str = Field(default="development", alias="APP_ENV")
+    session_absolute_expire_minutes: int = Field(
+        default=720, alias="SESSION_ABSOLUTE_EXPIRE_MINUTES"
     )
-    jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 60 * 24  # 24 Hours
+    # None => derived: Secure in production, insecure local HTTP development only.
+    session_cookie_secure: Optional[bool] = Field(
+        default=None, alias="SESSION_COOKIE_SECURE"
+    )
+    # Comma-separated explicit Origin allowlist for CSRF Origin validation.
+    # Production browser origin is an open deployment value.
+    auth_allowed_origins: str = Field(default="", alias="AUTH_ALLOWED_ORIGINS")
+    # Login rate-limit thresholds (AUTH-006 Section 8). Defaults preserve the
+    # existing behavior: 10 attempts per 60-second fixed window per username.
+    # Values below 1 are rejected as nonsensical.
+    auth_login_rate_limit_attempts: int = Field(
+        default=10, ge=1, le=1000, alias="AUTH_LOGIN_RATE_LIMIT_ATTEMPTS"
+    )
+    auth_login_rate_limit_window_seconds: int = Field(
+        default=60, ge=1, le=3600, alias="AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS"
+    )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+    @property
+    def is_production(self) -> bool:
+        """True when APP_ENV indicates a production deployment."""
+        return self.app_env.strip().lower() in ("production", "prod")
+
+    @property
+    def session_cookie_name(self) -> str:
+        """AUTH-006 Section 3: production uses the __Host- prefixed cookie."""
+        return "__Host-samanvay_session" if self.is_production else "samanvay_session"
+
+    @property
+    def cookie_secure(self) -> bool:
+        """Production is always Secure; local HTTP development may be insecure."""
+        if self.is_production:
+            return True
+        return bool(self.session_cookie_secure)
+
+    @property
+    def allowed_origins_list(self) -> list:
+        """Explicit configured Origin allowlist (never derived from Host headers)."""
+        configured = [
+            o.strip() for o in self.auth_allowed_origins.split(",") if o.strip()
+        ]
+        if configured:
+            return configured
+        return ["http://localhost:3000", "http://localhost:3001"]
+
+    @model_validator(mode="after")
+    def _reject_insecure_production_cookie(self):
+        """Production must reject an insecure cookie configuration."""
+        if self.is_production and self.session_cookie_secure is False:
+            raise ValueError(
+                "SESSION_COOKIE_SECURE cannot be disabled in a production deployment"
+            )
+        return self
 
 
 settings = Settings()
