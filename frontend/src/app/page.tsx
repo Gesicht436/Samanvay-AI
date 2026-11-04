@@ -1,3 +1,262 @@
-import Link from "next/link";
+import React from 'react';
+import Link from 'next/link';
+import { LandingAuthCTA } from '@/components/LandingAuthCTA';
+import {
+  Shield,
+  Search,
+  Cpu,
+  Layers,
+  Building2,
+  Lock,
+  ArrowRight,
+  CheckCircle2,
+  AlertTriangle,
+  QrCode,
+  FileCheck2,
+  FileSpreadsheet,
+  Globe2,
+} from 'lucide-react';
 
-export default function Home() { return <main className="min-h-[calc(100vh-73px)] px-6 py-16 max-w-6xl mx-auto"><p className="uppercase tracking-[0.25em] text-sm">Cross-CPSE material intelligence</p><h1 className="text-6xl md:text-8xl leading-[0.9] mt-6 max-w-4xl">One material.<br /><span className="text-[#e86f45]">One language.</span></h1><p className="max-w-xl text-xl mt-8">Harmonize IOCL, ONGC, and BPCL catalogs with evidence-backed matching, deterministic engineering rules, and human review where it matters.</p><div className="mt-10 flex gap-3"><Link className="bg-[#17221b] text-[#f4f0e7] px-5 py-3" href="/dashboard">Open workspace</Link><Link className="border-2 border-[#17221b] px-5 py-3" href="/deduplication">Try a catalog</Link></div></main>; }
+const CPSE_PARTNERS = [
+  { name: 'Oil India Limited', code: 'OIL', hub: 'Duliajan & Field HQs' },
+  { name: 'Indian Oil Corporation', code: 'IOCL', hub: 'Panipat & Guwahati' },
+  { name: 'Oil & Natural Gas Corp', code: 'ONGC', hub: 'Ankleshwar & Nazira' },
+  { name: 'Bharat Petroleum', code: 'BPCL', hub: 'Mumbai & Kochi' },
+  { name: 'Hindustan Petroleum', code: 'HPCL', hub: 'Visakh & Mumbai' },
+  { name: 'GAIL (India) Limited', code: 'GAIL', hub: 'Pata & HVJ Pipeline' },
+  { name: 'Numaligarh Refinery', code: 'NRL', hub: 'Numaligarh (Assam)' },
+];
+
+const PILLARS = [
+  {
+    icon: Cpu,
+    title: 'Dual-Path MTC Vision & Chemistry',
+    desc: 'Automated extraction of Mill Test Certificates using PyTorch GPU OCR. Validates ladle chemistry assays, IIW carbon equivalent weldability (CE ≤ 0.43%), and PREN pitting indices.',
+    tag: 'CUDA Accelerated',
+  },
+  {
+    icon: Layers,
+    title: '21 Codified Mechanical Safety Gates',
+    desc: 'Zero-tolerance deterministic hard vetoes across ASME B16.5, B16.34, API 6D, API 526, and NACE MR0175 sour service. Never recommends an unsafe spare for critical hydrocarbon duty.',
+    tag: 'Zero-Tolerance Veto',
+  },
+  {
+    icon: Globe2,
+    title: 'GIS Haversine Logistics Topology',
+    desc: 'Real-time road transit matrix across 19 CPSE field depots and refineries incorporating a 1.28× road tortuosity factor to identify the fastest mutual-aid delivery route.',
+    tag: '19 Hub Network',
+  },
+  {
+    icon: Shield,
+    title: 'Commercial Privacy & SHA-256 Ledger',
+    desc: 'Commercial price masking prevents anti-competitive pricing leakage between PSUs. All inter-CPSE loan requisitions and status changes are cryptographically sealed into an immutable Merkle chain.',
+    tag: 'Merkle Audit Trail',
+  },
+];
+
+const PERSONAS = [
+  {
+    role: 'Site Engineer',
+    user: 'engineer_oil',
+    cpse: 'OIL',
+    desc: 'Discovers interchangeable spares in sister refineries, checks 21 safety veto gates, and submits emergency loan requisitions to prevent plant trips.',
+  },
+  {
+    role: 'Materials Manager',
+    user: 'stores_oil',
+    cpse: 'OIL',
+    desc: 'Monitors warehouse idle stock countdowns (>180 days), broadcasts surplus spares into the sovereign mesh, and authorizes inter-CPSE loans.',
+  },
+  {
+    role: 'Technical Authority',
+    user: 'tech_authority',
+    cpse: 'OIL',
+    desc: 'QA-QC Chief Metallurgist arbitrating 80%–94% tolerance triage disputes, validating ASTM A105 vs IS 2062 equivalence, and reviewing ladle assays.',
+  },
+  {
+    role: 'CISF Security Officer',
+    user: 'cisf_officer',
+    cpse: 'OIL',
+    desc: 'Scans offline air-gapped SVG QR bit-matrices at refinery security gates, verifying truck registration, driver credentials, and stamping gate passes.',
+  },
+  {
+    role: 'Vigilance Auditor',
+    user: 'auditor',
+    cpse: 'MoPNG',
+    desc: 'Validates cryptographic SHA-256 continuity from Genesis block to latest transaction, ensures statutory compliance, and exports CAG audit logs.',
+  },
+  {
+    role: 'Super Administrator',
+    user: 'admin',
+    cpse: 'MoPNG',
+    desc: 'Maintains national inter-CPSE mesh parameters, oversees connected depots, and manages sovereign access policies.',
+  },
+];
+
+export default function LandingPage() {
+  return (
+    <div className="space-y-16 pb-16">
+      {/* Hero Section */}
+      <section className="relative overflow-hidden pt-12 pb-16 border-b border-zinc-200 dark:border-zinc-800 bg-gradient-to-b from-white via-zinc-50/50 to-zinc-100/40 dark:from-zinc-900 dark:via-zinc-900/80 dark:to-zinc-950">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 text-center space-y-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 text-xs font-mono font-semibold text-emerald-800 dark:text-emerald-300">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>SIH26099 · MINISTRY OF PETROLEUM & NATURAL GAS</span>
+          </div>
+
+          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-zinc-900 dark:text-white max-w-4xl mx-auto leading-tight sm:leading-tight">
+            Sovereign Inter-CPSE Spare Parts & Material Sharing Mesh
+          </h1>
+
+          <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-300 max-w-3xl mx-auto leading-relaxed">
+            Eliminating <strong className="text-zinc-900 dark:text-white">₹12,000+ Crore</strong> in idle PSU maintenance spare inventory and preventing <strong className="text-zinc-900 dark:text-white">critical hydrocarbon pipeline shutdowns</strong> through sovereign mutual aid, codified ASME/API safety gates, and immutable Merkle audit trails.
+          </p>
+
+          <LandingAuthCTA />
+
+          {/* Quick stats banner */}
+          <div className="pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-3xl mx-auto text-left">
+            <div className="p-3 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+              <span className="text-[10px] font-mono uppercase text-zinc-500 block">Connected CPSEs</span>
+              <span className="text-lg font-bold text-zinc-900 dark:text-white">7 PSUs</span>
+            </div>
+            <div className="p-3 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+              <span className="text-[10px] font-mono uppercase text-zinc-500 block">Depots & Refineries</span>
+              <span className="text-lg font-bold text-zinc-900 dark:text-white">19 Locations</span>
+            </div>
+            <div className="p-3 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+              <span className="text-[10px] font-mono uppercase text-zinc-500 block">Safety Veto Gates</span>
+              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">21 Enforced</span>
+            </div>
+            <div className="p-3 bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+              <span className="text-[10px] font-mono uppercase text-zinc-500 block">Transit Topology</span>
+              <span className="text-lg font-bold text-zinc-900 dark:text-white">1.28× Tortuosity</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Core Architectural Pillars */}
+      <section id="safety-gates" className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
+        <div className="text-center space-y-2">
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
+            Engineering Rigor & Deterministic Physics
+          </h2>
+          <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto">
+            Combining machine intelligence with strict adherence to oil & gas engineering standards.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {PILLARS.map((p) => {
+            const Icon = p.icon;
+            return (
+              <div
+                key={p.title}
+                className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3 shadow-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                    <Icon size={20} />
+                  </div>
+                  <span className="px-2 py-0.5 text-[10px] font-mono font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded">
+                    {p.tag}
+                  </span>
+                </div>
+                <h3 className="font-bold text-sm text-zinc-900 dark:text-white">
+                  {p.title}
+                </h3>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  {p.desc}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Role-Based Sovereign Access Personas */}
+      <section id="mission" className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
+        <div className="text-center space-y-2">
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
+            Segregated Sovereign Operational Roles
+          </h2>
+          <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto">
+            Dynamic workspaces configured with strict segregation of duties for plant reliability, materials management, and statutory audit.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {PERSONAS.map((p) => (
+            <div
+              key={p.role}
+              className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xs flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-xs text-zinc-900 dark:text-white">
+                    {p.role}
+                  </span>
+                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-300">
+                    {p.cpse}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  {p.desc}
+                </p>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs">
+                <span className="text-[11px] font-mono text-zinc-400">@{p.user}</span>
+                <Link
+                  href="/login"
+                  className="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px] hover:underline flex items-center gap-1"
+                >
+                  Test Role &rarr;
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Connected CPSEs */}
+      <section id="cpse-mesh" className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
+        <div className="text-center space-y-2">
+          <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
+            Inter-CPSE Mutual Aid Mesh
+          </h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Federated spare parts discovery across Indian Public Sector Undertakings.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
+          {CPSE_PARTNERS.map((cpse) => (
+            <div
+              key={cpse.code}
+              className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-center"
+            >
+              <p className="font-bold text-xs text-zinc-900 dark:text-white font-mono">
+                {cpse.code}
+              </p>
+              <p className="text-[10px] text-zinc-500 truncate mt-0.5">{cpse.name}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* National Standards & Make in India Banner */}
+      <section id="governance" className="max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="p-6 bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 text-center space-y-2 text-xs text-zinc-600 dark:text-zinc-400">
+          <p className="font-bold text-zinc-900 dark:text-white text-sm">
+            National Standards Compliance & Sovereign Governance
+          </p>
+          <p className="max-w-3xl mx-auto leading-relaxed">
+            All technical specifications prioritize Indian procurement standards: Bureau of Indian Standards (<strong>IS 2062</strong>, <strong>IS 14846</strong>, <strong>IS 1239</strong>), Oil Industry Safety Directorate (<strong>OISD-RP-126</strong>, <strong>OISD-STD-118</strong>), Engineers India Limited (<strong>EIL 6-44</strong>), and Make in India (DPIIT Class-I &ge; 50%).
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}

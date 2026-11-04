@@ -1,67 +1,117 @@
-import type {
-  DashboardSummary,
-  HitlResolution,
-  IngestResponse,
-  IngestResult,
+import {
+  User,
+  SeedUser,
+  AuthTokenResponse,
+  UserSignupRequest,
   MatchResult,
   ReviewQueueItem,
-} from "./types";
+  HitlResolution,
+  DashboardSummary,
+  IngestResult,
+} from './types';
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window === "undefined"
-    ? "http://localhost:8000"
-    : `${window.location.protocol}//${window.location.hostname}:8000`);
-
-async function parseApiResponse<T>(response: Response, fallback: string): Promise<T> {
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(payload?.detail ?? `${fallback} (${response.status})`);
+function resolveApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    // In browser: use relative /api/v1 so Next.js proxies it seamlessly across any domain or tunnel
+    const configured = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL;
+    if (!configured || configured.includes('localhost:8000') || configured.includes('127.0.0.1:8000')) {
+      return '/api/v1';
+    }
+    return configured.endsWith('/api/v1') ? configured : `${configured.replace(/\/+$/, '')}/api/v1`;
   }
+  // Server-side (SSR / Server Actions / Docker container)
+  const serverBackend =
+    process.env.INTERNAL_BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://samanvay-ai-backend:8000';
+  return serverBackend.endsWith('/api/v1') ? serverBackend : `${serverBackend.replace(/\/+$/, '')}/api/v1`;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
+
+async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const headers: Record<string, string> = {};
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('samanvay_auth_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      ...headers,
+      ...(options.headers as Record<string, string>),
+    },
+  });
+
+  if (!response.ok) {
+    let errorDetail = response.statusText;
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson.detail || errorDetail;
+    } catch {
+      // Ignore text parse failure
+    }
+    throw new Error(`API Error ${response.status}: ${errorDetail}`);
+  }
+
   return response.json();
 }
 
+// ─────────────────────────────────────────────────────────────
+// Standalone Named Functions for Hariom's Contract-First Pages
+// ─────────────────────────────────────────────────────────────
+
 export async function submitDocumentForOcr(file: File): Promise<IngestResult> {
   const form = new FormData();
-  form.append("file", file);
-  const response = await fetch(`${baseUrl}/v1/ingest/document`, {
-    method: "POST",
+  form.append('file', file);
+  return fetchAPI<IngestResult>('/ingest/document', {
+    method: 'POST',
     body: form,
-    cache: "no-store",
   });
-  return parseApiResponse(response, "Document processing failed");
 }
 
 export async function submitTextForParsing(rawText: string): Promise<IngestResult> {
-  const response = await fetch(`${baseUrl}/v1/ingest/text`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
+  return fetchAPI<IngestResult>('/ingest/text', {
+    method: 'POST',
     body: JSON.stringify({ raw_text: rawText }),
-    cache: "no-store",
   });
-  return parseApiResponse(response, "Text parsing failed");
 }
 
 export async function matchDescription(
   raw_description: string,
   top_k = 5,
 ): Promise<MatchResult | null> {
-  const response = await fetch(`${baseUrl}/v1/match`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
+  return fetchAPI<MatchResult | null>('/match/contract', {
+    method: 'POST',
     body: JSON.stringify({ raw_description, top_k, rerank: true }),
-    cache: "no-store",
   });
-  return parseApiResponse(response, "Matching failed");
 }
 
 export async function getHitlQueue(): Promise<ReviewQueueItem[]> {
-  const response = await fetch(`${baseUrl}/v1/match/hitl-queue`, { cache: "no-store" });
-  const payload = await parseApiResponse<{ items: ReviewQueueItem[] }>(
-    response,
-    "Unable to load review queue",
-  );
-  return payload.items;
+  try {
+    const payload = await fetchAPI<{ items: ReviewQueueItem[] }>('/match/hitl-queue');
+    return payload.items || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getHitlTrainingExamples(): Promise<any[]> {
+  try {
+    const payload = await fetchAPI<{ items?: any[]; examples?: any[] }>('/match/hitl-examples');
+    return payload.items || payload.examples || [];
+  } catch {
+    return [];
+  }
 }
 
 export async function resolveHitlItem(
@@ -69,42 +119,181 @@ export async function resolveHitlItem(
   accepted: boolean,
   correctedCandidate?: string,
 ): Promise<HitlResolution> {
-  const response = await fetch(`${baseUrl}/v1/match/hitl-resolve`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
+  return fetchAPI<HitlResolution>('/match/hitl-resolve', {
+    method: 'POST',
     body: JSON.stringify({
       item_id: itemId,
       accepted,
-      corrected_candidate: correctedCandidate?.trim() || null,
+      corrected_candidate: correctedCandidate || null,
     }),
-    cache: "no-store",
   });
-  return parseApiResponse(response, "Unable to save review decision");
-}
-
-export async function getHitlTrainingExamples(): Promise<HitlResolution["training_example"][]> {
-  const response = await fetch(`${baseUrl}/v1/match/hitl-training-examples`, {
-    cache: "no-store",
-  });
-  const payload = await parseApiResponse<{ items: HitlResolution["training_example"][] }>(
-    response,
-    "Unable to load feedback examples",
-  );
-  return payload.items;
 }
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
-  const response = await fetch(`${baseUrl}/v1/dashboard/summary`, { cache: "no-store" });
-  return parseApiResponse(response, "Unable to load dashboard");
+  return fetchAPI<DashboardSummary>('/dashboard/summary');
 }
 
-export async function ingestDocument(file: File): Promise<IngestResponse> {
-  const body = new FormData();
-  body.append("file", file);
-  const response = await fetch(`${baseUrl}/v1/ingest/document`, {
-    method: "POST",
-    body,
-    cache: "no-store",
-  });
-  return parseApiResponse(response, "Document ingest failed");
-}
+// ─────────────────────────────────────────────────────────────
+// Enterprise Core API Client Object (from main)
+// ─────────────────────────────────────────────────────────────
+
+export const api = {
+  // Inventory & Stock Ledger
+  getInventory: (params?: { cpse?: string; depot?: string; status?: string; category?: string; item_type?: string; skip?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '' && v !== 'ALL') {
+          query.append(k, String(v));
+        }
+      });
+    }
+    const qs = query.toString();
+    return fetchAPI<any>(`/inventory${qs ? `?${qs}` : ''}`);
+  },
+  getInventoryStats: () => fetchAPI<any>('/inventory/stats'),
+  getInventoryItem: (skuCode: string) => fetchAPI<any>(`/inventory/${skuCode}`),
+  getSurplusRadar: () => fetchAPI<any[]>('/inventory/surplus'),
+  getHitlQueue: () => fetchAPI<any[]>('/inventory/hitl-queue'),
+  updateItemStatus: (skuCode: string, payload: { status: string; reason?: string; officer?: string }) =>
+    fetchAPI<any>(`/inventory/${skuCode}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  createInventoryItem: (data: any) =>
+    fetchAPI<any>('/inventory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Requisitions & Consignments
+  getRequests: (params?: string | { cpse?: string; depot?: string }) => {
+    if (typeof params === 'string') {
+      return fetchAPI<any[]>(`/requisition${params && params !== 'ALL' ? `?cpse=${params}` : ''}`);
+    }
+    const query = new URLSearchParams();
+    if (params?.cpse && params.cpse !== 'ALL') query.append('cpse', params.cpse);
+    if (params?.depot && params.depot !== 'ALL') query.append('depot', params.depot);
+    const qs = query.toString();
+    return fetchAPI<any[]>(`/requisition${qs ? `?${qs}` : ''}`);
+  },
+  getRequestById: (reqId: string) => fetchAPI<any>(`/requisition/${reqId}`),
+  postRequisition: (data: any, idempotencyKey?: string) =>
+    fetchAPI<any>('/requisition', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+    }),
+  approveRequisition: (reqId: string, payload: { approved_by: string }) =>
+    fetchAPI<any>(`/requisition/${reqId}/approve`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  rejectRequisition: (reqId: string, payload: { reason: string }) =>
+    fetchAPI<any>(`/requisition/${reqId}/reject`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  generateGatePass: (reqId: string, payload: any) =>
+    fetchAPI<any>(`/requisition/${reqId}/gatepass`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  dispatchRequisition: (reqId: string) =>
+    fetchAPI<any>(`/requisition/${reqId}/dispatch`, { method: 'PUT' }),
+  deliverRequisition: (reqId: string) =>
+    fetchAPI<any>(`/requisition/${reqId}/deliver`, { method: 'PUT' }),
+
+  // Sovereign Audit Ledger
+  getAuditLogs: (params?: { category?: string; cpse?: string; skip?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params) {
+      if (params.category && params.category !== 'ALL') query.append('category', params.category);
+      if (params.cpse && params.cpse !== 'ALL') query.append('cpse', params.cpse);
+      if (params.skip !== undefined) query.append('skip', String(params.skip));
+      if (params.limit !== undefined) query.append('limit', String(params.limit));
+    }
+    const qs = query.toString();
+    return fetchAPI<any>(`/audit${qs ? `?${qs}` : ''}`);
+  },
+  verifyAuditChain: () => fetchAPI<any>('/audit/verify', { method: 'POST' }),
+  getAuditEntry: (logId: string) => fetchAPI<any>(`/audit/${logId}`),
+
+  // Pre-Purchase Radar & Graph
+  getTopology: () => fetchAPI<any>('/graph/topology'),
+  discoverSurplus: (itemType?: string, maxDistanceKm?: number) => {
+    const query = new URLSearchParams();
+    if (itemType) query.append('item_type', itemType);
+    if (maxDistanceKm) query.append('max_distance_km', maxDistanceKm.toString());
+    const qs = query.toString();
+    return fetchAPI<any>(`/graph/discover${qs ? `?${qs}` : ''}`);
+  },
+  getRouteLogistics: (sourceDepot: string, targetDepot: string) =>
+    fetchAPI<any>(`/graph/logistics/${encodeURIComponent(sourceDepot)}/${encodeURIComponent(targetDepot)}`),
+
+  // Matching & Compatibility Core
+  searchMatches: (payload: {
+    query_text?: string;
+    item_type?: string;
+    size_nb_mm?: number;
+    pressure_class?: number;
+    pressure_rating_bar?: number;
+    pressure_rating_psi?: number;
+    schedule?: string;
+    metallurgy?: string;
+    weldability_class?: string;
+    sour_service?: boolean;
+    facing_end?: string;
+    attachment?: string;
+    mfg_method?: string;
+    standard?: string;
+    indian_standard?: string;
+    oil_std_spec?: string;
+    severe_cyclic?: boolean;
+    trim_no?: number;
+    port_bore?: string;
+    piggable?: boolean;
+    fire_safe_required?: boolean;
+    min_local_content_pct?: number;
+    properties?: Record<string, any>;
+  }) =>
+    fetchAPI<any>('/match/search', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  runBenchmark: () => fetchAPI<any>('/match/benchmark'),
+
+  // Document & Catalog Ingestion
+  uploadDocument: (formData: FormData) =>
+    fetchAPI<any>('/ingest/document', {
+      method: 'POST',
+      body: formData,
+    }),
+  uploadCatalog: (formData: FormData) =>
+    fetchAPI<any>('/ingest/catalog', {
+      method: 'POST',
+      body: formData,
+    }),
+  listDocuments: (skip: number = 0, limit: number = 20) =>
+    fetchAPI<any>(`/ingest/documents?skip=${skip}&limit=${limit}`),
+  getDocumentById: (docId: number) => fetchAPI<any>(`/ingest/documents/${docId}`),
+
+  // Sovereign Authentication & Access Control
+  login: (payload: { username: string; password: string }) =>
+    fetchAPI<AuthTokenResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  signup: (payload: UserSignupRequest) =>
+    fetchAPI<AuthTokenResponse>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getMe: () => fetchAPI<User>('/auth/me'),
+  getSeedUsers: () => fetchAPI<{ default_password: string; users: SeedUser[] }>('/auth/seed-users'),
+  seedUsers: () => fetchAPI<{ status: string; total_users: number }>('/auth/seed', { method: 'POST' }),
+
+  getUsers: () => fetchAPI<User[]>('/auth/users'),
+  approveUser: (userId: number) => fetchAPI<User>(`/auth/users/${userId}/approve`, { method: 'POST' }),
+  rejectUser: (userId: number) => fetchAPI<{ status: string }>(`/auth/users/${userId}/reject`, { method: 'POST' }),
+};
